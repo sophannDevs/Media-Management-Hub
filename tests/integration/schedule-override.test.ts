@@ -46,7 +46,7 @@ describe("schedule override (WF-01)", () => {
     const { content, input } = await inReview();
     const s = await createSchedule({ ...input, override: { reason: "Client approved by phone" } });
 
-    expect(JSON.parse(s.overrideRules!)).toEqual(["review"]);
+    expect(s.overrideRules).toEqual(["review"]);
     expect(s.overrideReason).toBe("Client approved by phone");
     expect(s.overrideAt).toBeInstanceOf(Date);
     const log = await db.activityLog.findFirstOrThrow({ where: { contentId: content.id, type: "schedule.override" } });

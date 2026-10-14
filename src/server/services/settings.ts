@@ -22,9 +22,6 @@ export async function getRules() {
 }
 
 export function notificationPrefs(s: Settings): Record<string, boolean> {
-  try {
-    return JSON.parse(s.notificationPrefs) as Record<string, boolean>;
-  } catch {
-    return {};
-  }
+  const prefs = s.notificationPrefs;
+  return prefs && typeof prefs === "object" && !Array.isArray(prefs) ? (prefs as Record<string, boolean>) : {};
 }

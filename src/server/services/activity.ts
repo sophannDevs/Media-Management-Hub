@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 
 export async function logActivity(input: { contentId?: string | null; type: string; message: string; meta?: Record<string, unknown> }) {
@@ -6,7 +7,7 @@ export async function logActivity(input: { contentId?: string | null; type: stri
       contentId: input.contentId ?? null,
       type: input.type,
       message: input.message,
-      meta: JSON.stringify(input.meta ?? {}),
+      meta: (input.meta ?? {}) as Prisma.InputJsonObject,
     },
   });
 }

@@ -62,7 +62,7 @@ const UNUSED: Prisma.MediaAssetWhereInput = {
 /** Every filter except the media type (the type cards show counts per type for these). */
 function facetWhere(f: MediaFilters, now: Date): Prisma.MediaAssetWhereInput {
   const and: Prisma.MediaAssetWhereInput[] = [];
-  if (f.q) and.push({ fileName: { contains: f.q } });
+  if (f.q) and.push({ fileName: { contains: f.q, mode: "insensitive" } });
   if (f.content === "none") and.push({ contentId: null });
   else if (f.content) and.push({ contentId: f.content });
   if (f.usage === "used") and.push(IN_USE);

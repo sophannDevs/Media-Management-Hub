@@ -50,3 +50,7 @@ next-env.d.ts
 /prisma/backups/
 /storage
 !.env.example
+
+# local PostgreSQL cluster (scripts/db-local.mjs)
+/.pgdata/
+/.pgdata.pw.tmp

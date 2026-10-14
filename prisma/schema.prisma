@@ -2,15 +2,14 @@
 //
 // Statuses and other enumerations are stored as string codes (see
 // src/lib/workflow/statuses.ts) so new platforms / statuses can be added
-// without a migration, and so the schema stays portable between SQLite (local)
-// and PostgreSQL (production).
+// without a migration; CHECK constraints in the migrations keep them valid.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -37,8 +36,8 @@ model WorkspaceSettings {
   autoRetry             Boolean  @default(true)
   maxRetries            Int      @default(3)
   retryDelayMinutes     Int      @default(15)
-  /// JSON: { [notificationType]: boolean }
-  notificationPrefs     String   @default("{}")
+  /// { [notificationType]: boolean }
+  notificationPrefs     Json     @default("{}")
   updatedAt             DateTime @updatedAt
 }
 
@@ -261,8 +260,8 @@ model PublishingSchedule {
   thumbnailAsset   MediaAsset?         @relation(fields: [thumbnailAssetId], references: [id], onDelete: SetNull)
   /// YouTube: PUBLIC | UNLISTED | PRIVATE. Facebook: PUBLISH | DRAFT
   visibility       String              @default("PUBLIC")
-  /// JSON for platform-specific options
-  options          String              @default("{}")
+  /// Platform-specific options
+  options          Json                @default("{}")
   /// WAITING | PROCESSING | PUBLISHED | FAILED | RETRY_SCHEDULED | CANCELLED
   status           String              @default("WAITING")
   /// "contentId:accountId" while the post is active (waiting, processing or
@@ -275,8 +274,8 @@ model PublishingSchedule {
   /// Only an expired lease is recovered, and the platform is checked first.
   lockedBy         String?
   lockedUntil      DateTime?
-  /// Provider state saved during an attempt (e.g. a resumable upload session), JSON
-  uploadState      String?
+  /// Provider state saved during an attempt (e.g. a resumable upload session)
+  uploadState      Json?
   attempts         Int                 @default(0)
   nextAttemptAt    DateTime?
   lastError        String?
@@ -289,9 +288,9 @@ model PublishingSchedule {
   /// external id / URL are made up. Never shown as "Published".
   simulated        Boolean             @default(false)
   /// Scheduled before "Ready to Post": the soft requirements waived for this
-  /// post (JSON array of requirement keys), why, when and by whom (WF-01).
+  /// post (array of requirement keys), why, when and by whom (WF-01).
   /// Hard requirements can't be waived.
-  overrideRules    String?
+  overrideRules    Json?
   overrideReason   String?
   overrideAt       DateTime?
   /// User id once sign-in exists
@@ -335,8 +334,8 @@ model ActivityLog {
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   type      String
   message   String
-  /// JSON payload with extra details
-  meta      String   @default("{}")
+  /// Extra details
+  meta      Json     @default("{}")
   createdAt DateTime @default(now())
 
   @@index([createdAt])

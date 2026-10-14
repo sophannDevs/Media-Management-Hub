@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import os from "node:os";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { dayDiff } from "@/lib/dates";
 import { getProvider } from "@/lib/platforms/registry";
@@ -41,13 +41,9 @@ type MediaRow = { fileName: string; mimeType: string; size: number; storageKey: 
 const toPublishMedia = (m: MediaRow): PublishMedia | null =>
   m ? { fileName: m.fileName, mimeType: m.mimeType, size: m.size, localPath: m.storageKey ? storage.localPath(m.storageKey) : null, url: m.externalUrl } : null;
 
-function parseJson(text: string | null): Record<string, unknown> | null {
-  if (!text) return null;
-  try {
-    return JSON.parse(text) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
+/** A JSON column as a plain object, or null. */
+function asObject(value: Prisma.JsonValue | null): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
 
 function toRequest(s: LoadedSchedule): PublishRequest {
@@ -67,7 +63,7 @@ function toRequest(s: LoadedSchedule): PublishRequest {
     visibility: s.visibility,
     video: toPublishMedia(s.content.videoAsset),
     thumbnail: toPublishMedia(s.thumbnailAsset ?? s.content.thumbnailAsset),
-    options: parseJson(s.options) ?? {},
+    options: asObject(s.options) ?? {},
   };
 }
 
@@ -157,7 +153,7 @@ async function attempt(scheduleId: string, heartbeat: Heartbeat): Promise<Proces
   if (refusal) return recordFailure(s, jobId, refusal, settings);
 
   const request = toRequest(s);
-  const uploadState = parseJson(s.uploadState);
+  const uploadState = asObject(s.uploadState);
   const simulated = provider.isMock;
 
   // The previous attempt ended without a clear answer: ask the platform before sending again
@@ -179,7 +175,9 @@ async function attempt(scheduleId: string, heartbeat: Heartbeat): Promise<Proces
     result = await provider.publish(request, {
       uploadState,
       saveUploadState: async (state) => {
-        await persist("save upload state", () => db.publishingSchedule.update({ where: { id: scheduleId }, data: { uploadState: JSON.stringify(state) } }));
+        await persist("save upload state", () =>
+          db.publishingSchedule.update({ where: { id: scheduleId }, data: { uploadState: state as Prisma.InputJsonObject } }),
+        );
       },
       progress: () => heartbeat.progress(),
     });
@@ -207,9 +205,8 @@ function preflight(s: LoadedSchedule, settings: Settings): PublishError | null {
   return null;
 }
 
-function overriddenKeys(json: string | null): string[] {
-  const parsed = json ? (JSON.parse(json) as unknown) : [];
-  return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === "string") : [];
+function overriddenKeys(value: Prisma.JsonValue | null): string[] {
+  return Array.isArray(value) ? value.filter((k): k is string => typeof k === "string") : [];
 }
 
 /**
@@ -258,7 +255,7 @@ async function recordSuccess(
             nextAttemptAt: null,
             lastError: null,
             lastErrorCode: null,
-            uploadState: null,
+            uploadState: Prisma.DbNull,
           },
         }),
         db.publishingJob.update({ where: { id: jobId }, data: { status: "SUCCEEDED", finishedAt: now } }),

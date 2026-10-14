@@ -29,12 +29,14 @@ export interface ScheduleInput {
   override?: { reason: string } | null;
 }
 
-/** Override columns for a post: the waived soft requirements, or all null when nothing is waived. */
+const NO_OVERRIDE = { overrideRules: Prisma.DbNull, overrideReason: null, overrideAt: null, overrideBy: null };
+
+/** Override columns for a post (the waived soft requirements), or all null when nothing is waived. */
 function overrideData(missing: Requirement[], override: ScheduleInput["override"]) {
-  const waived = missing.filter((m) => !m.hard);
-  if (!override || !waived.length) return { overrideRules: null, overrideReason: null, overrideAt: null, overrideBy: null };
+  const waived = missing.filter((m) => !m.hard).map((m) => m.key);
+  if (!override || !waived.length) return { columns: NO_OVERRIDE, waived: [] as string[] };
   // overrideBy is filled with the signed-in user once sign-in exists (SEC-01)
-  return { overrideRules: JSON.stringify(waived.map((m) => m.key)), overrideReason: override.reason.trim(), overrideAt: new Date(), overrideBy: null };
+  return { columns: { overrideRules: waived, overrideReason: override.reason.trim(), overrideAt: new Date(), overrideBy: null }, waived };
 }
 
 async function logOverride(contentId: string, scheduleId: string, platform: string, missing: Requirement[], reason: string) {
@@ -133,7 +135,7 @@ export async function createSchedule(input: ScheduleInput) {
     if (existing) return existing;
   }
   const { provider, scheduledAt, account, missing } = await validate(input);
-  const override = overrideData(missing, input.override);
+  const override = overrideData(missing, input.override).columns;
 
   if (!input.repost) {
     const published = await db.publishingSchedule.findFirst({
@@ -170,8 +172,10 @@ export async function createSchedule(input: ScheduleInput) {
       },
     });
   } catch (e) {
-    if (input.idempotencyKey && isUniqueViolation(e, "idempotencyKey")) {
-      return db.publishingSchedule.findUniqueOrThrow({ where: { idempotencyKey: input.idempotencyKey } });
+    // A resubmitted form breaks both unique keys; which one the database reports varies
+    if (input.idempotencyKey && (isUniqueViolation(e, "idempotencyKey") || isUniqueViolation(e, "activeKey"))) {
+      const same = await db.publishingSchedule.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+      if (same) return same;
     }
     if (isUniqueViolation(e, "activeKey")) throw await alreadyScheduled(input.contentId, input.accountId);
     throw e;
@@ -199,8 +203,9 @@ export async function updateSchedule(id: string, input: ScheduleInput) {
   if (!EDITABLE.includes(existing.status)) throw await conflict(id);
   const { provider, scheduledAt, missing } = await validate({ ...input, contentId: existing.contentId });
   // Re-recorded on every edit: kept while it's still needed, cleared once the content is ready
-  const override = overrideData(missing, input.override);
-  const overrideChanged = override.overrideReason !== null && (override.overrideReason !== existing.overrideReason || override.overrideRules !== existing.overrideRules);
+  const { columns: override, waived } = overrideData(missing, input.override);
+  const overrideChanged =
+    override.overrideReason !== null && (override.overrideReason !== existing.overrideReason || JSON.stringify(waived) !== JSON.stringify(existing.overrideRules ?? []));
 
   let changed;
   try {
@@ -221,7 +226,7 @@ export async function updateSchedule(id: string, input: ScheduleInput) {
         activeKey: scheduleActiveKey("WAITING", existing.contentId, input.accountId),
         attempts: 0,
         nextAttemptAt: null,
-        uploadState: null,
+        uploadState: Prisma.DbNull,
         ...clearedError(existing.lastErrorCode),
         ...override,
         // Keep the original time and author of an override that didn't change
@@ -251,7 +256,7 @@ export async function removeOverride(id: string) {
   if (!s.overrideRules) return;
   const changed = await db.publishingSchedule.updateMany({
     where: { id, status: { in: EDITABLE } },
-    data: { overrideRules: null, overrideReason: null, overrideAt: null, overrideBy: null },
+    data: NO_OVERRIDE,
   });
   if (changed.count === 0) throw await conflict(id);
   await logActivity({

@@ -162,7 +162,7 @@ export async function updateSettings(input: SettingsInput) {
   const before = await db.workspaceSettings.upsert({ where: { id: 1 }, update: {}, create: { id: 1 } });
   await db.workspaceSettings.update({
     where: { id: 1 },
-    data: { ...rest, ...(notificationPrefs ? { notificationPrefs: JSON.stringify(notificationPrefs) } : {}) },
+    data: { ...rest, ...(notificationPrefs ? { notificationPrefs } : {}) },
   });
   const rulesChanged = (["requireScriptApproved", "requireImagesApproved", "requireFinalVideo", "requireReview", "requireThumbnail"] as const).some(
     (k) => rest[k] !== undefined && rest[k] !== before[k],

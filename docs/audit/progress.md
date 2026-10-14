@@ -40,3 +40,9 @@ Status: ✅ done and verified · 🟡 done, needs your credentials to verify aga
 | A11Y-01 | ✅ | `--muted-foreground` → `#6b6852` (≥ 4.6:1 on every surface), `--ring` → olive-600 (5.7:1), `text-stone-300/400` replaced by the muted token, no opacity-faded text, heatmap text picks white/black by computed contrast, 12 px minimum text (60 places). | axe serious/critical across 10 pages + Create dialog at 1440/820/390 px: **542 → 0** (e2e now strict). Heatmap rule unit-tested over the whole ramp. |
 | A11Y-02 | ✅ | Every progress bar named; the shared `Progress` now passes its value (bars were announced as indeterminate). Names for 22 dropdowns, the phone "Create content" button, analytics bars (`role="img"`), the target-date field and phone card links; the production-steps scroller is keyboard-focusable. | Same strict e2e. |
 | A11Y-03 | ✅ | Card checkboxes are 24 px; 12 px minimum text. | axe `target-size` at 390 px: 23 → 0. |
+
+## Phase 2 — Performance, sign-in and UX
+
+| ID | Status | What changed | Verified by |
+|---|---|---|---|
+| DB-03 | ✅ | PostgreSQL 17. `npm run db:start` runs a local cluster in `.pgdata/` (port 5433, generated password; no Docker needed, uses the installed PostgreSQL binaries) and `npm run dev` starts it automatically; any PostgreSQL 15+ works via `DATABASE_URL`. Migrations re-baselined, JSON text columns → `Json`, `prisma.config.ts` adopted, case-insensitive search. Your SQLite data was imported (`npm run db:import-sqlite`). | All 21 tables match row for row after the import (`scripts/compare-sqlite.ts`). 84 unit/integration and 80 e2e tests pass on PostgreSQL; CI runs a `postgres:17` service. |

@@ -1,16 +1,35 @@
 // Starts the app for Playwright on its own database and storage folder:
-// fresh migrated database -> demo seed -> production build -> `next start`.
-// Your prisma/dev.db and ./storage are never touched.
+// fresh database -> migrations -> demo seed -> production build -> `next start`.
+// Your development database and ./storage are never touched.
 //
+//   E2E_DATABASE_URL     PostgreSQL URL of the e2e database (CI); default: mediaflow_e2e
+//                        on the local cluster (scripts/db-local.mjs)
 //   E2E_PORT=3210        port to listen on
 //   E2E_SKIP_BUILD=1     reuse the existing .next build
-import { spawn, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { rmSync } from "node:fs";
+import prisma from "@prisma/client";
 
 const port = process.env.E2E_PORT ?? "3210";
+
+function localUrl(db) {
+  execFileSync(process.execPath, ["scripts/db-local.mjs", "start"], { stdio: "ignore" });
+  return execFileSync(process.execPath, ["scripts/db-local.mjs", "url", db], { encoding: "utf8" }).trim();
+}
+const dbUrl = process.env.E2E_DATABASE_URL ?? localUrl("mediaflow_e2e");
+const dbName = new URL(dbUrl).pathname.slice(1);
+
+// Recreate the e2e database from scratch
+const adminUrl = new URL(dbUrl);
+adminUrl.pathname = "/postgres";
+const admin = new prisma.PrismaClient({ datasources: { db: { url: adminUrl.toString() } } });
+await admin.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${dbName}" WITH (FORCE)`);
+await admin.$executeRawUnsafe(`CREATE DATABASE "${dbName}"`);
+await admin.$disconnect();
+
 const env = {
   ...process.env,
-  DATABASE_URL: "file:./e2e.db",
+  DATABASE_URL: dbUrl,
   STORAGE_DIR: "./.e2e-storage",
   PUBLISH_WORKER_ENABLED: "false",
   NEXT_TELEMETRY_DISABLED: "1",
@@ -21,7 +40,6 @@ function run(args) {
   if (r.status !== 0) process.exit(r.status ?? 1);
 }
 
-for (const f of ["prisma/e2e.db", "prisma/e2e.db-journal"]) rmSync(f, { force: true });
 rmSync(".e2e-storage", { recursive: true, force: true });
 run(["node_modules/prisma/build/index.js", "migrate", "deploy"]);
 run(["node_modules/tsx/dist/cli.mjs", "prisma/seed.ts"]);

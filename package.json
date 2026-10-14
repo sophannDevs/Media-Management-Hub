@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/db-local.mjs ensure",
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
@@ -12,6 +13,10 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "audit:prod": "node scripts/audit-check.mjs",
+    "db:start": "node scripts/db-local.mjs start",
+    "db:stop": "node scripts/db-local.mjs stop",
+    "db:import-sqlite": "tsx scripts/import-sqlite.ts",
+    "db:deploy": "prisma migrate deploy",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset --force",
@@ -52,8 +57,5 @@
     "tsx": "^4.21.0",
     "typescript": "^5",
     "vitest": "^5.0.4"
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
   }
 }

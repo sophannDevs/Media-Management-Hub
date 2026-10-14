@@ -45,7 +45,9 @@ export async function getContentList(params: ContentListParams) {
   const where: Prisma.ContentWhereInput = { archivedAt: null };
   const q = params.q?.trim();
   if (q) {
-    where.OR = [{ title: { contains: q } }, { description: { contains: q } }, { idea: { contains: q } }, { tags: { some: { name: { contains: q.toLowerCase() } } } }];
+    // PostgreSQL's contains is case-sensitive; search shouldn't be
+    const match = { contains: q, mode: "insensitive" } as const;
+    where.OR = [{ title: match }, { description: match }, { idea: match }, { tags: { some: { name: match } } }];
   }
   if (params.platform) where.platforms = { some: { platformId: params.platform } };
   if (params.category) where.categoryId = params.category;
