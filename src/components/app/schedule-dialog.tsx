@@ -2,6 +2,7 @@
 
 import { formatInTimeZone } from "date-fns-tz";
 import { CalendarCheck, CircleX, Globe, Link2, Lock, Pencil, Plus, Repeat2, TriangleAlert } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { ContentPicker } from "@/components/app/content-picker";
 import { ContentThumb } from "@/components/app/content-thumb";
@@ -18,7 +19,7 @@ import { useServerAction } from "@/hooks/use-server-action";
 import { TIMEZONES } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { AccountStatus } from "@/lib/workflow/statuses";
-import { getScheduleFormData, type ScheduleFormData } from "@/server/actions/queries";
+import type { ScheduleFormData } from "@/server/queries/schedule-form";
 import { createScheduleAction, updateScheduleAction } from "@/server/actions/schedule";
 
 type OpenOptions = { contentId?: string | null; scheduleId?: string | null; platformId?: string; date?: string; time?: string };
@@ -87,17 +88,29 @@ const newToken = () =>
 type Notice = { code: "ALREADY_SCHEDULED" | "ALREADY_PUBLISHED"; message: string; scheduleId?: string };
 
 function ScheduleForm({ opts, onDone, onSwitchContent }: { opts: OpenOptions; onDone: () => void; onSwitchContent: (id: string) => void }) {
+  const router = useRouter();
   const [data, setData] = useState<ScheduleFormData | null>(null);
   const [loadError, setLoadError] = useState(false);
   useEffect(() => {
-    let alive = true;
-    getScheduleFormData({ contentId: opts.contentId, scheduleId: opts.scheduleId })
-      .then((d) => alive && setData(d))
-      .catch(() => alive && setLoadError(true));
-    return () => {
-      alive = false;
-    };
-  }, [opts.contentId, opts.scheduleId]);
+    const ctrl = new AbortController();
+    const query = new URLSearchParams();
+    if (opts.contentId) query.set("contentId", opts.contentId);
+    if (opts.scheduleId) query.set("scheduleId", opts.scheduleId);
+    // A GET read, not a Server Action (ARCH-03)
+    fetch(`/api/schedule/form?${query}`, { signal: ctrl.signal })
+      .then((r) => {
+        if (r.status === 401) {
+          // The session ended: sign in and come back
+          router.push(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+          return null;
+        }
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json() as Promise<ScheduleFormData>;
+      })
+      .then((d) => d && setData(d))
+      .catch((e) => e?.name !== "AbortError" && setLoadError(true));
+    return () => ctrl.abort();
+  }, [opts.contentId, opts.scheduleId, router]);
 
   if (loadError) {
     return <div className="p-8 text-center text-sm text-muted-foreground">Couldn&apos;t load the scheduling form. Close and try again.</div>;

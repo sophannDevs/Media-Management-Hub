@@ -16,6 +16,8 @@ test("every page sends a signed-out visitor to /login", async ({ page }) => {
 
 test("APIs refuse a signed-out caller", async ({ request }) => {
   expect((await request.get("/api/content/export")).status()).toBe(401);
+  expect((await request.get("/api/content/search?q=a")).status()).toBe(401);
+  expect((await request.get("/api/schedule/form")).status()).toBe(401);
   expect((await request.get("/api/files/media/2026/10/x.mp4")).status()).toBe(401);
   expect((await request.post("/api/media", { multipart: { type: "IMAGE" } })).status()).toBe(401);
 });

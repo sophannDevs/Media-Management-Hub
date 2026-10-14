@@ -1,22 +1,17 @@
-"use server";
-
-// Read-only Server Functions used by client dialogs to load their form data on demand.
-
 import { db } from "@/lib/db";
 import { dayKey, timeKey } from "@/lib/dates";
 import { mediaUrl } from "@/lib/media-url";
 import { providerMeta } from "@/lib/platforms/registry";
 import { requirementsFromMask } from "@/lib/workflow/rules";
-import { requireActionUser } from "../auth/dal";
 import { getSettings } from "../services/settings";
 
 /**
- * What the schedule dialog needs for one content item (PERF-11). The content
- * picker searches separately (GET /api/content/search), so opening the dialog
- * costs the same at any library size. Readiness is the stored state (WF-03).
+ * What the schedule dialog needs for one content item (PERF-11), served by
+ * GET /api/schedule/form (ARCH-03: reads are GETs, not Server Actions). The
+ * content picker searches separately (GET /api/content/search), so opening the
+ * dialog costs the same at any library size. Readiness is the stored state (WF-03).
  */
 export async function getScheduleFormData(input: { contentId?: string | null; scheduleId?: string | null }) {
-  await requireActionUser();
   const schedule = input.scheduleId ? await db.publishingSchedule.findUnique({ where: { id: input.scheduleId } }) : null;
   const contentId = schedule?.contentId ?? input.contentId ?? null;
 
@@ -93,8 +88,3 @@ export async function getScheduleFormData(input: { contentId?: string | null; sc
   };
 }
 export type ScheduleFormData = Awaited<ReturnType<typeof getScheduleFormData>>;
-
-export async function getScriptPromptOptions() {
-  await requireActionUser();
-  return db.aiPrompt.findMany({ where: { category: "SCRIPT" }, orderBy: { updatedAt: "desc" }, select: { id: true, name: true } });
-}

@@ -5,8 +5,9 @@ vi.mock("next/server", async (importOriginal) => ({ ...(await importOriginal<typ
 
 import { NextRequest } from "next/server";
 import { GET as search } from "@/app/api/content/search/route";
-import { getScheduleFormData } from "@/server/actions/queries";
+import { GET as scheduleForm } from "@/app/api/schedule/form/route";
 import { PICKER_LIMIT, searchContentOptions } from "@/server/queries/content";
+import { getScheduleFormData, type ScheduleFormData } from "@/server/queries/schedule-form";
 import { createContent } from "@/server/services/content";
 import { createReadyContent, seedPlatforms } from "../helpers/factories";
 
@@ -44,6 +45,15 @@ describe("content picker (PERF-11)", () => {
     const body = (await res.json()) as { title: string; ready: boolean }[];
     expect(body.map((o) => o.title).sort()).toEqual(["Draft video 1", "Draft video 10", "Draft video 11", "Draft video 12", "Draft video 13", "Draft video 14", "Draft video 15", "Draft video 16", "Draft video 17", "Draft video 18", "Draft video 19"]);
     expect(body.every((o) => !o.ready)).toBe(true);
+  });
+
+  it("serves the dialog's data as a GET read (ARCH-03)", async () => {
+    const res = await scheduleForm(new NextRequest(`http://app.test/api/schedule/form?contentId=${draft}`));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toContain("no-store");
+    const data = (await res.json()) as ScheduleFormData;
+    expect(data.content).toMatchObject({ id: draft, ready: false });
+    expect(data.platforms.map((p) => p.id)).toContain("youtube");
   });
 
   it("opens the dialog with one item and no full list", async () => {
