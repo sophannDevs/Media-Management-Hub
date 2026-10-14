@@ -17,10 +17,15 @@ export const contentStateSelect = {
   script: { select: { body: true } },
   imagePrompt: { select: { prompt: true } },
   schedules: { select: { status: true } },
-  media: { where: { type: "IMAGE" }, select: { isSelected: true } },
+  media: { where: { type: "IMAGE" }, select: { id: true, isSelected: true, createdAt: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
 } satisfies Prisma.ContentSelect;
 
 export type ContentStateRow = Prisma.ContentGetPayload<{ select: typeof contentStateSelect }>;
+
+/** The image lists show for the content (Content.coverAssetId): the thumbnail, else the first selected image, else the first image. */
+export function coverAssetId(c: ContentStateRow) {
+  return c.thumbnailAssetId ?? c.media.find((m) => m.isSelected)?.id ?? c.media[0]?.id ?? null;
+}
 
 export function toContentState(c: ContentStateRow): ContentState {
   return {

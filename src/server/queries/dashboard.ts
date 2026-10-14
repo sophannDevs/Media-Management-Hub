@@ -17,14 +17,14 @@ const scheduleCardSelect = {
       id: true,
       title: true,
       contentType: true,
-      thumbnailAsset: { select: { storageKey: true, externalUrl: true } },
+      coverAsset: { select: { storageKey: true, externalUrl: true } },
       videoAsset: { select: { durationSec: true } },
     },
   },
 } as const;
 
 export async function getDashboardData() {
-  const { now, rules, tz } = await getPageContext();
+  const { now, tz } = await getPageContext();
   const todayKey = dayKey(now, tz);
   const week = weekKeys(todayKey);
   const weekRange = dayRangeUtc(week[0], week[6], tz);
@@ -60,7 +60,7 @@ export async function getDashboardData() {
     db.publishingSchedule.count({ where: { status: "PUBLISHED", publishedAt: { gte: monthStart } } }),
   ]);
 
-  const items = rows.map((r) => toSummary(r, rules, now));
+  const items = rows.map((r) => toSummary(r, now));
   const byStage = Object.fromEntries(PIPELINE_STAGES.map((s) => [s, 0])) as Record<string, number>;
   for (const c of items) byStage[c.stage] = (byStage[c.stage] ?? 0) + 1;
 
@@ -76,7 +76,7 @@ export async function getDashboardData() {
       id: s.content.id,
       title: s.content.title,
       contentType: s.content.contentType,
-      thumbUrl: mediaUrl(s.content.thumbnailAsset),
+      thumbUrl: mediaUrl(s.content.coverAsset),
       durationSec: s.content.videoAsset?.durationSec ?? null,
     },
   });

@@ -4,7 +4,7 @@
 // table in foreign-key order. Refuses to run when PostgreSQL already has
 // content, unless --force is given (it then only adds rows that don't exist).
 import { DatabaseSync } from "node:sqlite";
-import { Prisma, PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 
 try {
   process.loadEnvFile();
@@ -43,8 +43,10 @@ function convert(model: string, row: Record<string, unknown>) {
 }
 
 async function main() {
+  // Loaded after .env: the app's client and services read DATABASE_URL
+  const { db } = await import("../src/lib/db");
+  const { syncAllPublishingStatuses } = await import("../src/server/services/content");
   const sqlite = new DatabaseSync(file, { readOnly: true });
-  const db = new PrismaClient();
   try {
     if ((await db.content.count()) > 0 && !force) {
       throw new Error("PostgreSQL already has content. Run with --force to add only the rows that are missing.");
@@ -84,6 +86,8 @@ async function main() {
       }
       console.log(`${"_ContentToTag".padEnd(20)} ${links.length}`);
     }
+    // The old database has no stored stage, missing requirements, completion or cover (WF-03)
+    await syncAllPublishingStatuses();
     console.log(`Imported ${file} into PostgreSQL.`);
   } finally {
     sqlite.close();

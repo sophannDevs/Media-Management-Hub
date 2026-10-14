@@ -3,10 +3,10 @@ import type { Prisma } from "@prisma/client";
 import { cache } from "react";
 import { db } from "@/lib/db";
 import { mediaUrl } from "@/lib/media-url";
-import { completion, deriveStage, missingRequirements, type WorkflowRules } from "@/lib/workflow/rules";
+import { requirementsFromMask } from "@/lib/workflow/rules";
+import type { StageCode } from "@/lib/workflow/statuses";
 import { requireUser } from "../auth/dal";
 import { CACHE_TAGS } from "../cache-tags";
-import { contentStateSelect, toContentState } from "../services/content-state";
 import { getSettings, rulesFrom } from "../services/settings";
 
 // Page reads shared by the app shell and the pages (PERF-04). React `cache`
@@ -84,8 +84,11 @@ export type ContentFormOptions = Awaited<ReturnType<typeof getContentFormOptions
 
 // ---------- Content summaries (lists, dashboard, calendar) ----------
 
+/**
+ * Stage, missing requirements, completion and cover are read as stored
+ * (WF-03), so a summary needs no scripts, prompts or image rows.
+ */
 export const contentSummarySelect = {
-  ...contentStateSelect,
   id: true,
   title: true,
   description: true,
@@ -94,16 +97,21 @@ export const contentSummarySelect = {
   createdAt: true,
   targetPublishDate: true,
   archivedAt: true,
+  scriptStatus: true,
+  imageStatus: true,
+  videoStatus: true,
+  reviewStatus: true,
+  publishingStatus: true,
+  stage: true,
+  missingMask: true,
+  completion: true,
   category: { select: { id: true, name: true } },
   series: { select: { id: true, name: true } },
   campaign: { select: { id: true, name: true } },
   tags: { select: { name: true }, orderBy: { name: "asc" } },
   platforms: { select: { platformId: true } },
-  thumbnailAsset: { select: { storageKey: true, externalUrl: true } },
+  coverAsset: { select: { storageKey: true, externalUrl: true } },
   videoAsset: { select: { durationSec: true } },
-  // createdAt is selected because the list is ordered by it: past ~1,000 parent rows Prisma
-  // (SQLite) loads relations in chunks and panics merging them on an unselected order field (PERF-02)
-  media: { where: { type: "IMAGE" }, select: { isSelected: true, storageKey: true, externalUrl: true, createdAt: true }, orderBy: { createdAt: "asc" } },
   schedules: {
     select: { id: true, status: true, platformId: true, scheduledAt: true, accountId: true, simulated: true },
     orderBy: { scheduledAt: "asc" },
@@ -119,9 +127,7 @@ export function onlySimulatedPosts(schedules: { status: string; simulated: boole
 type SummaryRow = Prisma.ContentGetPayload<{ select: typeof contentSummarySelect }>;
 
 /** Turns a DB row into the serializable shape the UI uses. */
-export function toSummary(c: SummaryRow, rules: WorkflowRules, now: Date) {
-  const state = toContentState(c);
-  const thumb = c.thumbnailAsset ?? c.media.find((m) => m.isSelected) ?? c.media[0] ?? null;
+export function toSummary(c: SummaryRow, now: Date) {
   const nextSchedule = c.schedules.find((s) => ["WAITING", "RETRY_SCHEDULED", "PROCESSING"].includes(s.status) && s.scheduledAt >= new Date(now.getTime() - 86_400_000)) ?? null;
   return {
     id: c.id,
@@ -142,10 +148,10 @@ export function toSummary(c: SummaryRow, rules: WorkflowRules, now: Date) {
     videoStatus: c.videoStatus,
     reviewStatus: c.reviewStatus,
     publishingStatus: c.publishingStatus,
-    stage: deriveStage(state, rules),
-    completion: completion(state),
-    missing: missingRequirements(state, rules),
-    thumbUrl: mediaUrl(thumb),
+    stage: c.stage as StageCode,
+    completion: c.completion,
+    missing: requirementsFromMask(c.missingMask),
+    thumbUrl: mediaUrl(c.coverAsset),
     durationSec: c.videoAsset?.durationSec ?? null,
     nextSchedule,
     scheduleCount: c.schedules.filter((s) => s.status !== "CANCELLED").length,

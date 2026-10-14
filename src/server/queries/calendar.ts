@@ -22,15 +22,8 @@ const eventSelect = {
       id: true,
       title: true,
       contentType: true,
-      thumbnailAsset: { select: { storageKey: true, externalUrl: true } },
+      coverAsset: { select: { storageKey: true, externalUrl: true } },
       videoAsset: { select: { durationSec: true } },
-      media: {
-        where: { type: "IMAGE" },
-        // Order fields are selected too: Prisma panics merging chunked relations on unselected ones (PERF-02)
-        select: { storageKey: true, externalUrl: true, isSelected: true, createdAt: true },
-        orderBy: [{ isSelected: "desc" }, { createdAt: "asc" }],
-        take: 1,
-      },
     },
   },
 } satisfies Prisma.PublishingScheduleSelect;
@@ -61,7 +54,7 @@ function titleFor(view: CalendarView, anchor: string, days: string[]) {
 }
 
 export async function getCalendarData(params: CalendarParams) {
-  const { now, rules, tz } = await getPageContext();
+  const { now, tz } = await getPageContext();
   const todayKey = dayKey(now, tz);
   const view = params.view;
   const anchor = params.date ?? todayKey;
@@ -77,11 +70,7 @@ export async function getCalendarData(params: CalendarParams) {
       orderBy: [{ scheduledAt: "asc" }, { id: "asc" }],
       select: eventSelect,
     }),
-    // Stage READY is only possible while nothing is scheduled / published yet
-    db.content.findMany({
-      where: { archivedAt: null, publishingStatus: { notIn: ["SCHEDULED", "PUBLISHING", "PUBLISHED", "FAILED"] } },
-      select: contentSummarySelect,
-    }),
+    db.content.findMany({ where: { archivedAt: null, stage: "READY" }, select: contentSummarySelect }),
     getBestPostingTimes(tz, platform?.id ?? null),
   ]);
 
@@ -113,14 +102,13 @@ export async function getCalendarData(params: CalendarParams) {
       id: s.content.id,
       title: s.content.title,
       contentType: s.content.contentType,
-      thumbUrl: mediaUrl(s.thumbnailAsset ?? s.content.thumbnailAsset ?? s.content.media[0] ?? null),
+      thumbUrl: mediaUrl(s.thumbnailAsset ?? s.content.coverAsset),
       durationSec: s.content.videoAsset?.durationSec ?? null,
     },
   }));
 
   const ready = readyRows
-    .map((r) => toSummary(r, rules, now))
-    .filter((c) => c.stage === "READY")
+    .map((r) => toSummary(r, now))
     .sort(
       (a, b) =>
         (PRIORITY_ORDER[a.priority] ?? 9) - (PRIORITY_ORDER[b.priority] ?? 9) ||

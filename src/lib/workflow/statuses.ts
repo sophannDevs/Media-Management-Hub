@@ -153,7 +153,7 @@ export const AiProvider = defs({
 });
 export type AiProviderCode = (typeof AiProvider.codes)[number];
 
-/** Pipeline stage shown on the dashboard / content list (derived, never stored). */
+/** Pipeline stage shown on the dashboard / content list (derived; Content.stage keeps the current value). */
 export const Stage = defs({
   IDEA: { label: "Idea", tone: "neutral" },
   SCRIPT: { label: "Script Pending", tone: "progress" },

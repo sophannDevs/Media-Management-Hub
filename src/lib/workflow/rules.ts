@@ -44,40 +44,67 @@ export interface ContentState {
 
 export type WorkspaceTab = "overview" | "script" | "images" | "video" | "publishing" | "activity";
 
+/**
+ * Every check that can keep content from being Ready to Post. `bit` is its
+ * place in Content.missingMask (stored, WF-03): append new codes with new bits,
+ * never reuse one.
+ */
+export const REQUIREMENTS = {
+  videoFile: { bit: 1, key: "videoFile", label: "Final video is missing", tab: "video", hard: true },
+  scriptNotApproved: { bit: 2, key: "script", label: "Script is not approved", tab: "script" },
+  imagesNotApproved: { bit: 4, key: "images", label: "Images are not approved", tab: "images" },
+  noFinalImages: { bit: 8, key: "images", label: "No final images selected", tab: "images" },
+  videoNotFinal: { bit: 16, key: "video", label: "Video is not marked Final", tab: "video" },
+  notReviewed: { bit: 32, key: "review", label: "Content has not been reviewed", tab: "overview" },
+  noThumbnail: { bit: 64, key: "thumbnail", label: "No thumbnail selected", tab: "video" },
+} as const satisfies Record<string, { bit: number; key: string; label: string; tab: WorkspaceTab; hard?: boolean }>;
+
+export type RequirementCode = keyof typeof REQUIREMENTS;
+
 export interface Requirement {
+  /** The rule it belongs to (what an override waives) */
   key: "videoFile" | "script" | "images" | "video" | "review" | "thumbnail";
+  /** The exact check that failed */
+  code: RequirementCode;
   label: string;
   tab: WorkspaceTab;
   /** Hard requirements can't be switched off in Settings or overridden per post: publishing would fail without them. */
   hard?: boolean;
 }
 
+const requirement = (code: RequirementCode): Requirement => {
+  const r = REQUIREMENTS[code];
+  return { key: r.key, code, label: r.label, tab: r.tab, ...("hard" in r ? { hard: r.hard } : {}) };
+};
+
 /** Never optional: every platform publishes a video file, so a post without one can only fail. */
 export function hardRequirements(c: ContentState): Requirement[] {
-  return c.hasVideo === false ? [{ key: "videoFile", label: "Final video is missing", tab: "video", hard: true }] : [];
+  return c.hasVideo === false ? [requirement("videoFile")] : [];
 }
 
 /** What is still missing before the content can be marked "Ready to Post": hard requirements first, then the enabled rules. */
 export function missingRequirements(c: ContentState, rules: WorkflowRules = DEFAULT_RULES): Requirement[] {
   const missing: Requirement[] = hardRequirements(c);
-  if (rules.requireScriptApproved && c.scriptStatus !== "APPROVED") {
-    missing.push({ key: "script", label: "Script is not approved", tab: "script" });
-  }
+  if (rules.requireScriptApproved && c.scriptStatus !== "APPROVED") missing.push(requirement("scriptNotApproved"));
   if (rules.requireImagesApproved) {
-    if (c.imageStatus !== "APPROVED") missing.push({ key: "images", label: "Images are not approved", tab: "images" });
-    else if (c.selectedImageCount === 0) missing.push({ key: "images", label: "No final images selected", tab: "images" });
+    if (c.imageStatus !== "APPROVED") missing.push(requirement("imagesNotApproved"));
+    else if (c.selectedImageCount === 0) missing.push(requirement("noFinalImages"));
   }
   // The file itself is a hard requirement above; this rule is about its status
-  if (rules.requireFinalVideo && c.hasVideo !== false && c.videoStatus !== "FINAL") {
-    missing.push({ key: "video", label: "Video is not marked Final", tab: "video" });
-  }
-  if (rules.requireReview && c.reviewStatus !== "APPROVED") {
-    missing.push({ key: "review", label: "Content has not been reviewed", tab: "overview" });
-  }
-  if (rules.requireThumbnail && c.hasThumbnail === false) {
-    missing.push({ key: "thumbnail", label: "No thumbnail selected", tab: "video" });
-  }
+  if (rules.requireFinalVideo && c.hasVideo !== false && c.videoStatus !== "FINAL") missing.push(requirement("videoNotFinal"));
+  if (rules.requireReview && c.reviewStatus !== "APPROVED") missing.push(requirement("notReviewed"));
+  if (rules.requireThumbnail && c.hasThumbnail === false) missing.push(requirement("noThumbnail"));
   return missing;
+}
+
+/** Content.missingMask for a list of missing requirements. */
+export function missingMask(missing: Requirement[]) {
+  return missing.reduce((mask, r) => mask | REQUIREMENTS[r.code].bit, 0);
+}
+
+/** The missing requirements stored in Content.missingMask, in display order. */
+export function requirementsFromMask(mask: number): Requirement[] {
+  return (Object.keys(REQUIREMENTS) as RequirementCode[]).filter((code) => mask & REQUIREMENTS[code].bit).map(requirement);
 }
 
 export function isReadyToPost(c: ContentState, rules: WorkflowRules = DEFAULT_RULES) {
@@ -109,6 +136,28 @@ export function derivePublishingStatus(c: ContentState, rules: WorkflowRules = D
     c.videoStatus === "NOT_STARTED" &&
     c.reviewStatus === "NOT_STARTED";
   return untouched ? "DRAFT" : "NOT_READY";
+}
+
+export interface DerivedContentState {
+  publishingStatus: PublishingStatusCode;
+  stage: StageCode;
+  missingMask: number;
+  completion: number;
+}
+
+/**
+ * Everything syncPublishingStatus stores on Content (WF-03). The migration
+ * that added these columns backfills them with the same rules in SQL; a test
+ * keeps the two in step.
+ */
+export function deriveContentState(c: ContentState, rules: WorkflowRules = DEFAULT_RULES): DerivedContentState {
+  const publishingStatus = derivePublishingStatus(c, rules);
+  return {
+    publishingStatus,
+    stage: deriveStage({ ...c, publishingStatus }, rules),
+    missingMask: missingMask(missingRequirements(c, rules)),
+    completion: completion(c),
+  };
 }
 
 /** Current pipeline stage (Idea → … → Published). */

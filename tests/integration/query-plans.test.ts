@@ -29,6 +29,11 @@ describe("query plans (DB-01)", () => {
     expect(p).toContain("PublishingSchedule_accountId_idx");
   });
 
+  it("lists content of a stage, newest first, from an index (WF-03)", async () => {
+    const p = await plan(`SELECT "id" FROM "Content" WHERE "archivedAt" IS NULL AND "stage" = 'READY' ORDER BY "updatedAt" DESC LIMIT 50`);
+    expect(p).toContain("Content_archivedAt_stage_updatedAt_idx");
+  });
+
   it("lists a platform's posts in a time range from an index", async () => {
     const p = await plan(`SELECT "id" FROM "PublishingSchedule" WHERE "platformId" = 'youtube' AND "scheduledAt" >= now() AND "scheduledAt" < now() + interval '1 day'`);
     expect(p).toContain("PublishingSchedule_platformId_scheduledAt_idx");

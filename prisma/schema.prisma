@@ -128,6 +128,18 @@ model Content {
   /// Derived from the statuses above + schedules. See syncPublishingStatus().
   publishingStatus String @default("DRAFT")
 
+  // Also derived and kept current by syncPublishingStatus(), so lists can
+  // filter, sort, count and page in SQL (WF-03).
+  /// Pipeline stage: IDEA | SCRIPT | IMAGES | VIDEO | REVIEW | READY | SCHEDULED | PUBLISHED | FAILED
+  stage        String  @default("IDEA")
+  /// What keeps it from Ready to Post: one bit per REQUIREMENTS code (src/lib/workflow/rules.ts)
+  missingMask  Int     @default(0)
+  /// Checklist completion, 0-100
+  completion   Int     @default(0)
+  /// Image shown in lists: the thumbnail, else the first selected image, else the first image
+  coverAssetId String?
+  coverAsset   MediaAsset? @relation("ContentCover", fields: [coverAssetId], references: [id], onDelete: SetNull)
+
   titleFinalized       Boolean   @default(false)
   descriptionFinalized Boolean   @default(false)
   archivedAt           DateTime?
@@ -157,8 +169,10 @@ model Content {
   updatedAt DateTime @updatedAt
 
   @@index([publishingStatus])
-  @@index([archivedAt])
   @@index([createdAt])
+  /// Lists: not archived, by stage, newest first (also serves archivedAt alone)
+  @@index([archivedAt, stage, updatedAt])
+  @@index([coverAssetId])
 }
 
 model ContentPlatform {
@@ -235,6 +249,7 @@ model MediaAsset {
 
   videoFor       Content?             @relation("ContentVideo")
   thumbnailFor   Content?             @relation("ContentThumbnail")
+  coverFor       Content[]            @relation("ContentCover")
   scheduleThumbs PublishingSchedule[]
 
   @@index([contentId, type])

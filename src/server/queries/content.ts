@@ -40,7 +40,7 @@ function matchesStage(stage: string, filter: string) {
 }
 
 export async function getContentList(params: ContentListParams) {
-  const { now, rules, tz } = await getPageContext();
+  const { now, tz } = await getPageContext();
 
   const where: Prisma.ContentWhereInput = { archivedAt: null };
   const q = params.q?.trim();
@@ -57,7 +57,7 @@ export async function getContentList(params: ContentListParams) {
   }
 
   const rows = await db.content.findMany({ where, select: contentSummarySelect, orderBy: [{ updatedAt: "desc" }] });
-  let items = rows.map((r) => toSummary(r, rules, now));
+  let items = rows.map((r) => toSummary(r, now));
 
   // "Scheduled" date filter works on the next upcoming post
   const today = dayKey(now, tz);

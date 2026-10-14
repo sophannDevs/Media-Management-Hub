@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { syncPublishingStatus } from "@/server/services/content";
 
 let n = 0;
 const uid = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${(n++).toString(36)}`;
@@ -45,7 +46,10 @@ export async function createReadyContent(data: Partial<Prisma.ContentUncheckedCr
   const video = await db.mediaAsset.create({
     data: { contentId: content.id, type: "VIDEO", fileName: "final.mp4", storageKey: `${uid("test")}/final.mp4`, mimeType: "video/mp4", size: 1000 },
   });
-  return db.content.update({ where: { id: content.id }, data: { videoAssetId: video.id } });
+  await db.content.update({ where: { id: content.id }, data: { videoAssetId: video.id } });
+  // Stored stage, missing requirements, completion and cover (WF-03)
+  await syncPublishingStatus(content.id);
+  return db.content.findUniqueOrThrow({ where: { id: content.id } });
 }
 
 /** Inserts a schedule row directly (no validation), for setting up a given state. */

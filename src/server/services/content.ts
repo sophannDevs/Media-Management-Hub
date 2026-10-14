@@ -1,11 +1,11 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { storage } from "@/lib/storage";
-import { derivePublishingStatus, isReadyToPost, missingRequirements, normalizeHashtags, parseTags } from "@/lib/workflow/rules";
+import { deriveContentState, isReadyToPost, missingRequirements, normalizeHashtags, parseTags } from "@/lib/workflow/rules";
 import { ActivityType, ImageStatus, NotificationType, ReviewStatus, ScriptStatus, VideoStatus } from "@/lib/workflow/statuses";
 import { ServiceError } from "../errors";
 import { logActivity } from "./activity";
-import { contentStateSelect, toContentState } from "./content-state";
+import { contentStateSelect, coverAssetId, toContentState } from "./content-state";
 import { notify } from "./notifications";
 import { getRules } from "./settings";
 
@@ -18,27 +18,43 @@ export const STATUS_FIELDS = {
 export type StatusField = keyof typeof STATUS_FIELDS;
 
 /**
- * Recomputes the derived publishing status from production statuses + schedules.
- * Call after anything that can affect readiness or schedules.
+ * Recomputes what is derived from the production statuses, assets and
+ * schedules (publishing status, stage, missing requirements, completion, cover
+ * image) and stores it on the content. Call after anything that can change them.
  */
 export async function syncPublishingStatus(contentId: string) {
-  const row = await db.content.findUnique({ where: { id: contentId }, select: { ...contentStateSelect, title: true } });
+  const row = await db.content.findUnique({
+    where: { id: contentId },
+    select: { ...contentStateSelect, title: true, stage: true, missingMask: true, completion: true, coverAssetId: true },
+  });
   if (!row) return null;
-  const next = derivePublishingStatus(toContentState(row), await getRules());
-  if (next !== row.publishingStatus) {
-    await db.content.update({ where: { id: contentId }, data: { publishingStatus: next } });
-    if (next === "READY" && ["DRAFT", "NOT_READY"].includes(row.publishingStatus)) {
-      await logActivity({ contentId, type: ActivityType.STATUS_CHANGED, message: "All checks passed — Ready to Post" });
-      await notify({
-        type: NotificationType.READY_FOR_SCHEDULING,
-        title: "Ready for scheduling",
-        message: `"${row.title}" passed all checks and can be scheduled.`,
-        href: `/content/${contentId}?tab=publishing`,
-        dedupeKey: `ready:${contentId}:${new Date().toISOString().slice(0, 13)}`,
-      });
-    }
+  const next = deriveContentState(toContentState(row), await getRules());
+  const cover = coverAssetId(row);
+  const unchanged =
+    next.publishingStatus === row.publishingStatus &&
+    next.stage === row.stage &&
+    next.missingMask === row.missingMask &&
+    next.completion === row.completion &&
+    cover === row.coverAssetId;
+  if (!unchanged) {
+    // Raw SQL leaves updatedAt alone: refreshing derived values is not an edit
+    // (a rule change in Settings must not make every item "recently updated").
+    await db.$executeRaw`
+      UPDATE "Content" SET "publishingStatus" = ${next.publishingStatus}, "stage" = ${next.stage},
+        "missingMask" = ${next.missingMask}, "completion" = ${next.completion}, "coverAssetId" = ${cover}
+      WHERE "id" = ${contentId}`;
   }
-  return next;
+  if (next.publishingStatus === "READY" && ["DRAFT", "NOT_READY"].includes(row.publishingStatus)) {
+    await logActivity({ contentId, type: ActivityType.STATUS_CHANGED, message: "All checks passed — Ready to Post" });
+    await notify({
+      type: NotificationType.READY_FOR_SCHEDULING,
+      title: "Ready for scheduling",
+      message: `"${row.title}" passed all checks and can be scheduled.`,
+      href: `/content/${contentId}?tab=publishing`,
+      dedupeKey: `ready:${contentId}:${new Date().toISOString().slice(0, 13)}`,
+    });
+  }
+  return next.publishingStatus;
 }
 
 export async function syncAllPublishingStatuses() {
@@ -92,6 +108,7 @@ export async function createContent(input: ContentInput) {
     },
   });
   await logActivity({ contentId: content.id, type: ActivityType.CONTENT_CREATED, message: "Content created" });
+  await syncPublishingStatus(content.id);
   return content;
 }
 
@@ -162,6 +179,8 @@ export async function setChecklistFlag(id: string, key: "titleFinalized" | "desc
     type: ActivityType.CONTENT_UPDATED,
     message: `${key === "titleFinalized" ? "Title" : "Description"} ${value ? "finalized" : "reopened"}`,
   });
+  // Part of the checklist, so of the stored completion
+  await syncPublishingStatus(id);
 }
 
 export async function duplicateContent(id: string) {

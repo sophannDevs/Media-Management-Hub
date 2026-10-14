@@ -3,12 +3,16 @@ import {
   blockingRequirements,
   type ContentState,
   DEFAULT_RULES,
+  deriveContentState,
   derivePublishingStatus,
   deriveStage,
   isReadyToPost,
+  missingMask,
   missingRequirements,
   normalizeHashtags,
   parseTags,
+  REQUIREMENTS,
+  requirementsFromMask,
   validateSchedule,
   wordCount,
 } from "@/lib/workflow/rules";
@@ -56,7 +60,7 @@ describe("hard and soft requirements (WF-01)", () => {
 
   it("still requires a video file with every rule switched off", () => {
     const missing = missingRequirements({ ...ready, hasVideo: false }, allOff);
-    expect(missing).toEqual([{ key: "videoFile", label: "Final video is missing", tab: "video", hard: true }]);
+    expect(missing).toEqual([{ key: "videoFile", code: "videoFile", label: "Final video is missing", tab: "video", hard: true }]);
     expect(isReadyToPost({ ...ready, hasVideo: false }, allOff)).toBe(false);
   });
 
@@ -106,6 +110,36 @@ describe("deriveStage", () => {
     expect(deriveStage({ ...ready, videoStatus: "EDITING" })).toBe("VIDEO");
     expect(deriveStage({ ...ready, reviewStatus: "IN_REVIEW" })).toBe("REVIEW");
     expect(deriveStage(ready)).toBe("READY");
+  });
+});
+
+describe("stored content state (WF-03)", () => {
+  it("gives every requirement its own bit", () => {
+    const bits = Object.values(REQUIREMENTS).map((r) => r.bit);
+    expect(new Set(bits).size).toBe(bits.length);
+    expect(bits.every((b) => Number.isInteger(Math.log2(b)))).toBe(true);
+  });
+
+  it("reads back from the mask exactly what was missing, in the same order", () => {
+    const rules = { ...DEFAULT_RULES, requireThumbnail: true };
+    const cases: ContentState[] = [
+      { ...ready, hasVideo: false, scriptStatus: "GENERATED", hasThumbnail: false },
+      { ...ready, selectedImageCount: 0, videoStatus: "EDITING", reviewStatus: "IN_REVIEW" },
+      { ...ready, imageStatus: "GENERATED", hasThumbnail: true },
+      { ...ready, hasThumbnail: true },
+    ];
+    for (const c of cases) {
+      const missing = missingRequirements(c, rules);
+      expect(requirementsFromMask(missingMask(missing))).toEqual(missing);
+    }
+  });
+
+  it("derives status, stage, mask and completion together", () => {
+    // 8 of 13 checklist items: no thumbnail, finalized title/description, hashtags or schedule yet
+    expect(deriveContentState(ready)).toEqual({ publishingStatus: "READY", stage: "READY", missingMask: 0, completion: 62 });
+    const blank = { scriptStatus: "NOT_STARTED", imageStatus: "NOT_STARTED", videoStatus: "NOT_STARTED", reviewStatus: "NOT_STARTED", hasVideo: false };
+    // Video file (1) + script (2) + images (4) + review (32); only "Idea created" is done (1 of 13)
+    expect(deriveContentState(blank)).toEqual({ publishingStatus: "DRAFT", stage: "IDEA", missingMask: 39, completion: 8 });
   });
 });
 
