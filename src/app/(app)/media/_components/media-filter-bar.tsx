@@ -2,6 +2,7 @@
 
 import { LoaderCircle, Search, X } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { ContentPicker } from "@/components/app/content-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,7 +12,7 @@ import { CLEARED, useMediaNav } from "./media-nav";
 
 const ANY = "__any";
 
-export function MediaFilterBar({ contents }: { contents: MediaContentOption[] }) {
+export function MediaFilterBar({ filteredContent }: { filteredContent: MediaContentOption | null }) {
   const { filters, navigate, pending } = useMediaNav();
   const search = useRef<HTMLInputElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -59,14 +60,18 @@ export function MediaFilterBar({ contents }: { contents: MediaContentOption[] })
           aria-label="Search file name"
         />
       </div>
-      <FilterSelect
+      <ContentPicker
         label="Content"
-        value={filters.content}
         placeholder="All content"
-        onChange={(content) => navigate({ content })}
+        readiness={false}
         className="w-full sm:w-[230px]"
-        special={[["none", "Unassigned files"]]}
-        items={contents.map((c) => [c.id, c.title])}
+        inputClassName={filters.content ? "border-olive-300 bg-olive-50" : undefined}
+        value={filters.content === "none" ? { id: "none", title: "Unassigned files" } : filteredContent}
+        fixed={[
+          { id: "", title: "All content" },
+          { id: "none", title: "Unassigned files" },
+        ]}
+        onChange={(c) => navigate({ content: c.id || null })}
       />
       <FilterSelect
         label="Usage"
@@ -121,7 +126,8 @@ function FilterSelect({
   return (
     <Select value={value ?? ANY} onValueChange={(v) => onChange(v === ANY ? null : v)}>
       <SelectTrigger aria-label={label} className={cn("bg-white data-[size=default]:h-9", value && "border-olive-300 bg-olive-50", className)}>
-        <SelectValue />
+        {/* Labelled on the server too, so the bar doesn't reflow after hydration (as PERF-09) */}
+        <SelectValue>{[...special, ...items].find(([v]) => v === value)?.[1] ?? placeholder}</SelectValue>
       </SelectTrigger>
       <SelectContent position="popper" className="max-h-[min(20rem,var(--radix-select-content-available-height))] max-w-[min(24rem,calc(100vw-2rem))]">
         <SelectItem value={ANY}>{placeholder}</SelectItem>

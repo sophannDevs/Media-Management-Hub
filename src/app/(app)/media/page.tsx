@@ -5,7 +5,7 @@ import { EmptyState, PageHeader } from "@/components/app/content-bits";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { getMediaContentOptions, getMediaLibrary, type MediaLibraryData, parseMediaFilters } from "@/server/queries/media";
+import { getFilteredContent, getMediaLibrary, type MediaLibraryData, parseMediaFilters } from "@/server/queries/media";
 import { MediaFilterBar } from "./_components/media-filter-bar";
 import { MediaGrid } from "./_components/media-grid";
 import { ClearFiltersButton, MediaNavProvider, MediaPending } from "./_components/media-nav";
@@ -37,11 +37,11 @@ export default function MediaPage({ searchParams }: PageProps<"/media">) {
   );
 }
 
-/** Opens the upload dialog preset to the type / content currently filtered. */
+/** Opens the upload dialog preset to the type / content currently filtered (archived content can't receive uploads). */
 async function UploadButton({ searchParams }: { searchParams: SearchParams }) {
-  const [sp, contents] = await Promise.all([searchParams, getMediaContentOptions()]);
-  const f = parseMediaFilters(sp);
-  return <UploadMediaDialog contents={contents} defaultType={f.type ?? "IMAGE"} defaultContentId={f.content === "none" ? null : f.content} />;
+  const f = parseMediaFilters(await searchParams);
+  const filtered = await getFilteredContent(f.content);
+  return <UploadMediaDialog defaultType={f.type ?? "IMAGE"} defaultContent={filtered && !filtered.archived ? filtered : null} />;
 }
 
 function UploadButtonFallback() {
@@ -58,11 +58,11 @@ async function MediaLibrary({ searchParams }: { searchParams: SearchParams }) {
   return (
     <MediaNavProvider filters={d.filters}>
       <TypeCards counts={d.counts} all={d.all} />
-      <MediaFilterBar contents={d.contentOptions} />
+      <MediaFilterBar filteredContent={d.filteredContent} />
       <MediaPending className="space-y-5">
         {d.items.length > 0 ? (
           <>
-            <MediaGrid items={d.items} contents={d.pickerOptions} />
+            <MediaGrid items={d.items} />
             <MediaPagination page={d.page} pageCount={d.pageCount} total={d.total} pageSize={d.pageSize} />
           </>
         ) : (
@@ -93,7 +93,7 @@ function NoMedia({ d }: { d: MediaLibraryData }) {
               ? "Upload one, link a file stored elsewhere, or pick another type above."
               : "Upload images, videos, thumbnails and audio — or link files stored elsewhere."
           }
-          action={<UploadMediaDialog contents={d.pickerOptions} defaultType={type ?? "IMAGE"} />}
+          action={<UploadMediaDialog defaultType={type ?? "IMAGE"} />}
         />
       )}
     </div>

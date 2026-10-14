@@ -185,20 +185,26 @@ function toItem(a: AssetRow, now: Date, tz: string) {
 export type MediaItem = ReturnType<typeof toItem>;
 
 /** Non-archived content for the filter / upload / move pickers (one query per request). */
-export const getMediaContentOptions = cache(async () => {
+/**
+ * The content a media filter points at, for the pickers to show (they search
+ * the rest on demand, PERF-11). Archived content is named as such.
+ */
+export const getFilteredContent = cache(async (contentId: string | null) => {
+  if (!contentId || contentId === "none") return null;
   await io();
-  return db.content.findMany({ where: { archivedAt: null }, orderBy: { updatedAt: "desc" }, select: { id: true, title: true } });
+  const c = await db.content.findUnique({ where: { id: contentId }, select: { id: true, title: true, archivedAt: true } });
+  return { id: contentId, title: c ? `${c.title}${c.archivedAt ? " (archived)" : ""}` : "Unknown content", archived: !c || !!c.archivedAt };
 });
-export type MediaContentOption = Awaited<ReturnType<typeof getMediaContentOptions>>[number];
+export type MediaContentOption = { id: string; title: string };
 
 export async function getMediaLibrary(filters: MediaFilters) {
   const { now, tz } = await getPageContext();
   const facet = facetWhere(filters, now);
   const where: Prisma.MediaAssetWhereInput = filters.type ? { AND: [facet, { type: filters.type }] } : facet;
 
-  const [groups, options] = await Promise.all([
+  const [groups, filteredContent] = await Promise.all([
     db.mediaAsset.groupBy({ by: ["type"], where: facet, _count: { _all: true } }),
-    getMediaContentOptions(),
+    getFilteredContent(filters.content),
   ]);
 
   const counts = Object.fromEntries(MediaType.codes.map((c) => [c, 0])) as Record<MediaTypeCode, number>;
@@ -218,13 +224,6 @@ export async function getMediaLibrary(filters: MediaFilters) {
       })
     : [];
 
-  // Keep the filtered content selectable even when it's archived
-  let contentOptions = options;
-  if (filters.content && filters.content !== "none" && !options.some((o) => o.id === filters.content)) {
-    const c = await db.content.findUnique({ where: { id: filters.content }, select: { id: true, title: true } });
-    contentOptions = [{ id: filters.content, title: c ? `${c.title} (archived)` : "Unknown content" }, ...options];
-  }
-
   return {
     filters: { ...filters, page },
     counts,
@@ -234,9 +233,8 @@ export async function getMediaLibrary(filters: MediaFilters) {
     pageCount,
     pageSize: MEDIA_PAGE_SIZE,
     items: rows.map((r) => toItem(r, now, tz)),
-    contentOptions,
-    /** Upload / move pickers only offer content that isn't archived */
-    pickerOptions: options,
+    /** What the content filter points at (the picker searches the rest) */
+    filteredContent,
     hasFilters: Boolean(filters.q || filters.content || filters.usage || filters.days),
   };
 }

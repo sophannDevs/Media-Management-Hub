@@ -185,6 +185,25 @@ async function listPage(params: ContentListParams, { now, tz }: { now: Date; tz:
 export type ContentListData = Awaited<ReturnType<typeof getContentList>>;
 export type ContentListItem = ContentListData["items"][number];
 
+export const PICKER_LIMIT = 20;
+
+/**
+ * Title search for content pickers (PERF-11): the most recently updated
+ * matches, ready to post first unless `readyFirst` is off. Readiness is the
+ * stored state, so this costs the same at any library size.
+ */
+export async function searchContentOptions(q: string, { readyFirst = true, limit = PICKER_LIMIT } = {}) {
+  const term = q.trim().slice(0, 200);
+  const like = `%${term.replace(/[\\%_]/g, "\\$&")}%`;
+  const rows = await db.$queryRaw<{ id: string; title: string; missingMask: number; stage: string }[]>`
+    SELECT "id", "title", "missingMask", "stage" FROM "Content"
+    WHERE "archivedAt" IS NULL AND (${term} = '' OR "title" ILIKE ${like})
+    ORDER BY ${readyFirst ? Prisma.sql`("missingMask" = 0) DESC,` : Prisma.empty} "updatedAt" DESC, "id"
+    LIMIT ${limit}`;
+  return rows.map((r) => ({ id: r.id, title: r.title, ready: r.missingMask === 0, stage: r.stage }));
+}
+export type ContentOption = Awaited<ReturnType<typeof searchContentOptions>>[number];
+
 // ---------- Detail workspace ----------
 
 const assetSelect = {

@@ -4,23 +4,23 @@ import { Download, Ellipsis, ExternalLink, Eye, File, FileX, FolderInput, Link2,
 import Link from "next/link";
 import { type ComponentProps, type ReactNode, useState } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
+import { ContentPicker, type PickerChoice } from "@/components/app/content-picker";
 import { Field } from "@/components/app/create-content-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useServerAction } from "@/hooks/use-server-action";
 import { formatDuration } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { assignMediaAction, deleteMediaAction } from "@/server/actions/media";
-import type { MediaContentOption, MediaItem } from "@/server/queries/media";
+import type { MediaItem } from "@/server/queries/media";
 import { AssetVisual } from "./asset-visual";
 import { MEDIA_TYPE_ICONS } from "./media-types";
 
 type Action = "preview" | "move" | "delete";
 const UNASSIGNED = "__none";
 
-export function MediaGrid({ items, contents }: { items: MediaItem[]; contents: MediaContentOption[] }) {
+export function MediaGrid({ items }: { items: MediaItem[] }) {
   // One instance of each dialog for the whole grid; `active` is kept while a dialog animates out
   const [active, setActive] = useState<{ action: Action; asset: MediaItem } | null>(null);
   const [open, setOpen] = useState(false);
@@ -57,7 +57,7 @@ export function MediaGrid({ items, contents }: { items: MediaItem[]; contents: M
 
       <Dialog {...controlled("move")}>
         <DialogContent className="gap-0 p-0 sm:max-w-md">
-          {asset && <MoveForm key={asset.id} asset={asset} contents={contents} onDone={() => setOpen(false)} />}
+          {asset && <MoveForm key={asset.id} asset={asset} onDone={() => setOpen(false)} />}
         </DialogContent>
       </Dialog>
 
@@ -311,18 +311,19 @@ function PreviewMedia({ asset: a }: { asset: MediaItem }) {
   }
 }
 
-function MoveForm({ asset: a, contents, onDone }: { asset: MediaItem; contents: MediaContentOption[]; onDone: () => void }) {
-  const current = a.content?.id ?? UNASSIGNED;
-  const [target, setTarget] = useState(current);
+const UNASSIGNED_CHOICE = { id: UNASSIGNED, title: "Unassigned" };
+
+function MoveForm({ asset: a, onDone }: { asset: MediaItem; onDone: () => void }) {
+  // The current owner may be archived: the picker searches live content only, but shows it as the value
+  const [target, setTarget] = useState<PickerChoice>(a.content ? { id: a.content.id, title: a.content.title } : UNASSIGNED_CHOICE);
   const { run, pending } = useServerAction();
-  // An archived owner isn't in the picker, but it is the current value
-  const options = a.content && !contents.some((c) => c.id === a.content?.id) ? [{ id: a.content.id, title: a.content.title }, ...contents] : contents;
+  const current = a.content?.id ?? UNASSIGNED;
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => assignMediaAction(a.id, target === UNASSIGNED ? null : target), { onSuccess: onDone });
+        run(() => assignMediaAction(a.id, target.id === UNASSIGNED ? null : target.id), { onSuccess: onDone });
       }}
     >
       <DialogHeader className="border-b border-[#f1eedf] px-5 py-4 pr-12">
@@ -333,20 +334,7 @@ function MoveForm({ asset: a, contents, onDone }: { asset: MediaItem; contents: 
       </DialogHeader>
       <div className="space-y-4 p-5">
         <Field label="Belongs to content">
-          <Select value={target} onValueChange={setTarget}>
-            <SelectTrigger className="w-full" aria-label="Belongs to content">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent position="popper" className="max-h-[min(18rem,var(--radix-select-content-available-height))]">
-              <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
-              {options.length > 0 && <SelectSeparator />}
-              {options.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.title}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <ContentPicker label="Belongs to content" readiness={false} value={target} fixed={[UNASSIGNED_CHOICE]} onChange={setTarget} />
         </Field>
         {a.moveWarning && (
           <p className="flex gap-2 rounded-xl border border-orange-200 bg-orange-50 p-3 text-[13px] text-orange-900">
@@ -364,7 +352,7 @@ function MoveForm({ asset: a, contents, onDone }: { asset: MediaItem; contents: 
         <Button type="button" variant="outline" className="bg-white" onClick={onDone}>
           Cancel
         </Button>
-        <Button type="submit" disabled={pending || target === current}>
+        <Button type="submit" disabled={pending || target.id === current}>
           <FolderInput />
           {pending ? "Moving…" : "Move file"}
         </Button>

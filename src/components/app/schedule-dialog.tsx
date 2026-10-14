@@ -3,6 +3,7 @@
 import { formatInTimeZone } from "date-fns-tz";
 import { CalendarCheck, CircleX, Globe, Link2, Lock, Pencil, Plus, Repeat2, TriangleAlert } from "lucide-react";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { ContentPicker } from "@/components/app/content-picker";
 import { ContentThumb } from "@/components/app/content-thumb";
 import { PlatformIcon } from "@/components/app/platform-icon";
 import { Button } from "@/components/ui/button";
@@ -195,17 +196,7 @@ function ScheduleFields({ data, opts, onDone, onSwitchContent }: { data: Schedul
             {editing ? (
               <p className="truncate text-sm font-medium">{content?.title}</p>
             ) : (
-              <Select value={content?.id ?? ""} onValueChange={onSwitchContent}>
-                <SelectTrigger aria-label="Content" className="w-full bg-white"><SelectValue placeholder="Choose content" /></SelectTrigger>
-                <SelectContent>
-                  {data.contents.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.title}
-                      {!c.ready && <span className="text-muted-foreground"> — not ready</span>}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <ContentPicker value={content ? { id: content.id, title: content.title } : null} onChange={(o) => onSwitchContent(o.id)} />
             )}
           </div>
         </div>

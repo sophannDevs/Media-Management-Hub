@@ -2,12 +2,13 @@
 
 import { CloudUpload, Info, Link2, Upload } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { ContentPicker, type PickerChoice } from "@/components/app/content-picker";
 import { Field } from "@/components/app/create-content-dialog";
 import { UploadDropzone } from "@/components/app/media-upload";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useServerAction } from "@/hooks/use-server-action";
 import { MediaType } from "@/lib/workflow/statuses";
@@ -45,14 +46,13 @@ function parseDuration(value: string): number | null | undefined {
 }
 
 export function UploadMediaDialog({
-  contents,
   defaultType = "IMAGE",
-  defaultContentId = null,
+  defaultContent = null,
   trigger,
 }: {
-  contents: MediaContentOption[];
   defaultType?: string;
-  defaultContentId?: string | null;
+  /** Preselected owner, e.g. the content the library is filtered on */
+  defaultContent?: MediaContentOption | null;
   trigger?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -68,27 +68,24 @@ export function UploadMediaDialog({
       </DialogTrigger>
       <DialogContent className="max-h-[92vh] gap-0 overflow-y-auto p-0 sm:max-w-xl">
         {/* Mounted per opening, so every upload starts from the page's current filters */}
-        <UploadForm
-          contents={contents}
-          defaultType={MediaType.is(defaultType) ? defaultType : "IMAGE"}
-          defaultContentId={defaultContentId && contents.some((c) => c.id === defaultContentId) ? defaultContentId : null}
-          onDone={() => setOpen(false)}
-        />
+        <UploadForm defaultType={MediaType.is(defaultType) ? defaultType : "IMAGE"} defaultContent={defaultContent} onDone={() => setOpen(false)} />
       </DialogContent>
     </Dialog>
   );
 }
 
-function UploadForm({ contents, defaultType, defaultContentId, onDone }: { contents: MediaContentOption[]; defaultType: string; defaultContentId: string | null; onDone: () => void }) {
+const UNASSIGNED_CHOICE = { id: UNASSIGNED, title: "Unassigned" };
+
+function UploadForm({ defaultType, defaultContent, onDone }: { defaultType: string; defaultContent: MediaContentOption | null; onDone: () => void }) {
   const [type, setType] = useState(defaultType);
-  const [contentId, setContentId] = useState(defaultContentId ?? UNASSIGNED);
+  const [owner, setOwner] = useState<PickerChoice>(defaultContent ?? UNASSIGNED_CHOICE);
   const [mode, setMode] = useState("upload");
   const [url, setUrl] = useState("");
   const [fileName, setFileName] = useState("");
   const [duration, setDuration] = useState("");
   const { run, pending } = useServerAction();
 
-  const target = contentId === UNASSIGNED ? null : contentId;
+  const target = owner.id === UNASSIGNED ? null : owner.id;
   const timed = type === "VIDEO" || type === "AUDIO" || type === "MUSIC";
   const durationSec = timed ? parseDuration(duration) : null;
 
@@ -132,20 +129,7 @@ function UploadForm({ contents, defaultType, defaultContentId, onDone }: { conte
             </Select>
           </Field>
           <Field label="Belongs to content">
-            <Select value={contentId} onValueChange={setContentId}>
-              <SelectTrigger className="w-full" aria-label="Belongs to content">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent position="popper" className="max-h-[min(18rem,var(--radix-select-content-available-height))] max-w-[min(24rem,calc(100vw-2rem))]">
-                <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
-                {contents.length > 0 && <SelectSeparator />}
-                {contents.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <ContentPicker label="Belongs to content" readiness={false} value={owner} fixed={[UNASSIGNED_CHOICE]} onChange={setOwner} />
           </Field>
         </div>
         <p className="flex items-start gap-2 text-xs text-muted-foreground">
