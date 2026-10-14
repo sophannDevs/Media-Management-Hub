@@ -1,9 +1,18 @@
 "use server";
 
+import { updateTag } from "next/cache";
 import { z } from "zod";
 import { AiProvider, PromptCategory } from "@/lib/workflow/statuses";
+import { CACHE_TAGS } from "../cache-tags";
 import * as ws from "../services/workspace";
 import { id, runAction } from "./_run";
+
+/** Runs a mutation of taxonomies or settings, then expires the cached form options. */
+const thenExpireOptions = async <T>(p: Promise<T>) => {
+  const result = await p;
+  updateTag(CACHE_TAGS.formOptions);
+  return result;
+};
 
 // ---------- Social accounts ----------
 
@@ -73,15 +82,20 @@ export async function deletePromptAction(promptId: string) {
 const kind = z.enum(["category", "series", "campaign"]);
 
 export async function createTaxonomyAction(k: ws.TaxonomyKind, name: string) {
-  return runAction(z.object({ k: kind, name: z.string() }), { k, name }, ({ k, name }) => ws.createTaxonomy(k, name).then((r) => r.id), "Added");
+  return runAction(z.object({ k: kind, name: z.string() }), { k, name }, ({ k, name }) => thenExpireOptions(ws.createTaxonomy(k, name).then((r) => r.id)), "Added");
 }
 
 export async function renameTaxonomyAction(k: ws.TaxonomyKind, itemId: string, name: string) {
-  return runAction(z.object({ k: kind, id, name: z.string() }), { k, id: itemId, name }, ({ k, id, name }) => ws.renameTaxonomy(k, id, name).then(() => undefined), "Renamed");
+  return runAction(
+    z.object({ k: kind, id, name: z.string() }),
+    { k, id: itemId, name },
+    ({ k, id, name }) => thenExpireOptions(ws.renameTaxonomy(k, id, name).then(() => undefined)),
+    "Renamed",
+  );
 }
 
 export async function deleteTaxonomyAction(k: ws.TaxonomyKind, itemId: string) {
-  return runAction(z.object({ k: kind, id }), { k, id: itemId }, ({ k, id }) => ws.deleteTaxonomy(k, id), "Removed");
+  return runAction(z.object({ k: kind, id }), { k, id: itemId }, ({ k, id }) => thenExpireOptions(ws.deleteTaxonomy(k, id)), "Removed");
 }
 
 // ---------- Settings & notifications ----------
@@ -103,7 +117,7 @@ export async function updateSettingsAction(input: ws.SettingsInput) {
       notificationPrefs: z.record(z.string(), z.boolean()).optional(),
     }),
     input,
-    (d) => ws.updateSettings(d),
+    (d) => thenExpireOptions(ws.updateSettings(d)),
     "Settings saved",
   );
 }

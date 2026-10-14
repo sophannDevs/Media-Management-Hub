@@ -11,6 +11,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    setupFiles: ["tests/setup/next-cache.ts"],
     projects: [
       {
         extends: true,

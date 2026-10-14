@@ -1,4 +1,5 @@
 import { Bell, Plus } from "lucide-react";
+import { io } from "next/cache";
 import { type ReactNode, Suspense } from "react";
 import { CreateContentDialog } from "@/components/app/create-content-dialog";
 import { ScheduleDialogProvider } from "@/components/app/schedule-dialog";
@@ -30,6 +31,8 @@ async function Notifications() {
 
 /** Server-rendered "Create Content" button (loads the form options). */
 export async function CreateContentButton({ trigger }: { trigger?: ReactNode }) {
+  // Request time only: the options are cached across requests, never filled at build time
+  await io();
   return <CreateContentDialog options={await getContentFormOptions()} trigger={trigger} />;
 }
 

@@ -1,10 +1,19 @@
-import { io } from "next/cache";
+import { cacheLife, cacheTag, io } from "next/cache";
 import type { Prisma } from "@prisma/client";
+import { cache } from "react";
 import { db } from "@/lib/db";
 import { mediaUrl } from "@/lib/media-url";
 import { completion, deriveStage, missingRequirements, type WorkflowRules } from "@/lib/workflow/rules";
+import { CACHE_TAGS } from "../cache-tags";
 import { contentStateSelect, toContentState } from "../services/content-state";
 import { getSettings, rulesFrom } from "../services/settings";
+
+// Page reads shared by the app shell and the pages (PERF-04). React `cache`
+// runs each at most once per request however many components ask for it;
+// rarely changing data is also cached across requests with "use cache".
+
+/** Workspace settings, read once per request. */
+const getRenderSettings = cache(getSettings);
 
 /**
  * Current time for Server Components. `io()` keeps time-dependent output out
@@ -18,29 +27,46 @@ export async function getNow() {
 /** Settings + rules + "now" — what most pages need to render. */
 export async function getPageContext() {
   const now = await getNow();
-  const settings = await getSettings();
+  const settings = await getRenderSettings();
   return { now, settings, rules: rulesFrom(settings), tz: settings.timezone };
 }
 
-export async function getNavCounts() {
+/** Sidebar, mobile nav and the bell all show these: one query per request. */
+export const getNavCounts = cache(async () => {
   await io();
-  const [content, failed, accountIssues, unread, settings] = await Promise.all([
-    db.content.count({ where: { archivedAt: null } }),
-    db.publishingSchedule.count({ where: { status: "FAILED", content: { archivedAt: null } } }),
-    db.socialAccount.count({ where: { status: { not: "CONNECTED" } } }),
-    db.notification.count({ where: { readAt: null } }),
-    getSettings(),
+  const [[row], settings] = await Promise.all([
+    db.$queryRaw<{ content: bigint | number; failed: bigint | number; accountIssues: bigint | number; unread: bigint | number }[]>`
+      SELECT
+        (SELECT COUNT(*) FROM "Content" WHERE "archivedAt" IS NULL) AS "content",
+        (SELECT COUNT(*) FROM "PublishingSchedule" s JOIN "Content" c ON c."id" = s."contentId"
+          WHERE s."status" = 'FAILED' AND c."archivedAt" IS NULL) AS "failed",
+        (SELECT COUNT(*) FROM "SocialAccount" WHERE "status" <> 'CONNECTED') AS "accountIssues",
+        (SELECT COUNT(*) FROM "Notification" WHERE "readAt" IS NULL) AS "unread"`,
+    getRenderSettings(),
   ]);
-  return { content, failed, accountIssues, unread, workspaceName: settings.workspaceName };
-}
+  return {
+    content: Number(row.content),
+    failed: Number(row.failed),
+    accountIssues: Number(row.accountIssues),
+    unread: Number(row.unread),
+    workspaceName: settings.workspaceName,
+  };
+});
 
-export async function getNotifications(limit = 20) {
+export const getNotifications = cache(async (limit: number = 20) => {
   await io();
   return db.notification.findMany({ orderBy: { createdAt: "desc" }, take: limit });
-}
+});
 
+/**
+ * Options of the Create Content dialog and the content filters. Cached across
+ * requests until a taxonomy or the settings change (updateTag(CACHE_TAGS.formOptions)).
+ * Callers must be dynamic (after `io()`), so it never runs at build time.
+ */
 export async function getContentFormOptions() {
-  await io();
+  "use cache";
+  cacheLife("hours");
+  cacheTag(CACHE_TAGS.formOptions);
   const [categories, series, campaigns, platforms, settings] = await Promise.all([
     db.category.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
     db.series.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
