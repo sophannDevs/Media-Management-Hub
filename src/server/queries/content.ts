@@ -319,6 +319,13 @@ export async function getContentWorkspace(id: string) {
       rules,
       /** Every post that went out was simulated */
       simulated: onlySimulatedPosts(c.schedules),
+      /** A post is being sent or due within two minutes: the page refreshes itself (PUB-06) */
+      inFlight: c.schedules.some(
+        (s) =>
+          s.status === "PROCESSING" ||
+          (s.status === "WAITING" && s.scheduledAt.getTime() <= now.getTime() + 120_000) ||
+          (s.status === "RETRY_SCHEDULED" && !!s.nextAttemptAt && s.nextAttemptAt.getTime() <= now.getTime() + 120_000),
+      ),
     },
     script: {
       body: c.script?.body ?? "",

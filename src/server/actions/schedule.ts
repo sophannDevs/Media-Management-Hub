@@ -1,8 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { tick } from "../worker";
-import * as publishing from "../services/publishing";
+import { nudgeWorker } from "../worker";
 import * as schedule from "../services/schedule";
 import { id, runAction } from "./_run";
 
@@ -50,20 +49,28 @@ export async function cancelScheduleAction(scheduleId: string) {
   return runAction(id, scheduleId, (id) => schedule.cancelSchedule(id), "Post cancelled");
 }
 
-/** Re-queues a failed post and publishes it right away. */
+const queuedMessage = (n: { inProcess: boolean; withinSeconds: number }) =>
+  n.inProcess ? "Sending now — the status updates on its own" : `Queued — the publishing worker sends it within ${n.withinSeconds} seconds`;
+
+/**
+ * Re-queues a failed post (PUB-06). Answers at once: the upload happens in the
+ * worker, never inside this request, and the page shows the status as it changes.
+ */
 export async function retryScheduleAction(scheduleId: string, opts: { confirmUnknownOutcome?: boolean } = {}) {
   return runAction(
     z.object({ id, confirmUnknownOutcome: z.boolean().optional() }),
     { id: scheduleId, ...opts },
     async ({ id, confirmUnknownOutcome }) => {
       await schedule.retrySchedule(id, { confirmUnknownOutcome });
-      return publishing.processSchedule(id);
+      return nudgeWorker();
     },
-    (r) => (r === "published" ? "Published successfully" : r === "retry" ? "Still failing — another retry is scheduled" : r === "failed" ? "Publishing failed again — see the error" : "Queued"),
+    queuedMessage,
   );
 }
 
-/** Runs the publishing worker now (instead of waiting for the next tick). */
+/** Asks the worker to look at the queue now instead of at its next check. Doesn't wait for it. */
 export async function runQueueNowAction() {
-  return runAction(z.undefined(), undefined, async () => tick(), (s) => (s ? `Processed ${s.processed} post(s)` : "Worker is already running"));
+  return runAction(z.undefined(), undefined, async () => nudgeWorker(), (n) =>
+    n.inProcess ? "Checking the queue now" : `The publishing worker checks the queue every ${n.withinSeconds} seconds`,
+  );
 }

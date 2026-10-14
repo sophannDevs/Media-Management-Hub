@@ -3,6 +3,7 @@ import { AiProvider, PromptCategory } from "@/lib/workflow/statuses";
 import { ServiceError } from "../errors";
 import { syncAllPublishingStatuses } from "./content";
 import { markNotificationsRead } from "./notifications";
+import { notifyBlockedPosts } from "./publishing";
 
 // ---------- Social accounts ----------
 // OAuth is phase 2: "connect" currently registers the account directly and
@@ -42,6 +43,7 @@ export async function reconnectAccount(id: string) {
 
 export async function disconnectAccount(id: string) {
   await db.socialAccount.update({ where: { id }, data: { status: "DISCONNECTED", accessToken: null, refreshToken: null } });
+  await notifyBlockedPosts(id);
 }
 
 export async function syncAccount(id: string) {

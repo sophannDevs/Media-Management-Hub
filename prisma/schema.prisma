@@ -434,6 +434,32 @@ model AnalyticsSnapshot {
   @@index([date])
 }
 
+/// A running publishing worker proves it is alive here (PUB-11). Read by /api/health and Settings.
+model WorkerHeartbeat {
+  /// host:pid:random, the same id the worker puts in PublishingSchedule.lockedBy
+  id         String    @id
+  /// INLINE (inside the web server) | PROCESS (npm run worker) | CRON (POST /api/cron/publish)
+  mode       String
+  startedAt  DateTime  @default(now())
+  lastBeatAt DateTime
+  lastTickAt DateTime?
+  lastTickMs Int?
+  /// Posts this worker attempted since it started
+  processed  Int       @default(0)
+
+  @@index([lastBeatAt])
+}
+
+/// Periodic jobs that must run once per period whatever the number of workers (PUB-10).
+model ScheduledTask {
+  /// maintenance | analytics
+  name           String    @id
+  lastStartedAt  DateTime?
+  lastFinishedAt DateTime?
+  lastDurationMs Int?
+  lastError      String?
+}
+
 model AiPrompt {
   id        String   @id @default(cuid())
   name      String

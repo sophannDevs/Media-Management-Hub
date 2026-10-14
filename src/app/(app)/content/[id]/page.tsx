@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { AutoRefresh } from "@/components/app/auto-refresh";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getContentWorkspace } from "@/server/queries/content";
 import { ActivityTab } from "./_components/activity-tab";
@@ -37,6 +38,8 @@ async function Workspace({ params, searchParams }: Pick<PageProps<"/content/[id]
 
   return (
     <WorkspaceProvider initialTab={tab}>
+      {/* Edits in progress survive: a refresh re-renders server data, client state stays */}
+      <AutoRefresh active={data.workflow.inFlight} />
       <div>
         <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Link href="/content" className="hover:text-primary">Content</Link>

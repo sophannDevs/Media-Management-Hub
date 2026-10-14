@@ -105,38 +105,40 @@ export function PublishingForm({ initial, worker }: { initial: SettingsData["pub
             <Server className="mt-0.5 size-4 shrink-0 text-stone-500" aria-hidden />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium">In-app worker</span>
-                <StatusBadge size="sm" tone={worker.enabled ? "success" : "neutral"} label={worker.enabled ? "Running" : "Disabled"} />
+                <span className="font-medium">Worker</span>
+                <StatusBadge size="sm" tone={worker.running ? "success" : "danger"} label={worker.running ? (worker.live > 1 ? `${worker.live} running` : "Running") : "Not running"} />
               </div>
               <p className="text-xs text-muted-foreground">
-                {worker.enabled ? (
+                {worker.running ? (
                   <>
                     <Clock className="mr-1 inline size-3 align-[-1px]" aria-hidden />
-                    Checks the queue every {worker.intervalSeconds} seconds while the server runs (<code className="font-mono">PUBLISH_WORKER_INTERVAL_SECONDS</code>).
+                    {worker.mode === "PROCESS" ? "Its own process" : worker.mode === "INLINE" ? "Inside the web server" : "Run by the cron endpoint"}, last seen {worker.lastSeenSecondsAgo ?? 0}s ago. Checks the queue every{" "}
+                    {worker.intervalSeconds} seconds (<code className="font-mono">PUBLISH_WORKER_INTERVAL_SECONDS</code>).
                   </>
                 ) : (
                   <>
-                    Turned off with <code className="font-mono">PUBLISH_WORKER_ENABLED=false</code> — use the cron endpoint below to process the queue.
+                    Scheduled posts won&apos;t go out. Start it with <code className="font-mono">npm run worker</code> next to the web server
+                    {worker.lastSeenSecondsAgo !== null && ` (last seen ${Math.round(worker.lastSeenSecondsAgo / 60)} min ago)`}.
                   </>
                 )}
               </p>
             </div>
           </li>
           <li className="flex gap-3">
-            {worker.cronProtected ? <ShieldCheck className="mt-0.5 size-4 shrink-0 text-olive-700" aria-hidden /> : <ShieldAlert className="mt-0.5 size-4 shrink-0 text-orange-700" aria-hidden />}
+            {worker.cronEnabled ? <ShieldCheck className="mt-0.5 size-4 shrink-0 text-olive-700" aria-hidden /> : <ShieldAlert className="mt-0.5 size-4 shrink-0 text-stone-500" aria-hidden />}
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-medium">External cron</span>
                 <code className="rounded border border-[#ece9d6] bg-[#fcfbf3] px-1.5 py-0.5 font-mono text-xs">POST /api/cron/publish</code>
               </div>
               <p className="text-xs text-muted-foreground">
-                {worker.cronProtected ? (
+                {worker.cronEnabled ? (
                   <>
-                    Protected by <code className="font-mono">CRON_SECRET</code> — send <code className="font-mono">Authorization: Bearer &lt;secret&gt;</code>.
+                    On, protected by <code className="font-mono">CRON_SECRET</code> — send <code className="font-mono">Authorization: Bearer &lt;secret&gt;</code>.
                   </>
                 ) : (
                   <>
-                    Not protected — set <code className="font-mono">CRON_SECRET</code> in <code className="font-mono">.env</code> to require a bearer token.
+                    Off. Set <code className="font-mono">CRON_SECRET</code> in <code className="font-mono">.env</code> to let a scheduler trigger the queue.
                   </>
                 )}
               </p>

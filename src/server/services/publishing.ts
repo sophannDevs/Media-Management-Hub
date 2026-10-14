@@ -10,7 +10,6 @@ import { blockingRequirements, missingRequirements } from "@/lib/workflow/rules"
 import { ActivityType, NotificationType } from "@/lib/workflow/statuses";
 import { purgeExpiredSessions } from "../auth/session";
 import { logActivity } from "./activity";
-import { syncMockAnalytics } from "./analytics-sync";
 import { contentStateSelect, toContentState } from "./content-state";
 import { syncPublishingStatus } from "./content";
 import { notify } from "./notifications";
@@ -25,8 +24,8 @@ import { getSettings, rulesFrom, type Settings } from "./settings";
 // A post whose lease expired (the process stopped mid-upload) is never sent
 // again blindly: the platform is asked what happened first.
 
-/** Lease holder id for this process. */
-const WORKER_ID = `${os.hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`;
+/** Lease holder id for this process (also its WorkerHeartbeat id). */
+export const WORKER_ID = `${os.hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`;
 const leaseMs = () => Math.max(10, Number(process.env.PUBLISH_LEASE_SECONDS) || 120) * 1000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -119,7 +118,34 @@ export async function processSchedule(scheduleId: string): Promise<ProcessResult
     data: { status: "PROCESSING", attempts: { increment: 1 }, lockedBy: WORKER_ID, lockedUntil: new Date(Date.now() + leaseMs()) },
   });
   if (claimed.count === 0) return "skipped";
+  return runClaimed(scheduleId);
+}
 
+/**
+ * Claims the next due post for this worker (PUB-11). FOR UPDATE SKIP LOCKED
+ * lets several workers take from the queue at the same time without waiting
+ * on, or claiming, each other's rows. Raw SQL, so updatedAt is set here.
+ */
+export async function claimNextDue(now = new Date()): Promise<string | null> {
+  const utc = (d: Date) => Prisma.sql`(${d} AT TIME ZONE 'UTC')`;
+  const rows = await db.$queryRaw<{ id: string }[]>`
+    UPDATE "PublishingSchedule"
+    SET "status" = 'PROCESSING', "attempts" = "attempts" + 1, "lockedBy" = ${WORKER_ID},
+        "lockedUntil" = ${utc(new Date(Date.now() + leaseMs()))}, "updatedAt" = ${utc(new Date())}
+    WHERE "id" = (
+      SELECT "id" FROM "PublishingSchedule"
+      WHERE ("status" = 'WAITING' AND "scheduledAt" <= ${utc(now)})
+         OR ("status" = 'RETRY_SCHEDULED' AND "nextAttemptAt" <= ${utc(now)})
+      ORDER BY "scheduledAt", "id"
+      LIMIT 1
+      FOR UPDATE SKIP LOCKED
+    )
+    RETURNING "id"`;
+  return rows[0]?.id ?? null;
+}
+
+/** Runs the attempt of a post this worker has claimed, renewing its lease meanwhile. */
+async function runClaimed(scheduleId: string): Promise<ProcessResult> {
   const heartbeat = startHeartbeat(scheduleId);
   try {
     return await attempt(scheduleId, heartbeat);
@@ -320,6 +346,7 @@ async function recordFailure(s: LoadedSchedule, jobId: string, err: PublishError
 
   if (err.code === "AUTH") {
     await bestEffort("mark account", () => db.socialAccount.update({ where: { id: s.accountId }, data: { status: "TOKEN_EXPIRED", lastError: err.message } }));
+    await bestEffort("blocked posts notice", () => notifyBlockedPosts(s.accountId));
   }
   await bestEffort("activity log", () =>
     logActivity({
@@ -391,32 +418,49 @@ export async function recoverExpiredLeases(dueAt = new Date()) {
   return expired.length;
 }
 
-/** Processes every post that is due. Returns a summary for logs / the UI. */
-export async function processDueSchedules(now = new Date()) {
+/**
+ * Processes the posts that are due, one claim at a time (at most `limit` per
+ * call). Cheap when nothing is due: two indexed queries. Returns a summary.
+ */
+export async function processDueSchedules(now = new Date(), limit = 20) {
   await recoverExpiredLeases(now);
-
-  const due = await db.publishingSchedule.findMany({
-    where: {
-      OR: [
-        { status: "WAITING", scheduledAt: { lte: now } },
-        { status: "RETRY_SCHEDULED", nextAttemptAt: { lte: now } },
-      ],
-    },
-    orderBy: { scheduledAt: "asc" },
-    select: { id: true },
-    take: 20,
-  });
   const summary = { processed: 0, published: 0, failed: 0, retry: 0 };
-  for (const { id } of due) {
-    const r = await processSchedule(id);
-    if (r === "skipped") continue;
+  for (let i = 0; i < limit; i++) {
+    const id = await claimNextDue(now);
+    if (!id) break;
+    const r = await runClaimed(id);
     summary.processed++;
     summary[r === "published" ? "published" : r === "retry" ? "retry" : "failed"]++;
   }
   return summary;
 }
 
-/** Periodic housekeeping: token expiry, reminders, incomplete-asset warnings, analytics. */
+/**
+ * Event, not a scan (PUB-10): an account just stopped working (token expired,
+ * refused by the platform, disconnected). One notice per account and day names
+ * the posts it now blocks.
+ */
+export async function notifyBlockedPosts(accountId: string) {
+  const blocked = await db.publishingSchedule.findMany({
+    where: { accountId, status: { in: ["WAITING", "RETRY_SCHEDULED"] } },
+    select: { content: { select: { title: true } }, account: { select: { name: true } } },
+    take: 50,
+  });
+  if (!blocked.length) return;
+  const account = blocked[0].account.name;
+  await notify({
+    type: NotificationType.TOKEN_EXPIRED,
+    title: "Account needs reconnecting",
+    message:
+      blocked.length === 1
+        ? `"${blocked[0].content.title}" is scheduled on "${account}", which is not connected.`
+        : `${blocked.length}${blocked.length === 50 ? "+" : ""} posts are scheduled on "${account}", which is not connected.`,
+    href: "/accounts",
+    dedupeKey: `blocked:${accountId}:${new Date().toISOString().slice(0, 10)}`,
+  });
+}
+
+/** Hourly housekeeping: token expiry, tomorrow's posts, incomplete assets, old sessions and worker rows. */
 export async function runMaintenance(now = new Date()) {
   const settings = await getSettings();
   const tz = settings.timezone;
@@ -432,20 +476,7 @@ export async function runMaintenance(now = new Date()) {
       href: "/accounts",
       dedupeKey: `token:${a.id}:${a.tokenExpiresAt?.toISOString()}`,
     });
-  }
-  // Waiting posts on disconnected accounts
-  const blocked = await db.publishingSchedule.findMany({
-    where: { status: "WAITING", account: { status: { not: "CONNECTED" } } },
-    include: { account: true, content: { select: { title: true } } },
-  });
-  for (const s of blocked) {
-    await notify({
-      type: NotificationType.TOKEN_EXPIRED,
-      title: "Account needs reconnecting",
-      message: `"${s.content.title}" is scheduled on "${s.account.name}", which is not connected.`,
-      href: "/accounts",
-      dedupeKey: `blocked:${s.id}`,
-    });
+    await notifyBlockedPosts(a.id);
   }
 
   // Scheduled for tomorrow
@@ -483,6 +514,7 @@ export async function runMaintenance(now = new Date()) {
     });
   }
 
-  await syncMockAnalytics(now);
   await purgeExpiredSessions();
+  // Workers that stopped beating a day ago are gone
+  await db.workerHeartbeat.deleteMany({ where: { lastBeatAt: { lt: new Date(now.getTime() - 86_400_000) } } });
 }

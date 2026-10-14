@@ -5,6 +5,7 @@
   "scripts": {
     "predev": "node scripts/db-local.mjs ensure",
     "dev": "next dev",
+    "worker": "tsx scripts/worker.ts",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",

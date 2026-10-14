@@ -4,18 +4,22 @@ import { fmtDate } from "@/lib/dates";
 import { mediaUrl } from "@/lib/media-url";
 import { NOTIFICATION_LABELS, type NotificationTypeCode } from "@/lib/workflow/statuses";
 import { notificationPrefs } from "../services/settings";
+import { workerStatus } from "../worker";
 import { getPageContext } from "./shared";
 
 const usage = { _count: { select: { contents: true } } } as const;
 const toItem = (t: { id: string; name: string; _count: { contents: number } }) => ({ id: t.id, name: t.name, count: t._count.contents });
 
-/** Read-only facts about the publishing worker (see instrumentation.ts / server/worker.ts). */
-function workerInfo() {
-  const interval = Number(process.env.PUBLISH_WORKER_INTERVAL_SECONDS ?? 60);
+/** The publishing worker as its heartbeats show it (PUB-11), and whether the cron trigger is on. */
+async function workerInfo(now: Date) {
+  const s = await workerStatus(now);
   return {
-    enabled: process.env.PUBLISH_WORKER_ENABLED !== "false",
-    intervalSeconds: Number.isFinite(interval) ? Math.max(15, interval) : 60,
-    cronProtected: Boolean(process.env.CRON_SECRET?.trim()),
+    running: s.live > 0,
+    live: s.live,
+    mode: s.mode,
+    lastSeenSecondsAgo: s.lastBeatAt ? Math.max(0, Math.round((now.getTime() - s.lastBeatAt.getTime()) / 1000)) : null,
+    intervalSeconds: s.intervalSeconds,
+    cronEnabled: Boolean(process.env.CRON_SECRET?.trim()),
   };
 }
 
@@ -32,8 +36,8 @@ function aiInfo() {
 }
 
 export async function getSettingsData() {
-  const { settings, rules, tz } = await getPageContext();
-  const [categories, series, campaigns, archived] = await Promise.all([
+  const { settings, rules, tz, now } = await getPageContext();
+  const [categories, series, campaigns, archived, worker] = await Promise.all([
     db.category.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true, ...usage } }),
     db.series.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, ...usage } }),
     db.campaign.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, ...usage } }),
@@ -51,6 +55,7 @@ export async function getSettingsData() {
         _count: { select: { schedules: { where: { status: "CANCELLED", archivedStatus: { not: null } } } } },
       },
     }),
+    workerInfo(now),
   ]);
 
   const prefs = notificationPrefs(settings);
@@ -76,7 +81,7 @@ export async function getSettingsData() {
       archivedLabel: c.archivedAt ? fmtDate(c.archivedAt, tz) : "",
       pausedPosts: c._count.schedules,
     })),
-    worker: workerInfo(),
+    worker,
     ai: aiInfo(),
   };
 }

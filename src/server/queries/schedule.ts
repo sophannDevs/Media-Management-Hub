@@ -6,6 +6,7 @@ import { dayKey, fmt, fmtDateTime, fmtTime, relativeDay, timeAgo } from "@/lib/d
 import { db } from "@/lib/db";
 import { mediaUrl } from "@/lib/media-url";
 import { isSimulationMode, listProviders, providerMeta } from "@/lib/platforms/registry";
+import { workerStatus } from "../worker";
 import { getPageContext } from "./shared";
 
 /** Status codes and sort order behind each queue tab. */
@@ -45,10 +46,8 @@ const rowSelect = {
       id: true,
       title: true,
       contentType: true,
-      thumbnailAsset: { select: assetSelect },
+      coverAsset: { select: assetSelect },
       videoAsset: { select: { durationSec: true } },
-      // Order fields are selected too: Prisma panics merging chunked relations on unselected ones (PERF-02)
-      media: { where: { type: "IMAGE" }, select: { ...assetSelect, isSelected: true, createdAt: true }, orderBy: [{ isSelected: "desc" }, { createdAt: "asc" }], take: 1 },
     },
   },
   jobs: {
@@ -101,6 +100,11 @@ function toRow(s: Row, now: Date, tz: string) {
     /** Wall-clock time in the timezone the post was scheduled in, when that differs from the workspace's */
     setIn: s.timezone !== tz ? `${fmt(s.scheduledAt, s.timezone, "MMM d, h:mm a")} in ${s.timezone}` : null,
     overdue: s.status === "WAITING" && s.scheduledAt.getTime() <= now.getTime(),
+    /** Being sent, or due within two minutes: its status is about to change */
+    inFlight:
+      s.status === "PROCESSING" ||
+      (s.status === "WAITING" && s.scheduledAt.getTime() <= now.getTime() + 120_000) ||
+      (s.status === "RETRY_SCHEDULED" && !!s.nextAttemptAt && s.nextAttemptAt.getTime() <= now.getTime() + 120_000),
     attempts: s.attempts,
     lastError: s.lastError,
     nextAttempt: s.status === "RETRY_SCHEDULED" && s.nextAttemptAt ? `${relativeDay(s.nextAttemptAt, now, tz)}, ${fmtTime(s.nextAttemptAt, tz)}` : null,
@@ -116,7 +120,7 @@ function toRow(s: Row, now: Date, tz: string) {
       id: s.content.id,
       title: s.content.title,
       contentType: s.content.contentType,
-      thumbUrl: mediaUrl(s.thumbnailAsset ?? s.content.thumbnailAsset ?? s.content.media[0] ?? null),
+      thumbUrl: mediaUrl(s.thumbnailAsset ?? s.content.coverAsset),
       durationSec: s.content.videoAsset?.durationSec ?? null,
     },
     jobs: s.jobs.map((j) => ({
@@ -153,7 +157,7 @@ export async function getQueueData(params: QueueParams) {
   } satisfies Prisma.PublishingScheduleWhereInput;
   const isFiltered = !!(platform || account);
 
-  const [globalCounts, filteredCounts, rows, failedRows, lastJob, publishedSimulated] = await Promise.all([
+  const [globalCounts, filteredCounts, rows, failedRows, lastJob, publishedSimulated, worker] = await Promise.all([
     db.publishingSchedule.groupBy({ by: ["status"], where: live, _count: { _all: true } }),
     isFiltered ? db.publishingSchedule.groupBy({ by: ["status"], where: filtered, _count: { _all: true } }) : null,
     db.publishingSchedule.findMany({
@@ -174,6 +178,7 @@ export async function getQueueData(params: QueueParams) {
       select: { finishedAt: true },
     }),
     db.publishingSchedule.count({ where: { ...live, status: "PUBLISHED", simulated: true } }),
+    workerStatus(now),
   ]);
 
   const countOf = (counts: typeof globalCounts, statuses: string[] | null) =>
@@ -181,20 +186,23 @@ export async function getQueueData(params: QueueParams) {
   const byStatus = (s: string) => countOf(globalCounts, [s]);
   const tabCounts = filteredCounts ?? globalCounts;
 
-  const interval = Number(process.env.PUBLISH_WORKER_INTERVAL_SECONDS ?? 60);
   const failedTotal = byStatus("FAILED");
+  const mapped = rows.map((r) => toRow(r, now, tz));
 
   return {
     tz,
     zone: formatInTimeZone(now, tz, "zzz", { locale: enUS }),
     params: { status: params.status, platform: platform ?? undefined, account: account ?? undefined } satisfies QueueParams,
     isFiltered,
+    /** Something on the page is being sent or about to be: it refreshes itself (PUB-06) */
+    inFlight: byStatus("PROCESSING") > 0 || mapped.some((r) => r.inFlight),
     worker: {
-      enabled: process.env.PUBLISH_WORKER_ENABLED !== "false",
+      /** A worker checked in recently (heartbeat, PUB-11) */
+      running: worker.live > 0,
+      mode: worker.mode,
       /** Publishing goes through simulated providers: nothing reaches the platforms */
       simulated: isSimulationMode(),
-      // Mirrors the worker's own clamp (min 15s)
-      intervalSec: Number.isFinite(interval) && interval > 0 ? Math.max(15, Math.round(interval)) : 60,
+      intervalSec: worker.intervalSeconds,
       lastRunAgo: lastJob?.finishedAt ? timeAgo(lastJob.finishedAt, now) : null,
       autoRetry: settings.autoRetry,
       maxRetries: settings.maxRetries,
@@ -212,7 +220,7 @@ export async function getQueueData(params: QueueParams) {
     tabTotal: countOf(tabCounts, tab.statuses),
     /** Same tab without the platform / account filters */
     tabTotalUnfiltered: countOf(globalCounts, tab.statuses),
-    rows: rows.map((r) => toRow(r, now, tz)),
+    rows: mapped,
     failed: failedRows.map((r) => toRow(r, now, tz)),
     failedMore: Math.max(0, failedTotal - failedRows.length),
     platforms,

@@ -2,6 +2,7 @@ import { CalendarPlus, CircleCheck, History, Inbox } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import { AutoRefresh } from "@/components/app/auto-refresh";
 import { EmptyState, PageHeader } from "@/components/app/content-bits";
 import { ContentThumb, thumbIconFor } from "@/components/app/content-thumb";
 import { PlatformIcon, PlatformLabel } from "@/components/app/platform-icon";
@@ -42,6 +43,7 @@ async function Queue({ searchParams }: { searchParams: SearchParams }) {
   const d = await getQueueData(parseQueueParams(await searchParams));
   return (
     <>
+      <AutoRefresh active={d.inFlight} />
       <WorkerCard d={d} />
       {d.failed.length > 0 && <FailedCallouts d={d} />}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -72,25 +74,26 @@ function WorkerCard({ d }: { d: QueueData }) {
   return (
     <section className="flex flex-col gap-4 rounded-2xl border bg-card p-4 shadow-card md:flex-row md:items-center" aria-label="Publishing worker">
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        {w.enabled ? (
+        {w.running ? (
           <span className="relative flex size-2.5 shrink-0" aria-hidden>
-            <span className="absolute inline-flex size-full animate-ping rounded-full bg-olive-400 opacity-60" />
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-olive-400 opacity-60 motion-reduce:animate-none" />
             <span className="relative inline-flex size-2.5 rounded-full bg-olive-600" />
           </span>
         ) : (
-          <span className="size-2.5 shrink-0 rounded-full bg-stone-300" aria-hidden />
+          <span className="size-2.5 shrink-0 rounded-full bg-rose-600" aria-hidden />
         )}
         <div className="min-w-0">
           <p className="text-sm font-medium">
-            {w.enabled ? "Publishing worker is running" : "Publishing worker is disabled"}
+            {w.running ? "Publishing worker is running" : "Publishing worker is not running — scheduled posts won't go out"}
             {w.simulated && <span className="font-normal text-orange-800"> · simulated publishing, nothing is sent to the platforms</span>}
           </p>
           <p className="text-xs text-muted-foreground">
-            {w.enabled ? (
-              `Checks the queue every ${w.intervalSec} seconds`
+            {w.running ? (
+              `Checks the queue every ${w.intervalSec} seconds${w.mode === "PROCESS" ? " in its own process" : w.mode === "INLINE" ? " inside the web server" : ""}`
             ) : (
               <>
-                Call <code className="rounded bg-muted px-1 font-mono text-xs">POST /api/cron/publish</code> from an external scheduler, or use Run queue now
+                Start it with <code className="rounded bg-muted px-1 font-mono text-xs">npm run worker</code>, or trigger{" "}
+                <code className="rounded bg-muted px-1 font-mono text-xs">POST /api/cron/publish</code> from a scheduler
               </>
             )}
             {" · "}

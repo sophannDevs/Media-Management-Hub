@@ -13,6 +13,15 @@ npm run db:seed        # optional: demo content, schedules, accounts, analytics
 npm run dev            # http://localhost:3000 (starts the local database first if needed)
 ```
 
+In development the publishing worker runs inside `npm run dev`. In production run it as its own process next to the web server, so deploys and restarts don't cut uploads off:
+
+```bash
+npm run build && npm start    # the web app
+npm run worker                # the publishing worker (run one or more; a post is never sent twice)
+```
+
+`GET /api/health` answers `ok` when the database responds and a worker has checked in recently, `degraded` when no worker runs (posts won't go out), and 503 when the database is down; Settings → Publishing shows the same.
+
 Copy `.env.example` to `.env` first if you don't have one. Any PostgreSQL 15+ server works: point `DATABASE_URL` at it instead of the local one. Coming from the old SQLite setup? `npm run db:import-sqlite` copies `prisma/dev.db` into PostgreSQL (and `npx tsx scripts/compare-sqlite.ts` checks the row counts). Useful scripts: `npm run typecheck`, `npm run lint`, `npm run db:studio`, `npm run db:reset` (wipes the database).
 
 ### Tests
@@ -33,7 +42,7 @@ Tests never touch your development database or `./storage`. The first `test:e2e`
 | `TEST_DATABASE_URL`, `E2E_DATABASE_URL` | Optional: PostgreSQL server for test databases and the e2e database. Default: the local cluster. |
 | `STORAGE_DIR` | Where uploaded media is stored (default `./storage`). |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Enables **Generate with Claude** for scripts (default model `claude-opus-5-5`). Without a key, generation produces a mock draft. |
-| `PUBLISH_WORKER_ENABLED`, `PUBLISH_WORKER_INTERVAL_SECONDS` | The in-process publishing worker checks the queue every N seconds while the server runs. |
+| `PUBLISH_WORKER_ENABLED`, `PUBLISH_WORKER_INTERVAL_SECONDS` | Where the publishing worker runs: unset = inside the web server in development only (use `npm run worker` in production), `true` = inside the web server always, `false` = never. It checks the queue every N seconds (default 10), runs maintenance hourly and generated analytics daily. |
 | `CRON_SECRET` | Enables `POST /api/cron/publish` for an external scheduler (send `Authorization: Bearer <secret>`). Empty = the endpoint is disabled (503). |
 | `ALLOWED_ORIGINS` | Extra hosts allowed to POST to the API (CSRF check), e.g. behind a reverse proxy. The app's own host is always allowed. |
 | `HTTPS_ONLY` | `true` when served over HTTPS: adds HSTS and `upgrade-insecure-requests` to the security headers. |

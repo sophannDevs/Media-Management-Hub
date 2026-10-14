@@ -27,30 +27,39 @@ export function mockDailyMetrics(seed: string, platformId: string, dayIndex: num
   };
 }
 
+/**
+ * Fills in the days each simulated post has no numbers for yet (PUB-10: daily,
+ * in batches: one query for what exists, inserts in chunks; metrics are a pure
+ * function of the post and day, so nothing needs refreshing).
+ */
 export async function syncMockAnalytics(now = new Date()) {
   // Only simulated posts get generated numbers; real posts wait for the platform sync
   const published = await db.publishingSchedule.findMany({
     where: { status: "PUBLISHED", simulated: true, publishedAt: { not: null } },
     select: { id: true, contentId: true, platformId: true, publishedAt: true },
   });
+  if (!published.length) return 0;
+  const last = await db.analyticsSnapshot.groupBy({
+    by: ["contentId", "platformId"],
+    where: { contentId: { in: [...new Set(published.map((s) => s.contentId))] } },
+    _max: { date: true },
+  });
+  const lastDay = new Map(last.map((l) => [`${l.contentId}:${l.platformId}`, l._max.date?.getTime() ?? -Infinity]));
+
   const today = startOfUtcDay(now);
+  const rows = [];
   for (const s of published) {
     const start = startOfUtcDay(s.publishedAt!);
     const days = Math.min(90, Math.round((today.getTime() - start.getTime()) / 86_400_000));
-    const existing = await db.analyticsSnapshot.findMany({
-      where: { contentId: s.contentId, platformId: s.platformId, date: { gte: start } },
-      select: { date: true },
-    });
-    const have = new Set(existing.map((e) => e.date.getTime()));
+    const after = lastDay.get(`${s.contentId}:${s.platformId}`) ?? -Infinity;
     for (let i = 0; i <= days; i++) {
       const date = new Date(start.getTime() + i * 86_400_000);
-      if (have.has(date.getTime()) && i < days) continue; // today's row is refreshed each run
-      const m = mockDailyMetrics(s.id, s.platformId, i);
-      await db.analyticsSnapshot.upsert({
-        where: { contentId_platformId_date: { contentId: s.contentId, platformId: s.platformId, date } },
-        update: { ...m, scheduleId: s.id, source: "MOCK" },
-        create: { ...m, contentId: s.contentId, platformId: s.platformId, scheduleId: s.id, date, source: "MOCK" },
-      });
+      if (date.getTime() <= after) continue;
+      rows.push({ ...mockDailyMetrics(s.id, s.platformId, i), contentId: s.contentId, platformId: s.platformId, scheduleId: s.id, date, source: "MOCK" });
     }
   }
+  for (let i = 0; i < rows.length; i += 2_000) {
+    await db.analyticsSnapshot.createMany({ data: rows.slice(i, i + 2_000), skipDuplicates: true });
+  }
+  return rows.length;
 }
