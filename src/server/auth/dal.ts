@@ -2,6 +2,7 @@ import { io } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
+import { apiError } from "../api";
 import { ServiceError } from "../errors";
 import { SESSION_COOKIE, sessionUser } from "./session";
 
@@ -34,7 +35,7 @@ export async function requireActionUser() {
 
 /** Route Handlers: a 401 response to return when nobody is signed in, else null. */
 export async function unauthorizedResponse() {
-  return (await getCurrentUser()) ? null : Response.json({ ok: false, error: "Sign in required." }, { status: 401 });
+  return (await getCurrentUser()) ? null : apiError(401, "UNAUTHENTICATED", "Sign in required.");
 }
 
 /** Cookie settings for the session: never readable by scripts, sent on same-site navigations only. */

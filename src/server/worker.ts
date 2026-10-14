@@ -1,6 +1,9 @@
 import { db } from "@/lib/db";
+import { logger } from "@/lib/log";
 import { syncMockAnalytics } from "./services/analytics-sync";
 import { processDueSchedules, runMaintenance, WORKER_ID } from "./services/publishing";
+
+const log = logger.child({ component: "worker", workerId: WORKER_ID });
 
 // The publishing worker (PUB-11, PUB-10). It runs as its own process in
 // production (`npm run worker`, scripts/worker.ts) so web deploys don't stop
@@ -39,7 +42,7 @@ export async function runPeriodic(name: keyof typeof PERIODIC, fn: () => Promise
     await fn();
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
-    console.error(`[worker] ${name} failed`, e);
+    log.error("periodic job failed", { job: name, err: e });
   }
   await db.scheduledTask.update({ where: { name }, data: { lastFinishedAt: new Date(), lastDurationMs: Date.now() - started, lastError: error } });
   return true;
@@ -64,10 +67,10 @@ export function tick(): Promise<{ processed: number; published: number; failed: 
       await runPeriodic("maintenance", () => runMaintenance());
       await runPeriodic("analytics", () => syncMockAnalytics());
       await beat(g.__mediaflowWorker?.mode ?? "CRON", { ms: Date.now() - started, processed: summary.processed });
-      if (summary.processed) console.log(`[worker] processed ${summary.processed}:`, summary);
+      if (summary.processed) log.info("queue pass", { ...summary, ms: Date.now() - started });
       return summary;
     } catch (e) {
-      console.error("[worker] tick failed", e);
+      log.error("queue pass failed", { err: e });
       return null;
     } finally {
       g.__mediaflowTick = null;
@@ -83,7 +86,7 @@ export function startWorker(mode: WorkerMode) {
   const seconds = queueIntervalSeconds();
   g.__mediaflowWorker = { timer: setInterval(() => void tick(), seconds * 1000), mode, stopping: false };
   setTimeout(() => void tick(), mode === "INLINE" ? 5000 : 0);
-  console.log(`[worker] started (${mode === "INLINE" ? "inside the web server" : "own process"}), checking the queue every ${seconds}s`);
+  log.info("worker started", { mode, intervalSeconds: seconds });
 }
 
 /** Stops taking new work and waits (up to `graceMs`) for the attempt in progress. An unfinished upload is recovered by its lease. */

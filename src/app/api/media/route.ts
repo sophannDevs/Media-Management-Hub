@@ -1,8 +1,8 @@
 import { db } from "@/lib/db";
-import { rejectCrossSite } from "@/lib/security/origin";
-import { unauthorizedResponse } from "@/server/auth/dal";
 import { makeStorageKey, storage } from "@/lib/storage";
 import { MediaType } from "@/lib/workflow/statuses";
+import { apiError, rejectCrossSite, route } from "@/server/api";
+import { unauthorizedResponse } from "@/server/auth/dal";
 import { ServiceError } from "@/server/errors";
 import { createMediaAsset } from "@/server/services/media";
 
@@ -21,7 +21,7 @@ const ALLOWED: Record<string, RegExp> = {
   OTHER: /.*/,
 };
 
-export async function POST(req: Request) {
+export const POST = route(async (req) => {
   const crossSite = rejectCrossSite(req);
   if (crossSite) return crossSite;
   const unauthorized = await unauthorizedResponse();
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
   try {
     form = await req.formData();
   } catch {
-    return Response.json({ ok: false, error: "Invalid upload." }, { status: 400 });
+    return apiError(400, "VALIDATION", "Invalid upload.");
   }
 
   const type = String(form.get("type") ?? "");
@@ -44,10 +44,10 @@ export async function POST(req: Request) {
     meta = [];
   }
 
-  if (!MediaType.is(type)) return Response.json({ ok: false, error: "Choose a media type." }, { status: 400 });
-  if (!files.length) return Response.json({ ok: false, error: "Choose at least one file." }, { status: 400 });
+  if (!MediaType.is(type)) return apiError(400, "VALIDATION", "Choose a media type.");
+  if (!files.length) return apiError(400, "VALIDATION", "Choose at least one file.");
   if (contentId && !(await db.content.findUnique({ where: { id: contentId }, select: { id: true } }))) {
-    return Response.json({ ok: false, error: "Content not found." }, { status: 404 });
+    return apiError(404, "NOT_FOUND", "Content not found.");
   }
 
   const created: string[] = [];
@@ -82,8 +82,7 @@ export async function POST(req: Request) {
     }
   }
 
-  return Response.json(
-    { ok: created.length > 0, created, errors, error: created.length ? undefined : errors[0] },
-    { status: created.length ? 200 : 400 },
-  );
-}
+  // Some files may have been refused while others went through: say which
+  if (!created.length) return apiError(400, "VALIDATION", errors[0] ?? "Upload failed.", { details: errors });
+  return Response.json({ ok: true, created, errors });
+});

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { type ReactNode, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
+import { shortRequestId } from "@/lib/request-id";
 import { cn } from "@/lib/utils";
 
 export interface MediaMeta {
@@ -60,8 +61,16 @@ export function readMediaMeta(file: File): Promise<MediaMeta> {
 export interface UploadResult {
   ok: boolean;
   created: string[];
+  /** Files that were refused (the rest may have gone through) */
   errors: string[];
   error?: string;
+  /** Matches the server's log line when the failure was unexpected (ARCH-04) */
+  requestId?: string;
+}
+
+/** The server's answer in either shape: success with refused files, or the common failure shape. */
+function toUploadResult(body: Partial<UploadResult> & { details?: string[] }): UploadResult {
+  return { ok: !!body.ok, created: body.created ?? [], errors: body.errors ?? body.details ?? [], error: body.error, requestId: body.requestId };
 }
 
 /** POSTs files to /api/media (XHR so we get upload progress). */
@@ -84,7 +93,7 @@ export async function uploadMedia(opts: {
     xhr.upload.onprogress = (e) => e.lengthComputable && opts.onProgress?.(Math.round((e.loaded / e.total) * 100));
     xhr.onload = () => {
       try {
-        resolve(JSON.parse(xhr.responseText) as UploadResult);
+        resolve(toUploadResult(JSON.parse(xhr.responseText)));
       } catch {
         resolve({ ok: false, created: [], errors: [], error: "Upload failed." });
       }
@@ -110,7 +119,8 @@ export function useMediaUpload() {
       });
       router.refresh();
     } else {
-      toast.error(r.error ?? "Upload failed.", { description: r.errors.slice(1).join(" · ") || undefined });
+      const more = r.errors.slice(1).join(" · ");
+      toast.error(r.error ?? "Upload failed.", { description: [more, r.requestId && `Reference ${shortRequestId(r.requestId)}`].filter(Boolean).join(" — ") || undefined });
     }
     return r;
   }

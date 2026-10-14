@@ -47,6 +47,7 @@ Tests never touch your development database or `./storage`. The first `test:e2e`
 | `ALLOWED_ORIGINS` | Extra hosts allowed to POST to the API (CSRF check), e.g. behind a reverse proxy. The app's own host is always allowed. |
 | `HTTPS_ONLY` | `true` when served over HTTPS: adds HSTS and `upgrade-insecure-requests` to the security headers. |
 | `MOCK_PUBLISH_FAILURE_RATE` | Optional, e.g. `0.2`: makes the simulated publisher fail randomly so you can exercise the retry flow. |
+| `LOG_LEVEL`, `LOG_FORMAT` | `debug` / `info` (default) / `warn` / `error`; `json` (default in production, one line per event) or `pretty` (default in development). Passwords, tokens, cookies and API keys are redacted. |
 
 ## What's implemented (Phase 1)
 
@@ -93,6 +94,7 @@ src/components/ui/          shadcn/ui
 - **Publishing**: each `PublishingSchedule` (content × platform × account × time) is processed by the worker. Every attempt is stored as a `PublishingJob`.
   - Retryable errors are retried with a delay you set in Settings.
   - Authentication errors mark the account as Token Expired and send a notification.
+- **Errors and logs**: every request gets an id in `src/proxy.ts` (a plain `x-request-id` from a reverse proxy is kept) and every response carries it. Route Handlers (`route()` in `src/server/api.ts`) and Server Actions (`runAction`) fail in one shape, `{ ok: false, error, code, details?, requestId }`, and leave exactly one structured log line with that id: a refusal at `warn`, a bug at `error` with the stack. Render errors go through `onRequestError` (`src/instrumentation.ts`, the place to forward to an error tracker) and show their digest on the error page as a reference; `src/app/global-error.tsx` covers the root layout. A toast or page that says "Reference 1a2b3c4d" matches a log line.
 - **Adding a platform** (TikTok, Instagram, …): implement `PlatformProvider` in `src/lib/platforms/`, register it in `registry.ts`, and enable the row in the `Platform` table.
 
 ## Next phases

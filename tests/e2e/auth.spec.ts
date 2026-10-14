@@ -22,6 +22,18 @@ test("APIs refuse a signed-out caller", async ({ request }) => {
   expect((await request.post("/api/media", { multipart: { type: "IMAGE" } })).status()).toBe(401);
 });
 
+// ARCH-04: a refusal carries a request id in the body and the header, and a plain id from the caller is kept
+test("a refused API call carries a request id", async ({ request }) => {
+  const res = await request.get("/api/content/export");
+  const body = await res.json();
+  expect(body).toMatchObject({ ok: false, code: "UNAUTHENTICATED", error: "Sign in required." });
+  expect(res.headers()["x-request-id"]).toBe(body.requestId);
+
+  const supplied = await request.get("/api/content/export", { headers: { "x-request-id": "e2e-request-0001" } });
+  expect(supplied.headers()["x-request-id"]).toBe("e2e-request-0001");
+  expect((await supplied.json()).requestId).toBe("e2e-request-0001");
+});
+
 test("setup is closed once the owner has a password", async ({ page }) => {
   await page.goto("/setup");
   await expect(page).toHaveURL(/\/login/);

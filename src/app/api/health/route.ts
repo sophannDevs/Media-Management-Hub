@@ -1,5 +1,6 @@
 import { connection } from "next/server";
 import { db } from "@/lib/db";
+import { route } from "@/server/api";
 import { workerStatus } from "@/server/worker";
 
 /**
@@ -8,7 +9,7 @@ import { workerStatus } from "@/server/worker";
  * 200 "degraded" when no worker is running (the app works, posts won't go
  * out); 503 "down" when the database doesn't answer.
  */
-export async function GET() {
+export const GET = route(async () => {
   await connection();
   let database = true;
   try {
@@ -29,4 +30,4 @@ export async function GET() {
     },
     { status: database ? 200 : 503, headers: { "Cache-Control": "no-store" } },
   );
-}
+});

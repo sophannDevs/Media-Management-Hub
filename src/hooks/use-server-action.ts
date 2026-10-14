@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
+import { shortRequestId } from "@/lib/request-id";
 import type { ActionFailure, ActionResult } from "@/server/errors";
 
 /**
@@ -37,7 +38,9 @@ export function useServerAction() {
           router.push(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
         } else {
           if (opts.onError?.(r.error, r.details, r) === true) return;
-          toast.error(r.error, { description: r.details?.join(" · ") });
+          // An unexpected failure carries a reference to quote: it matches the server's log line
+          const reference = r.code === "INTERNAL" && r.requestId ? `Reference ${shortRequestId(r.requestId)}` : null;
+          toast.error(r.error, { description: [r.details?.join(" · "), reference].filter(Boolean).join(" — ") || undefined });
         }
       } catch {
         toast.error("Network error — please try again.");

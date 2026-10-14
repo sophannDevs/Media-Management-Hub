@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { csvCell } from "@/lib/csv";
-import { rejectCrossSite } from "@/lib/security/origin";
+import { isCrossSite } from "@/lib/security/origin";
 import { checkBearer } from "@/lib/security/secret";
 import { mediaLinkProblem } from "@/lib/security/url";
 
@@ -42,27 +42,27 @@ describe("mediaLinkProblem (SEC-06)", () => {
   });
 });
 
-describe("rejectCrossSite (SEC-03)", () => {
+describe("isCrossSite (SEC-03)", () => {
   const post = (headers: Record<string, string>) => new Request("http://app.test/api/media", { method: "POST", headers });
   afterEach(() => {
     delete process.env.ALLOWED_ORIGINS;
   });
 
   it("allows same-origin and origin-less requests", () => {
-    expect(rejectCrossSite(post({ host: "app.test", origin: "http://app.test" }))).toBeNull();
-    expect(rejectCrossSite(post({ host: "app.test" }))).toBeNull();
+    expect(isCrossSite(post({ host: "app.test", origin: "http://app.test" }))).toBe(false);
+    expect(isCrossSite(post({ host: "app.test" }))).toBe(false);
   });
 
   it("refuses other sites, opaque origins and cross-site fetches", () => {
-    expect(rejectCrossSite(post({ host: "app.test", origin: "https://evil.example" }))?.status).toBe(403);
-    expect(rejectCrossSite(post({ host: "app.test", origin: "null" }))?.status).toBe(403);
-    expect(rejectCrossSite(post({ host: "app.test", "sec-fetch-site": "cross-site" }))?.status).toBe(403);
+    expect(isCrossSite(post({ host: "app.test", origin: "https://evil.example" }))).toBe(true);
+    expect(isCrossSite(post({ host: "app.test", origin: "null" }))).toBe(true);
+    expect(isCrossSite(post({ host: "app.test", "sec-fetch-site": "cross-site" }))).toBe(true);
   });
 
   it("accepts hosts listed in ALLOWED_ORIGINS", () => {
     process.env.ALLOWED_ORIGINS = "admin.example.com, https://ops.example.com";
-    expect(rejectCrossSite(post({ host: "app.test", origin: "https://admin.example.com" }))).toBeNull();
-    expect(rejectCrossSite(post({ host: "app.test", origin: "https://ops.example.com" }))).toBeNull();
+    expect(isCrossSite(post({ host: "app.test", origin: "https://admin.example.com" }))).toBe(false);
+    expect(isCrossSite(post({ host: "app.test", origin: "https://ops.example.com" }))).toBe(false);
   });
 });
 

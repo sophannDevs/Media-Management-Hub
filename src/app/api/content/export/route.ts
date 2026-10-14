@@ -3,11 +3,12 @@ import { csvCell } from "@/lib/csv";
 import { db } from "@/lib/db";
 import { fmt } from "@/lib/dates";
 import { ContentType, ImageStatus, Priority, PublishingStatus, ReviewStatus, ScriptStatus, VideoStatus } from "@/lib/workflow/statuses";
+import { route } from "@/server/api";
 import { unauthorizedResponse } from "@/server/auth/dal";
 import { getSettings } from "@/server/services/settings";
 
 /** CSV export of all (non-archived) content with statuses and the next scheduled post. */
-export async function GET() {
+export const GET = route(async () => {
   await connection(); // always run at request time
   const unauthorized = await unauthorizedResponse();
   if (unauthorized) return unauthorized;
@@ -57,4 +58,4 @@ export async function GET() {
       "Cache-Control": "no-store",
     },
   });
-}
+});

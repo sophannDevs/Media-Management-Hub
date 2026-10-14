@@ -1,10 +1,11 @@
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { storage } from "@/lib/storage";
+import { apiError, route } from "@/server/api";
 import { unauthorizedResponse } from "@/server/auth/dal";
 
 // Streams uploaded media. Supports HTTP Range requests so videos can seek.
-export async function GET(req: NextRequest, ctx: RouteContext<"/api/files/[...key]">) {
+export const GET = route(async (req: NextRequest, ctx: RouteContext<"/api/files/[...key]">) => {
   const unauthorized = await unauthorizedResponse();
   if (unauthorized) return unauthorized;
   const { key: parts } = await ctx.params;
@@ -12,7 +13,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/files/[...ke
 
   const asset = await db.mediaAsset.findUnique({ where: { storageKey: key }, select: { mimeType: true, fileName: true } });
   const info = asset ? await storage.stat(key) : null;
-  if (!asset || !info) return new Response("Not found", { status: 404 });
+  if (!asset || !info) return apiError(404, "NOT_FOUND", "File not found.");
 
   const download = req.nextUrl.searchParams.has("download");
   const headers = new Headers({
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/files/[...ke
     const start = match[1] ? Number(match[1]) : 0;
     const end = match[2] ? Math.min(Number(match[2]), info.size - 1) : info.size - 1;
     if (start >= info.size || start > end) {
-      return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${info.size}` } });
+      return apiError(416, "VALIDATION", "That byte range isn't available.", { headers: { "Content-Range": `bytes */${info.size}` } });
     }
     headers.set("Content-Range", `bytes ${start}-${end}/${info.size}`);
     headers.set("Content-Length", String(end - start + 1));
@@ -40,4 +41,4 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/files/[...ke
 
   headers.set("Content-Length", String(info.size));
   return new Response(storage.readStream(key), { headers });
-}
+});

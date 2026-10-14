@@ -72,10 +72,10 @@ describe("publishing worker (PUB-11)", () => {
   });
 
   it("checks in on every pass, which /api/health reports", async () => {
-    expect(await (await health()).json()).toMatchObject({ status: "degraded", database: "ok", worker: { running: false } });
+    expect(await (await health(new Request("http://app.test/api/health"))).json()).toMatchObject({ status: "degraded", database: "ok", worker: { running: false } });
     await tick();
     expect((await workerStatus()).live).toBe(1);
-    const res = await health();
+    const res = await health(new Request("http://app.test/api/health"));
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ status: "ok", worker: { running: true, lastSeenSecondsAgo: 0 } });
   });

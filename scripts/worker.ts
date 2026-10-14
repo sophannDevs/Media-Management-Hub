@@ -12,11 +12,12 @@ try {
 
 async function main() {
   // After .env: the client reads DATABASE_URL
+  const { logger } = await import("../src/lib/log");
   const { startWorker, stopWorker } = await import("../src/server/worker");
   startWorker("PROCESS");
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.once(signal, async () => {
-      console.log(`[worker] ${signal}: finishing the current attempt…`);
+      logger.info("worker stopping: finishing the current attempt", { signal });
       await stopWorker(30_000);
       process.exit(0);
     });

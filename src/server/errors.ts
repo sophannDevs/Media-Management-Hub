@@ -11,6 +11,9 @@ export type ServiceErrorCode =
   /** No valid session: the client sends the user to /login. */
   | "UNAUTHENTICATED";
 
+/** Every code a failure can carry: the service reasons above plus the generic HTTP-like ones (ARCH-04). */
+export type ErrorCode = ServiceErrorCode | "VALIDATION" | "NOT_FOUND" | "FORBIDDEN" | "SERVICE_UNAVAILABLE" | "INTERNAL";
+
 /** An error whose message is safe to show to the user. */
 export class ServiceError extends Error {
   constructor(
@@ -24,6 +27,7 @@ export class ServiceError extends Error {
   }
 }
 
-export type ActionFailure = { ok: false; error: string; details?: string[]; code?: ServiceErrorCode; info?: Record<string, string> };
+/** The failure shape of Server Actions and Route Handlers alike (see server/api.ts). */
+export type ActionFailure = { ok: false; error: string; details?: string[]; code?: ErrorCode; info?: Record<string, string>; requestId?: string };
 
 export type ActionResult<T = undefined> = { ok: true; data: T; message?: string } | ActionFailure;

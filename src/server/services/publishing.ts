@@ -3,6 +3,7 @@ import os from "node:os";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { dayDiff } from "@/lib/dates";
+import { logger } from "@/lib/log";
 import { getProvider } from "@/lib/platforms/registry";
 import { type PlatformProvider, PublishError, type PublishMedia, type PublishRequest, type PublishResult, type ReconcileResult } from "@/lib/platforms/types";
 import { storage } from "@/lib/storage";
@@ -67,6 +68,8 @@ function toRequest(s: LoadedSchedule): PublishRequest {
   };
 }
 
+const log = logger.child({ component: "publisher", workerId: WORKER_ID });
+
 /** Retries a write that records what the platform already did; losing it could cause a second post. */
 async function persist<T>(label: string, write: () => Promise<T>): Promise<T> {
   for (let attempt = 1, delay = 200; ; attempt++, delay *= 3) {
@@ -74,7 +77,7 @@ async function persist<T>(label: string, write: () => Promise<T>): Promise<T> {
       return await write();
     } catch (e) {
       if (attempt >= 5) throw e;
-      console.warn(`[publisher] ${label} failed (attempt ${attempt} of 5), retrying`, e);
+      log.warn("write failed, retrying", { label, attempt, of: 5, err: e });
       await sleep(delay);
     }
   }
@@ -85,7 +88,7 @@ async function bestEffort(label: string, fn: () => Promise<unknown>) {
   try {
     await fn();
   } catch (e) {
-    console.error(`[publisher] ${label} failed; the post's outcome is already saved`, e);
+    log.error("side effect failed; the post's outcome is already saved", { label, err: e });
   }
 }
 
@@ -95,7 +98,7 @@ function startHeartbeat(scheduleId: string) {
     last = Date.now();
     return db.publishingSchedule
       .updateMany({ where: { id: scheduleId, status: "PROCESSING", lockedBy: WORKER_ID }, data: { lockedUntil: new Date(Date.now() + leaseMs()) } })
-      .catch((e) => console.error(`[publisher] could not renew the lease of ${scheduleId}`, e));
+      .catch((e) => log.error("could not renew the lease", { scheduleId, err: e }));
   };
   const timer = setInterval(renew, leaseMs() / 3);
   timer.unref?.();
@@ -289,13 +292,17 @@ async function recordSuccess(
       ]),
     );
   } catch (e) {
-    console.error(
-      `[publisher] ${s.platform.name} accepted schedule ${s.id} as ${result.externalId} (${result.url}) but the result could not be saved. ` +
-        "It will not be sent again: recovery checks the platform when the lease expires.",
-      e,
-    );
+    log.error("the platform accepted the post but the result could not be saved; it will not be sent again (recovery checks the platform when the lease expires)", {
+      scheduleId: s.id,
+      jobId,
+      platform: s.platformId,
+      externalId: result.externalId,
+      url: result.url,
+      err: e,
+    });
     throw e;
   }
+  log.info("post published", { scheduleId: s.id, jobId, platform: s.platformId, account: s.account.name, attempt: s.attempts, simulated, reconciled, externalId: result.externalId });
 
   await bestEffort("activity log", () =>
     logActivity({
@@ -344,6 +351,7 @@ async function recordFailure(s: LoadedSchedule, jobId: string, err: PublishError
     ]),
   );
 
+  log.warn("publish attempt failed", { scheduleId: s.id, jobId, platform: s.platformId, account: s.account.name, attempt: s.attempts, code: err.code, willRetry: retry, message: err.message });
   if (err.code === "AUTH") {
     await bestEffort("mark account", () => db.socialAccount.update({ where: { id: s.accountId }, data: { status: "TOKEN_EXPIRED", lastError: err.message } }));
     await bestEffort("blocked posts notice", () => notifyBlockedPosts(s.accountId));
@@ -407,6 +415,7 @@ export async function recoverExpiredLeases(dueAt = new Date()) {
           },
         });
     if (moved.count === 0) continue;
+    log.warn("an attempt was interrupted; the post was recovered", { scheduleId: s.id, outcome: s.externalId ? "already published" : "checked with the platform before any resend" });
     await db.publishingJob.updateMany({
       where: { scheduleId: s.id, status: "PROCESSING" },
       data: s.externalId
