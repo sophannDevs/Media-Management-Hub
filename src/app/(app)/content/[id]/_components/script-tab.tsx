@@ -97,7 +97,7 @@ export function ScriptTab({ data }: { data: ContentWorkspace }) {
               </p>
             </div>
             <Select value={templateId} onValueChange={setTemplateId}>
-              <SelectTrigger className="w-full bg-white sm:w-56"><SelectValue /></SelectTrigger>
+              <SelectTrigger aria-label="Script prompt template" className="w-full bg-white sm:w-56"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={NO_TEMPLATE}>Default script brief</SelectItem>
                 {scriptTemplates.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
@@ -163,8 +163,8 @@ export function ScriptTab({ data }: { data: ContentWorkspace }) {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <StatusBadge def={ScriptStatus} value={v.status} size="sm" />
-                      <span className="text-[11px] text-muted-foreground">{SOURCE_LABEL[v.source] ?? v.source}</span>
-                      {i === 0 && <span className="text-[11px] font-medium text-primary">Current</span>}
+                      <span className="text-xs text-muted-foreground">{SOURCE_LABEL[v.source] ?? v.source}</span>
+                      {i === 0 && <span className="text-xs font-medium text-primary">Current</span>}
                     </div>
                     {v.note && <p className="mt-1 text-sm">{v.note}</p>}
                     <p className="text-xs text-muted-foreground">{v.createdLabel} · {v.words.toLocaleString("en-US")} words</p>

@@ -92,7 +92,7 @@ export function WorkspaceTabs({ panels, counts }: { panels: Record<TabKey, React
             >
               <t.icon className="size-4" />
               {t.label}
-              {counts[t.key] ? <span className="rounded-full bg-secondary px-1.5 text-[10px] text-muted-foreground tabular-nums">{counts[t.key]}</span> : null}
+              {counts[t.key] ? <span className="rounded-full bg-secondary px-1.5 text-xs text-muted-foreground tabular-nums">{counts[t.key]}</span> : null}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -128,10 +128,10 @@ export function WorkspaceHeader({ data }: { data: ContentWorkspace }) {
           {c.archived && <StatusBadge tone="neutral" label="Archived" />}
           <PriorityBadge priority={c.priority} />
           {c.seriesName && (
-            <span className="inline-flex h-[22px] items-center gap-1 rounded-full border border-stone-200 bg-stone-100 px-2 text-[11.5px] text-stone-600"><Library className="size-3" />{c.seriesName}</span>
+            <span className="inline-flex h-[22px] items-center gap-1 rounded-full border border-stone-200 bg-stone-100 px-2 text-xs text-stone-600"><Library className="size-3" />{c.seriesName}</span>
           )}
           {c.campaignName && (
-            <span className="inline-flex h-[22px] items-center gap-1 rounded-full border border-stone-200 bg-stone-100 px-2 text-[11.5px] text-stone-600"><Flag className="size-3" />{c.campaignName}</span>
+            <span className="inline-flex h-[22px] items-center gap-1 rounded-full border border-stone-200 bg-stone-100 px-2 text-xs text-stone-600"><Flag className="size-3" />{c.campaignName}</span>
           )}
         </div>
         <h1 className="mt-2 text-xl font-semibold tracking-tight md:text-2xl">{c.title}</h1>

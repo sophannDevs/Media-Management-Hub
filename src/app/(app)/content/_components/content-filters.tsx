@@ -78,13 +78,13 @@ export function ContentFilters({
                 )}
               >
                 {label}
-                <span className="text-xs text-stone-400 tabular-nums">{counts[key] ?? 0}</span>
+                <span className="text-xs text-muted-foreground tabular-nums">{counts[key] ?? 0}</span>
               </Link>
             ))}
             {deepStage && (
               <span className="flex h-8 items-center gap-1.5 rounded-lg bg-white px-3 text-[13px] font-medium whitespace-nowrap shadow-sm">
                 {Stage.label(deepStage)}
-                <Link href={buildHref(params, { stage: "ALL" })} aria-label="Clear stage filter" className="text-stone-400 hover:text-foreground">
+                <Link href={buildHref(params, { stage: "ALL" })} aria-label="Clear stage filter" className="text-muted-foreground hover:text-foreground">
                   <X className="size-3.5" />
                 </Link>
               </span>
@@ -123,7 +123,7 @@ export function ContentFilters({
 
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-card p-3 shadow-card">
         <div className="relative min-w-[220px] flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-stone-400" />
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} className="h-9 pl-9" placeholder="Search title, tag or description" aria-label="Search content" />
         </div>
         <FilterSelect label="All platforms" value={params.platform} onChange={(v) => go({ platform: v })} items={options.platforms.filter((p) => p.enabled).map((p) => [p.id, p.name])} />
@@ -144,7 +144,7 @@ export function ContentFilters({
 function FilterSelect({ label, value, items, onChange }: { label: string; value?: string; items: (readonly [string, string])[]; onChange: (v: string | undefined) => void }) {
   return (
     <Select value={value ?? ALL} onValueChange={(v) => onChange(v === ALL ? undefined : v)}>
-      <SelectTrigger className={cn("w-auto bg-white data-[size=default]:h-9", value && "border-olive-300 bg-olive-50")}>
+      <SelectTrigger aria-label={label} className={cn("w-auto bg-white data-[size=default]:h-9", value && "border-olive-300 bg-olive-50")}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

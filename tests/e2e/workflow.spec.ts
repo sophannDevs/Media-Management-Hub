@@ -18,3 +18,25 @@ test("a post can be scheduled before Ready to Post with a reason", async ({ page
   await expect(page.getByText("Scheduled before Ready to Post")).toBeVisible();
   await expect(page.getByText("Client approved the cut by phone")).toBeVisible();
 });
+
+// PERF-04: the Create Content options are cached across requests; adding a
+// category must expire that cache at once.
+test("a new category appears in the Create Content dialog right away", async ({ page }, info) => {
+  test.skip(info.project.name !== "desktop", "mutates the shared e2e database");
+  const name = `E2E category ${Date.now()}`;
+
+  await page.goto("/prompts");
+  await page.getByRole("button", { name: /Create content/i }).click(); // fills the cache
+  await page.keyboard.press("Escape");
+
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "Add category" }).click();
+  await page.getByRole("textbox", { name: "New category name" }).fill(name);
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.getByRole("list", { name: "Categories" }).getByText(name)).toBeVisible();
+
+  await page.goto("/prompts");
+  await page.getByRole("button", { name: /Create content/i }).click();
+  await page.getByRole("combobox", { name: "Category" }).click();
+  await expect(page.getByRole("option", { name })).toBeVisible();
+});

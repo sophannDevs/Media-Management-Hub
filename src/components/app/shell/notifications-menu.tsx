@@ -46,7 +46,7 @@ export function NotificationsMenu({ items, unread }: { items: NotificationItem[]
         <Button variant="outline" size="icon-lg" className="relative bg-white" aria-label={`Notifications${unread ? ` (${unread} unread)` : ""}`}>
           <Bell />
           {unread > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-white">{unread}</span>
+            <span className="absolute -top-1 -right-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-xs font-semibold text-white">{unread}</span>
           )}
         </Button>
       </PopoverTrigger>
@@ -78,7 +78,7 @@ export function NotificationsMenu({ items, unread }: { items: NotificationItem[]
                   {!n.read && <span className="size-1.5 rounded-full bg-primary" />}
                 </div>
                 <p className="mt-0.5 text-xs text-muted-foreground">{n.message}</p>
-                <p className="mt-1 text-[11px] text-stone-400">{n.ago}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{n.ago}</p>
               </div>
             </Link>
           ))}

@@ -155,7 +155,7 @@ export function PublishedTable({ rows, fileDate }: { rows: AnalyticsPost[]; file
               </TableCell>
               <TableCell className="px-3 text-muted-foreground">
                 {p.publishedLabel}
-                <span className="block text-xs text-stone-400">{p.publishedTime}</span>
+                <span className="block text-xs text-muted-foreground">{p.publishedTime}</span>
               </TableCell>
               <TableCell className="px-3 text-right font-medium tabular-nums">{formatInt(p.views)}</TableCell>
               <TableCell className="px-3 text-right tabular-nums">{formatInt(p.likes)}</TableCell>

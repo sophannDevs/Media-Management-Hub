@@ -16,6 +16,8 @@ function Progress({
         "relative flex h-1 w-full items-center overflow-x-hidden rounded-full bg-muted",
         className
       )}
+      // Without value Radix reports an indeterminate bar with no aria-valuenow
+      value={value}
       {...props}
     >
       <ProgressPrimitive.Indicator

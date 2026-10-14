@@ -72,7 +72,7 @@ function PromptPanel({ data }: { data: ContentWorkspace }) {
               }
             }}
           >
-            <SelectTrigger className="w-full"><Library className="text-muted-foreground" /><SelectValue /></SelectTrigger>
+            <SelectTrigger aria-label="Image prompt template" className="w-full"><Library className="text-muted-foreground" /><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value={NO_TEMPLATE}>Start from a template…</SelectItem>
               {templates.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
@@ -88,20 +88,20 @@ function PromptPanel({ data }: { data: ContentWorkspace }) {
         <div className="grid grid-cols-2 gap-3">
           <Field label="Style">
             <Select value={style} onValueChange={setStyle}>
-              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectTrigger aria-label="Style" className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>{Array.from(new Set([...STYLES, style])).map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
           <Field label="Aspect ratio">
             <Select value={aspectRatio} onValueChange={setRatio}>
-              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectTrigger aria-label="Aspect ratio" className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>{RATIOS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
         </div>
         <Field label="Tool">
           <Select value={provider} onValueChange={setProvider}>
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectTrigger aria-label="Tool" className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>{PROVIDERS.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent>
           </Select>
         </Field>
@@ -167,10 +167,10 @@ function Gallery({ data }: { data: ContentWorkspace }) {
                     <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">Linked file</div>
                   )}
                   {img.isSelected && (
-                    <span className="absolute top-2 left-2 inline-flex h-[22px] items-center gap-1 rounded-full bg-primary px-2 text-[11px] font-medium text-white"><Check className="size-3" />Selected</span>
+                    <span className="absolute top-2 left-2 inline-flex h-[22px] items-center gap-1 rounded-full bg-primary px-2 text-xs font-medium text-white"><Check className="size-3" />Selected</span>
                   )}
                   {data.media.thumbnailId === img.id && (
-                    <span className="absolute top-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white">Thumbnail</span>
+                    <span className="absolute top-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-xs font-medium text-white">Thumbnail</span>
                   )}
                   <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
                     <Button size="sm" variant="secondary" disabled={pending} onClick={() => run(() => setImageSelectedAction(img.id, !img.isSelected), { success: img.isSelected ? "Removed from final selection" : "Added to final selection" })}>

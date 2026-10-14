@@ -93,7 +93,7 @@ async function Dashboard() {
                     </Link>
                   )}
                 </div>
-                <span className="ml-auto text-[11px] whitespace-nowrap text-stone-400">{timeAgo(a.createdAt, d.now)}</span>
+                <span className="ml-auto text-xs whitespace-nowrap text-muted-foreground">{timeAgo(a.createdAt, d.now)}</span>
               </div>
             ))}
           </div>
@@ -186,7 +186,7 @@ function Pipeline({ d }: { d: DashboardData }) {
                 <span className="font-medium">{s === "READY" ? "Ready to post" : s === "IDEA" ? "Idea" : Stage.label(s).replace(" Pending", "")}</span>
                 <span className="font-semibold tabular-nums">{n}</span>
               </div>
-              <Progress value={(n / max) * 100} className="mt-1.5 h-1.5 bg-[#eeebd8]" />
+              <Progress value={(n / max) * 100} aria-label={`${Stage.label(s)}: ${n} video${n === 1 ? "" : "s"}`} className="mt-1.5 h-1.5 bg-[#eeebd8]" />
             </div>
           </Link>
         );
@@ -251,14 +251,14 @@ function Tasks({ d }: { d: DashboardData }) {
         <Link key={c.id} href={`/content/${c.id}?tab=${c.missing[0]?.tab ?? "overview"}`} className="block rounded-xl border border-[#f1eedf] p-3 hover:border-olive-300">
           <div className="flex items-center justify-between gap-2">
             <PriorityBadge priority={c.priority} />
-            <span className="text-[11px] text-muted-foreground">{c.completion}%</span>
+            <span className="text-xs text-muted-foreground">{c.completion}%</span>
           </div>
           <p className="mt-1 line-clamp-1 text-sm font-medium">{c.title}</p>
           <ul className="mt-1.5 space-y-0.5">
             {c.missing.slice(0, 2).map((m) => (
               <li key={m.key} className="flex items-center gap-1.5 text-xs text-muted-foreground"><CircleDashed className="size-3 text-amber-600" />{m.label}</li>
             ))}
-            {c.missing.length > 2 && <li className="pl-[18px] text-xs text-stone-400">+{c.missing.length - 2} more</li>}
+            {c.missing.length > 2 && <li className="pl-[18px] text-xs text-muted-foreground">+{c.missing.length - 2} more</li>}
           </ul>
         </Link>
       ))}
@@ -280,16 +280,16 @@ function WeekStrip({ d }: { d: DashboardData }) {
           const items = d.weekSchedules.filter((s) => dayKey(s.scheduledAt, d.tz) === key);
           return (
             <div key={key} className={cn("min-h-[160px] border-r border-[#f1eedf] p-2.5 last:border-r-0", isToday && "bg-olive-50/60")}>
-              <p className="text-[11px] tracking-wide text-muted-foreground uppercase">{fmt(`${key}T12:00:00Z`, "UTC", "EEE")}</p>
+              <p className="text-xs tracking-wide text-muted-foreground uppercase">{fmt(`${key}T12:00:00Z`, "UTC", "EEE")}</p>
               <p className={cn("text-lg font-semibold", isToday && "text-primary")}>{Number(key.slice(8))}</p>
               <div className="mt-1 space-y-1.5">
                 {items.map((s) => (
                   <Link key={s.id} href={`/content/${s.content.id}?tab=publishing`} className="block rounded-lg border bg-white p-1.5 hover:border-olive-300">
                     <div className="flex items-center gap-1">
                       <PlatformIcon platform={s.platformId} size={12} />
-                      <span className="text-[10px] text-muted-foreground">{fmtTime(s.scheduledAt, d.tz)}</span>
+                      <span className="text-xs text-muted-foreground">{fmtTime(s.scheduledAt, d.tz)}</span>
                     </div>
-                    <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug font-medium">{s.content.title}</p>
+                    <p className="mt-0.5 line-clamp-2 text-xs leading-snug font-medium">{s.content.title}</p>
                     <div className="mt-1">
                       <StatusBadge def={ScheduleStatus} value={s.status} label={scheduleLabel(s.status, s.simulated)} size="sm" />
                     </div>

@@ -91,7 +91,7 @@ function BasicInfo({ data }: { data: ContentWorkspace }) {
         <Field label="Description" className="sm:col-span-2"><Textarea rows={3} value={form.description} onChange={(e) => set("description", e.target.value)} /></Field>
         <Field label="Category">
           <Select value={form.categoryId} onValueChange={(v) => set("categoryId", v)}>
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectTrigger aria-label="Category" className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value={NONE}>No category</SelectItem>
               {data.options.categories.map((o) => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
@@ -100,7 +100,7 @@ function BasicInfo({ data }: { data: ContentWorkspace }) {
         </Field>
         <Field label="Content type">
           <Select value={form.contentType} onValueChange={(v) => set("contentType", v)}>
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectTrigger aria-label="Content type" className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>{ContentType.options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
           </Select>
         </Field>
@@ -108,7 +108,7 @@ function BasicInfo({ data }: { data: ContentWorkspace }) {
         <Field label="Target audience"><Input value={form.targetAudience} onChange={(e) => set("targetAudience", e.target.value)} /></Field>
         <Field label="Language">
           <Select value={form.language} onValueChange={(v) => set("language", v)}>
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectTrigger aria-label="Language" className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>{Array.from(new Set([...LANGUAGES, form.language])).map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
           </Select>
         </Field>
@@ -160,7 +160,7 @@ function ProductionStatus({ data }: { data: ContentWorkspace }) {
               <StatusBadge def={row.def} value={c[row.field]} />
             </div>
             <Select value={c[row.field]} disabled={pending} onValueChange={(v) => run(() => setStatusAction(c.id, row.field, v))}>
-              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectTrigger aria-label={`${row.label} status`} className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>{row.def.options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
             </Select>
           </div>
@@ -195,7 +195,7 @@ function Checklist({ data }: { data: ContentWorkspace }) {
   return (
     <Panel title="Checklist" action={<span className="text-sm font-semibold text-primary">{data.workflow.completion}% complete</span>}>
       <div className="px-5 pt-4">
-        <Progress value={data.workflow.completion} className="h-1.5 bg-[#eeebd8]" />
+        <Progress value={data.workflow.completion} aria-label="Checklist completion" className="h-1.5 bg-[#eeebd8]" />
         <p className="mt-1.5 text-xs text-muted-foreground">{done} of {items.length} complete</p>
       </div>
       <ul className="space-y-0.5 p-3">
@@ -213,7 +213,7 @@ function Checklist({ data }: { data: ContentWorkspace }) {
                 {i.done && <Check className="size-3" />}
               </span>
             )}
-            <span className={cn("flex-1 text-sm", i.done ? "text-stone-400 line-through" : "text-foreground")}>{i.label}</span>
+            <span className={cn("flex-1 text-sm", i.done ? "text-muted-foreground line-through" : "text-foreground")}>{i.label}</span>
             {!i.done && !i.manual && (
               <button type="button" onClick={() => setTab(i.tab)} className="text-xs text-primary opacity-0 group-hover:opacity-100 focus:opacity-100" aria-label={`Go to ${i.tab}`}>
                 <ArrowRight className="size-3.5" />
@@ -243,11 +243,11 @@ function Planning({ data }: { data: ContentWorkspace }) {
           </div>
         </Field>
         <Field label="Target publish date">
-          <Input type="date" defaultValue={c.targetPublishDate} disabled={pending} onBlur={(e) => e.target.value !== c.targetPublishDate && save({ targetPublishDate: e.target.value || null })} />
+          <Input type="date" aria-label="Target publish date" defaultValue={c.targetPublishDate} disabled={pending} onBlur={(e) => e.target.value !== c.targetPublishDate && save({ targetPublishDate: e.target.value || null })} />
         </Field>
         <Field label="Series">
           <Select value={c.seriesId ?? NONE} disabled={pending} onValueChange={(v) => save({ seriesId: v === NONE ? null : v })}>
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectTrigger aria-label="Series" className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value={NONE}>None</SelectItem>
               {data.options.series.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
@@ -256,7 +256,7 @@ function Planning({ data }: { data: ContentWorkspace }) {
         </Field>
         <Field label="Campaign">
           <Select value={c.campaignId ?? NONE} disabled={pending} onValueChange={(v) => save({ campaignId: v === NONE ? null : v })}>
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectTrigger aria-label="Campaign" className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value={NONE}>None</SelectItem>
               {data.options.campaigns.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}

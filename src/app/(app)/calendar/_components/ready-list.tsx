@@ -52,13 +52,13 @@ export function ReadyList({ items, platform }: { items: ReadyItem[]; platform: s
             dragging === c.id && "opacity-50",
           )}
         >
-          <GripVertical className="size-4 shrink-0 text-stone-300" aria-hidden />
+          <GripVertical className="size-4 shrink-0 text-muted-foreground" aria-hidden />
           <ContentThumb src={c.thumbUrl} seed={c.id} icon={thumbIconFor(c)} className="h-9 w-14" />
           <div className="min-w-0 flex-1">
             <p className="line-clamp-2 text-xs leading-snug font-medium">{c.title}</p>
             <div className="mt-1 flex items-center gap-2">
               <PlatformStack platforms={c.platforms} size={16} />
-              {c.target && <span className="truncate text-[11px] text-muted-foreground">Target {c.target}</span>}
+              {c.target && <span className="truncate text-xs text-muted-foreground">Target {c.target}</span>}
             </div>
           </div>
         </div>

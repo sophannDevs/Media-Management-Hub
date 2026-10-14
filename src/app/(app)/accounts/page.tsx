@@ -78,7 +78,7 @@ async function Accounts() {
           </h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {d.comingSoon.map((p) => (
-              <div key={p.id} className="flex items-center gap-3 rounded-2xl border bg-card p-4 opacity-80 shadow-card">
+              <div key={p.id} className="flex items-center gap-3 rounded-2xl border border-dashed bg-card p-4 shadow-card">
                 <PlatformIcon platform={p.id} size={26} />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{p.name}</p>
@@ -115,7 +115,7 @@ function AccountCard({ a }: { a: AccountCardData }) {
             <h3 className="font-semibold">{a.name}</h3>
             <StatusBadge def={AccountStatus} value={a.status} />
             {a.isDefault && (
-              <span className="inline-flex h-[22px] items-center gap-1 rounded-full border border-olive-200 bg-olive-50 px-2 text-[11.5px] font-medium text-olive-700">
+              <span className="inline-flex h-[22px] items-center gap-1 rounded-full border border-olive-200 bg-olive-50 px-2 text-xs font-medium text-olive-700">
                 <Star className="size-3 fill-current" />
                 Default
               </span>

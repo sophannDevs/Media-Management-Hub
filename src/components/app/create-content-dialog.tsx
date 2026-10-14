@@ -52,7 +52,7 @@ export function CreateContentDialog({ options, trigger }: { options: ContentForm
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger ?? (
-          <Button>
+          <Button aria-label="Create content">
             <Plus />
             <span className="hidden sm:inline">Create Content</span>
           </Button>
@@ -85,7 +85,7 @@ export function CreateContentDialog({ options, trigger }: { options: ContentForm
                 </Field>
                 <Field label="Category">
                   <Select value={form.categoryId} onValueChange={(v) => set("categoryId", v)}>
-                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectTrigger aria-label="Category" className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value={NONE}>No category</SelectItem>
                       {options.categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
@@ -94,7 +94,7 @@ export function CreateContentDialog({ options, trigger }: { options: ContentForm
                 </Field>
                 <Field label="Content type">
                   <Select value={form.contentType} onValueChange={(v) => set("contentType", v)}>
-                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectTrigger aria-label="Content type" className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>{ContentType.options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
                   </Select>
                 </Field>
@@ -106,7 +106,7 @@ export function CreateContentDialog({ options, trigger }: { options: ContentForm
                 </Field>
                 <Field label="Language">
                   <Select value={form.language} onValueChange={(v) => set("language", v)}>
-                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectTrigger aria-label="Language" className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>{LANGUAGES.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
                   </Select>
                 </Field>
@@ -134,7 +134,7 @@ export function CreateContentDialog({ options, trigger }: { options: ContentForm
                       />
                       <PlatformIcon platform={p.id} size={20} />
                       <span className="text-sm font-medium">{p.name}</span>
-                      {!p.enabled && <span className="ml-auto rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-semibold text-stone-500 uppercase">Soon</span>}
+                      {!p.enabled && <span className="ml-auto rounded bg-stone-100 px-1.5 py-0.5 text-xs font-semibold text-stone-500 uppercase">Soon</span>}
                     </label>
                   );
                 })}
@@ -158,7 +158,7 @@ export function CreateContentDialog({ options, trigger }: { options: ContentForm
                 </Field>
                 <Field label="Series">
                   <Select value={form.seriesId} onValueChange={(v) => set("seriesId", v)}>
-                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectTrigger aria-label="Series" className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value={NONE}>None</SelectItem>
                       {options.series.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
@@ -167,7 +167,7 @@ export function CreateContentDialog({ options, trigger }: { options: ContentForm
                 </Field>
                 <Field label="Campaign">
                   <Select value={form.campaignId} onValueChange={(v) => set("campaignId", v)}>
-                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectTrigger aria-label="Campaign" className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value={NONE}>None</SelectItem>
                       {options.campaigns.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}

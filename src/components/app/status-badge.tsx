@@ -43,7 +43,7 @@ export function StatusBadge({
     <span
       className={cn(
         "inline-flex shrink-0 items-center gap-1.5 rounded-full border font-medium whitespace-nowrap",
-        size === "sm" ? "h-[18px] px-1.5 text-[10px]" : "h-[22px] px-2 text-[11.5px]",
+        size === "sm" ? "h-5 px-1.5 text-xs" : "h-[22px] px-2 text-xs",
         TONE_CLASSES[t],
         className,
       )}

@@ -66,7 +66,7 @@ function TaxonomyGroup({ group, items }: { group: (typeof GROUPS)[number]; items
             <span className="max-w-[220px] truncate">{item.name}</span>
             <Tooltip>
               <TooltipTrigger asChild>
-                <span tabIndex={0} className="ml-0.5 rounded-full bg-white px-1.5 text-[11px] text-muted-foreground tabular-nums ring-1 ring-[#ece9d6] outline-none focus-visible:ring-ring" aria-label={usageLabel(item.count)}>
+                <span tabIndex={0} className="ml-0.5 rounded-full bg-white px-1.5 text-xs text-muted-foreground tabular-nums ring-1 ring-[#ece9d6] outline-none focus-visible:ring-ring" aria-label={usageLabel(item.count)}>
                   {item.count}
                 </span>
               </TooltipTrigger>

@@ -184,7 +184,7 @@ export function CalendarBoard({ view, days, events: serverEvents, tz, todayKey, 
                     title={`Open ${day.longLabel}`}
                     className={cn(
                       "flex size-6 items-center justify-center rounded-full text-xs tabular-nums",
-                      day.isToday ? "bg-primary font-semibold text-primary-foreground" : day.inMonth ? "font-medium text-stone-700 hover:bg-olive-100" : "text-stone-300 hover:bg-olive-50",
+                      day.isToday ? "bg-primary font-semibold text-primary-foreground" : day.inMonth ? "font-medium text-stone-700 hover:bg-olive-100" : "text-muted-foreground hover:bg-olive-50",
                     )}
                   >
                     {day.day}
@@ -194,7 +194,7 @@ export function CalendarBoard({ view, days, events: serverEvents, tz, todayKey, 
                       <MonthChip key={ev.id} {...chipProps(ev)} />
                     ))}
                     {items.length > 3 && (
-                      <Link href={dayHref(day.key)} className="block px-1 text-[11px] font-medium text-olive-700 hover:underline">
+                      <Link href={dayHref(day.key)} className="block px-1 text-xs font-medium text-olive-700 hover:underline">
                         +{items.length - 3} more
                       </Link>
                     )}
@@ -225,14 +225,14 @@ export function CalendarBoard({ view, days, events: serverEvents, tz, todayKey, 
           <div />
           {days.map((day) => (
             <Link key={day.key} href={dayHref(day.key)} title={`Open ${day.longLabel}`} className="border-l border-[#f0eddb] px-2 py-2 text-center hover:bg-olive-50/70">
-              <p className="text-[11px] tracking-wide text-muted-foreground uppercase">{day.weekday}</p>
+              <p className="text-xs tracking-wide text-muted-foreground uppercase">{day.weekday}</p>
               <p className={cn("text-lg font-semibold tabular-nums", day.isToday && "text-primary")}>{day.day}</p>
             </Link>
           ))}
         </div>
         {HOURS.map((h) => (
           <div key={h} className={cn("grid", cols)}>
-            <div className="border-b border-[#f6f4e8] pt-1 pr-2 text-right text-[11px] text-stone-400 tabular-nums">{pad2(h)}:00</div>
+            <div className="border-b border-[#f6f4e8] pt-1 pr-2 text-right text-xs text-muted-foreground tabular-nums">{pad2(h)}:00</div>
             {days.map((day) => {
               const cell = `${day.key}|${h}`;
               const items = bySlot.get(cell) ?? [];
@@ -285,7 +285,7 @@ function MonthChip({ ev, dimmed, onDragStart, onDragEnd }: ChipProps) {
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       title={chipTitle(ev)}
-      className={chipClass(ev, dimmed, "flex items-center gap-1.5 rounded-md bg-[#f7f5e6] px-1.5 py-1 text-[11px] leading-tight hover:bg-olive-50")}
+      className={chipClass(ev, dimmed, "flex items-center gap-1.5 rounded-md bg-[#f7f5e6] px-1.5 py-1 text-xs leading-tight hover:bg-olive-50")}
     >
       <PlatformIcon platform={ev.platformId} size={12} />
       <span className="shrink-0 text-muted-foreground tabular-nums">{ev.timeLabel.replace(":00", "")}</span>
@@ -302,15 +302,15 @@ function WeekChip({ ev, dimmed, onDragStart, onDragEnd }: ChipProps) {
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       title={chipTitle(ev)}
-      className={chipClass(ev, dimmed, "block bg-white p-1.5 text-[11px] hover:bg-[#fdfcf4]")}
+      className={chipClass(ev, dimmed, "block bg-white p-1.5 text-xs hover:bg-[#fdfcf4]")}
     >
       <div className="flex items-center gap-1.5">
         <ContentThumb src={ev.content.thumbUrl} seed={ev.content.id} icon={thumbIconFor(ev.content)} className="h-6 w-10 rounded" />
         <PlatformIcon platform={ev.platformId} size={12} />
-        <span className="truncate text-[10.5px] text-muted-foreground tabular-nums">{ev.timeLabel}</span>
+        <span className="truncate text-xs text-muted-foreground tabular-nums">{ev.timeLabel}</span>
       </div>
       <p className="mt-1 line-clamp-2 leading-snug font-medium text-stone-800">{ev.content.title}</p>
-      <p className="mt-0.5 truncate text-[10.5px] text-muted-foreground">{ev.accountName}</p>
+      <p className="mt-0.5 truncate text-xs text-muted-foreground">{ev.accountName}</p>
     </Link>
   );
 }

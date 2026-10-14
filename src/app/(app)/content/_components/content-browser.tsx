@@ -161,7 +161,7 @@ export function ContentBrowser({
         <CalendarPlus />Schedule
       </Button>
     ) : (
-      <span className="text-xs whitespace-nowrap text-stone-400">{c.targetLabel ? `Target ${c.targetLabel}` : "—"}</span>
+      <span className="text-xs whitespace-nowrap text-muted-foreground">{c.targetLabel ? `Target ${c.targetLabel}` : "—"}</span>
     );
 
   const showTable = view !== "cards";
@@ -247,8 +247,8 @@ export function ContentBrowser({
                           <Link href={`/content/${c.id}`} className="block truncate font-medium hover:underline" onClick={(e) => e.stopPropagation()}>{c.title}</Link>
                           <p className="truncate text-xs text-muted-foreground">{c.description || "No description"}</p>
                           <div className="mt-1 flex items-center gap-1">
-                            <span className="mr-1 text-[11px] text-stone-600">{c.category?.name ?? "Uncategorized"} · {ContentType.label(c.contentType)}</span>
-                            {c.tags.slice(0, 2).map((t) => <span key={t} className="rounded bg-[#f5f3e3] px-1.5 py-0.5 text-[10px] text-stone-600">#{t}</span>)}
+                            <span className="mr-1 text-xs text-stone-600">{c.category?.name ?? "Uncategorized"} · {ContentType.label(c.contentType)}</span>
+                            {c.tags.slice(0, 2).map((t) => <span key={t} className="rounded bg-[#f5f3e3] px-1.5 py-0.5 text-xs text-stone-600">#{t}</span>)}
                           </div>
                         </div>
                       </div>
@@ -277,10 +277,13 @@ export function ContentBrowser({
           {items.map((c) => (
             <div key={c.id} className="group overflow-hidden rounded-2xl border bg-card shadow-card transition-colors hover:border-olive-300">
               <div className="relative">
-                <Link href={`/content/${c.id}`} className="block">
+                <Link href={`/content/${c.id}`} className="block" aria-label={c.title}>
                   <ContentThumb src={c.thumbUrl} seed={c.id} icon={thumbIconFor(c)} durationSec={c.durationSec} className="aspect-video w-full rounded-none" />
                 </Link>
-                <div className="absolute top-2.5 left-2.5 rounded bg-white/90 p-0.5"><Checkbox checked={selected.has(c.id)} onCheckedChange={(v) => toggle(c.id, !!v)} aria-label={`Select ${c.title}`} /></div>
+                {/* 24px target (WCAG 2.5.8): it sits on top of the card's image link */}
+                <div className="absolute top-2 left-2 rounded-md bg-white/90 p-0.5">
+                  <Checkbox className="size-6" checked={selected.has(c.id)} onCheckedChange={(v) => toggle(c.id, !!v)} aria-label={`Select ${c.title}`} />
+                </div>
                 <div className="absolute top-2.5 right-2.5"><StatusBadge def={Stage} value={c.stage} label={stageLabel(c.stage, c.simulated)} className="shadow-sm" /></div>
               </div>
               <div className="p-4">

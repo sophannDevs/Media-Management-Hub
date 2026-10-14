@@ -48,7 +48,7 @@ const ALL = "ALL";
 type Filter = PromptCategoryCode | typeof ALL;
 
 function Pill({ tone, children }: { tone: Tone; children: ReactNode }) {
-  return <span className={cn("inline-flex h-[22px] shrink-0 items-center rounded-full border px-2 text-[11.5px] font-medium whitespace-nowrap", TONE_CLASSES[tone])}>{children}</span>;
+  return <span className={cn("inline-flex h-[22px] shrink-0 items-center rounded-full border px-2 text-xs font-medium whitespace-nowrap", TONE_CLASSES[tone])}>{children}</span>;
 }
 
 function matches(p: PromptItem, q: string) {
@@ -105,17 +105,17 @@ export function PromptLibrary({ prompts, initialCategory }: { prompts: PromptIte
                 >
                   {t.icon && <t.icon className="size-3.5" aria-hidden />}
                   {t.label}
-                  <span className="text-xs text-stone-400 tabular-nums">{counts[t.value] ?? 0}</span>
+                  <span className="text-xs text-muted-foreground tabular-nums">{counts[t.value] ?? 0}</span>
                 </button>
               );
             })}
           </div>
         </div>
         <div className="relative ml-auto w-full sm:w-64">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-stone-400" />
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={query} onChange={(e) => setQuery(e.target.value)} className="h-10 bg-white pr-9 pl-9" placeholder="Search prompts" aria-label="Search prompts" />
           {query && (
-            <button type="button" onClick={() => setQuery("")} className="absolute top-1/2 right-2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-stone-400 hover:bg-muted hover:text-foreground" aria-label="Clear search">
+            <button type="button" onClick={() => setQuery("")} className="absolute top-1/2 right-2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Clear search">
               <X className="size-3.5" />
             </button>
           )}
@@ -235,7 +235,7 @@ function PromptCard({ prompt: p, onEdit }: { prompt: PromptItem; onEdit: () => v
         </div>
       </div>
       <div className="flex items-center justify-between gap-2 border-t border-[#f3f1e4] py-2 pr-3 pl-5">
-        <span className="min-w-0 truncate text-[11px] text-muted-foreground">
+        <span className="min-w-0 truncate text-xs text-muted-foreground">
           Updated {p.updatedLabel} · created {p.createdLabel}
         </span>
         <div className="flex shrink-0 gap-0.5">

@@ -7,6 +7,8 @@ const port = Number(process.env.E2E_PORT ?? 3210);
 export default defineConfig({
   testDir: "tests/e2e",
   timeout: 60_000,
+  // The suite runs 6 workers against one server; refreshes after an action can take a few seconds
+  expect: { timeout: 15_000 },
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {

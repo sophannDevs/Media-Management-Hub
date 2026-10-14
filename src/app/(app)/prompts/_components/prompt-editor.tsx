@@ -127,7 +127,7 @@ function PromptForm({ prompt, defaultCategory, onDone }: { prompt?: PromptItem; 
               <>
                 <span className="mr-0.5 text-xs text-muted-foreground">Variables:</span>
                 {variables.map((v) => (
-                  <span key={v} className="inline-flex h-[22px] items-center rounded-full border border-olive-200 bg-olive-50 px-2 font-mono text-[11.5px] font-medium text-olive-700">
+                  <span key={v} className="inline-flex h-[22px] items-center rounded-full border border-olive-200 bg-olive-50 px-2 font-mono text-xs font-medium text-olive-700">
                     {v}
                   </span>
                 ))}

@@ -38,7 +38,7 @@ export async function CreateContentButton({ trigger }: { trigger?: ReactNode }) 
 
 export function CreateContentButtonFallback() {
   return (
-    <Button disabled>
+    <Button disabled aria-label="Create content">
       <Plus />
       <span className="hidden sm:inline">Create Content</span>
     </Button>

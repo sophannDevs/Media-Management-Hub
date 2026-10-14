@@ -78,13 +78,15 @@
   --secondary: #f5f2d8;
   --secondary-foreground: #3a3830;
   --muted: #f6f4e6;
-  --muted-foreground: #75725f;
+  /* ≥ 4.6:1 on every surface of the app, tinted ones included (WCAG AA, A11Y-01) */
+  --muted-foreground: #6b6852;
   --accent: #eef2e3;
   --accent-foreground: #2b361a;
   --destructive: #b42318;
   --border: #ece9d6;
   --input: #e2dfca;
-  --ring: #88a05c;
+  /* Focus ring: olive-600, 5.7:1 on cream (was 2.8:1) */
+  --ring: #556b2f;
   --chart-1: #556b2f;
   --chart-2: #2a78d6;
   --chart-3: #e34948;
@@ -98,7 +100,7 @@
   --sidebar-accent: #f4f6ee;
   --sidebar-accent-foreground: #1c1b17;
   --sidebar-border: #efe9b4;
-  --sidebar-ring: #88a05c;
+  --sidebar-ring: #556b2f;
   --youtube: #e34948;
   --facebook: #2a78d6;
 }

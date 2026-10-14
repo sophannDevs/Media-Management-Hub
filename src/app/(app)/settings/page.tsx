@@ -50,7 +50,7 @@ async function Sections() {
   );
 }
 
-const code = (text: string) => <code className="rounded bg-[#f6f4e6] px-1 font-mono text-[11.5px]">{text}</code>;
+const code = (text: string) => <code className="rounded bg-[#f6f4e6] px-1 font-mono text-xs">{text}</code>;
 
 function AiIntegrations({ ai }: { ai: SettingsData["ai"] }) {
   const manual: ReactNode = <>Manual: copy prompts from the Image tab and upload the results. API integration planned.</>;

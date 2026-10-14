@@ -33,7 +33,8 @@ export function Stepper({ data }: { data: ContentWorkspace }) {
           <span className="font-semibold text-primary">{data.workflow.completion}%</span> <span className="text-muted-foreground">checklist complete</span>
         </p>
       </div>
-      <div className="thin-scroll overflow-x-auto">
+      {/* Scrolls sideways on phones: focusable so keyboard users can scroll it too */}
+      <div className="thin-scroll overflow-x-auto rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring" tabIndex={0} role="region" aria-label="Production steps">
         <ol className="flex min-w-[560px] items-start">
           {steps.map((s, i) => {
             const isCurrent = i === current;
@@ -44,13 +45,13 @@ export function Stepper({ data }: { data: ContentWorkspace }) {
                 <span
                   className={cn(
                     "relative z-10 flex size-7 items-center justify-center rounded-full",
-                    s.done ? "bg-primary text-white" : s.failed ? "bg-rose-100 text-rose-700" : isCurrent ? "bg-white text-primary ring-2 ring-primary" : "bg-stone-100 text-stone-400",
+                    s.done ? "bg-primary text-white" : s.failed ? "bg-rose-100 text-rose-700" : isCurrent ? "bg-white text-primary ring-2 ring-primary" : "bg-stone-100 text-muted-foreground",
                   )}
                 >
                   <Icon className="size-3.5" />
                 </span>
                 <span className={cn("mt-2 text-xs font-medium", s.done || isCurrent ? "text-foreground" : "text-muted-foreground")}>{s.label}</span>
-                <span className={cn("text-[11px]", s.failed ? "text-rose-700" : "text-muted-foreground")}>{s.status}</span>
+                <span className={cn("text-xs", s.failed ? "text-rose-700" : "text-muted-foreground")}>{s.status}</span>
               </li>
             );
           })}

@@ -47,14 +47,14 @@ export function MiniSteps({
             key={k}
             title={`${name}: ${label}`}
             className={cn(
-              "flex size-6 items-center justify-center rounded-md text-[10px] font-semibold",
+              "flex size-6 items-center justify-center rounded-md text-xs font-semibold",
               done
                 ? "bg-primary text-primary-foreground"
                 : warn
                   ? "bg-orange-100 text-orange-800 ring-1 ring-orange-200"
                   : busy
                     ? "bg-amber-50 text-amber-800 ring-1 ring-amber-200"
-                    : "bg-stone-100 text-stone-400",
+                    : "bg-stone-100 text-muted-foreground",
             )}
           >
             {k}
@@ -65,10 +65,10 @@ export function MiniSteps({
   );
 }
 
-export function CompletionBar({ value, className }: { value: number; className?: string }) {
+export function CompletionBar({ value, label = "Completion", className }: { value: number; label?: string; className?: string }) {
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      <Progress value={value} className="h-1.5 bg-[#eeebd8]" />
+      <Progress value={value} aria-label={label} className="h-1.5 bg-[#eeebd8]" />
       <span className="w-8 shrink-0 text-xs text-muted-foreground tabular-nums">{value}%</span>
     </div>
   );

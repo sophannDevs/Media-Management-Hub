@@ -102,18 +102,18 @@ function AssetCard({ asset: a, busy, onAction }: { asset: MediaItem; busy: boole
         >
           <AssetVisual asset={a} className="aspect-video w-full" />
         </button>
-        <span className="pointer-events-none absolute top-2 left-2 inline-flex h-[22px] items-center gap-1 rounded-full border border-white bg-white/90 px-2 text-[11px] font-medium text-stone-700">
+        <span className="pointer-events-none absolute top-2 left-2 inline-flex h-[22px] items-center gap-1 rounded-full border border-white bg-white/90 px-2 text-xs font-medium text-stone-700">
           <TypeIcon className="size-3" />
           {a.typeLabel}
         </span>
         {a.external && (
-          <span className="pointer-events-none absolute bottom-2 left-2 inline-flex items-center gap-1 rounded bg-black/65 px-1.5 text-[10px] font-medium text-white">
+          <span className="pointer-events-none absolute bottom-2 left-2 inline-flex items-center gap-1 rounded bg-black/65 px-1.5 text-xs font-medium text-white">
             <Link2 className="size-3" />
             Link
           </span>
         )}
         {timed && (
-          <span className="pointer-events-none absolute right-2 bottom-2 rounded bg-black/65 px-1.5 text-[10px] font-medium text-white tabular-nums">
+          <span className="pointer-events-none absolute right-2 bottom-2 rounded bg-black/65 px-1.5 text-xs font-medium text-white tabular-nums">
             {formatDuration(a.durationSec)}
           </span>
         )}
@@ -124,14 +124,14 @@ function AssetCard({ asset: a, busy, onAction }: { asset: MediaItem; busy: boole
           {a.fileName}
         </p>
         {a.content ? (
-          <Link href={a.content.href} title={a.content.title} className="mt-0.5 flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground hover:text-primary">
+          <Link href={a.content.href} title={a.content.title} className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-muted-foreground hover:text-primary">
             <Link2 className="size-3 shrink-0" />
             <span className="truncate">{a.content.title}</span>
           </Link>
         ) : (
-          <p className="mt-0.5 text-[11px] text-stone-400">Unassigned</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">Unassigned</p>
         )}
-        <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+        <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
           <span className="truncate">
             {a.size} · {a.date}
           </span>

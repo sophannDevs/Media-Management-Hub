@@ -117,7 +117,7 @@ function Delta({ value, unit = "%", vs }: { value: number | null; unit?: string;
   const Icon = flat ? Minus : value > 0 ? TrendingUp : TrendingDown;
   return (
     <p className="mt-1 flex flex-wrap items-center gap-x-1 text-xs text-muted-foreground">
-      <Icon className={cn("size-3.5 shrink-0", flat ? "text-stone-400" : value > 0 ? "text-olive-700" : "text-rose-700")} aria-hidden />
+      <Icon className={cn("size-3.5 shrink-0", flat ? "text-muted-foreground" : value > 0 ? "text-olive-700" : "text-rose-700")} aria-hidden />
       <span className={cn("font-medium", flat ? "text-stone-600" : value > 0 ? "text-olive-700" : "text-rose-700")}>{formatSigned(value, unit)}</span>
       vs previous {vs}
     </p>
@@ -220,7 +220,7 @@ function PlatformPerformance({ d }: { d: AnalyticsData }) {
               </div>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div tabIndex={0} aria-label={`${name}: ${formatInt(p.views)} views, ${share}% of all views`} className="mt-2 h-3 rounded-[4px] bg-[#f5f3e3] outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <div role="img" tabIndex={0} aria-label={`${name}: ${formatInt(p.views)} views, ${share}% of all views`} className="mt-2 h-3 rounded-[4px] bg-[#f5f3e3] outline-none focus-visible:ring-2 focus-visible:ring-ring">
                     <div
                       className="h-full rounded-r-[4px]"
                       style={{ width: `${p.views ? Math.max(1.5, (p.views / max) * 100) : 0}%`, background: `var(--${p.platformId})` }}
@@ -281,7 +281,7 @@ function TopContent({ d }: { d: AnalyticsData }) {
             const pct = Math.round((c.views / max) * 100);
             return (
               <li key={c.id} className="flex items-center gap-3 sm:gap-4">
-                <span className="w-4 shrink-0 text-sm font-semibold text-stone-400 tabular-nums">{i + 1}</span>
+                <span className="w-4 shrink-0 text-sm font-semibold text-muted-foreground tabular-nums">{i + 1}</span>
                 <ContentThumb src={c.thumbUrl} seed={c.id} durationSec={c.durationSec} className="h-12 w-20 sm:h-14 sm:w-24" />
                 <div className="min-w-0 flex-1">
                   <Link href={`/content/${c.id}`} className="block truncate text-sm font-medium hover:text-primary">
@@ -290,7 +290,7 @@ function TopContent({ d }: { d: AnalyticsData }) {
                   <div className="mt-2 flex items-center gap-3">
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div tabIndex={0} aria-label={`${formatInt(c.views)} views, ${pct}% of the top video`} className="h-2 flex-1 rounded-[3px] bg-[#f5f3e3] outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        <div role="img" tabIndex={0} aria-label={`${formatInt(c.views)} views, ${pct}% of the top video`} className="h-2 flex-1 rounded-[3px] bg-[#f5f3e3] outline-none focus-visible:ring-2 focus-visible:ring-ring">
                           <div className="h-full rounded-r-[4px] bg-primary" style={{ width: `${Math.max(1.5, pct)}%` }} />
                         </div>
                       </TooltipTrigger>

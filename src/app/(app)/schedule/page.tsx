@@ -90,7 +90,7 @@ function WorkerCard({ d }: { d: QueueData }) {
               `Checks the queue every ${w.intervalSec} seconds`
             ) : (
               <>
-                Call <code className="rounded bg-muted px-1 font-mono text-[11px]">POST /api/cron/publish</code> from an external scheduler, or use Run queue now
+                Call <code className="rounded bg-muted px-1 font-mono text-xs">POST /api/cron/publish</code> from an external scheduler, or use Run queue now
               </>
             )}
             {" · "}
@@ -103,7 +103,7 @@ function WorkerCard({ d }: { d: QueueData }) {
         {stats.map((s) => (
           <Link key={s.label} href={queueHref({ status: s.tab })} scroll={false} className="rounded-lg px-1.5 py-1 transition-colors hover:bg-olive-50">
             <p className={cn("text-lg font-semibold tabular-nums", s.className)}>{s.value}</p>
-            <p className="text-[11px] whitespace-nowrap text-muted-foreground">{s.label}</p>
+            <p className="text-xs whitespace-nowrap text-muted-foreground">{s.label}</p>
           </Link>
         ))}
       </div>
@@ -168,7 +168,7 @@ function QueueTabs({ d }: { d: QueueData }) {
               )}
             >
               {t.label}
-              <span className={cn("text-xs tabular-nums", t.key === "failed" && t.count > 0 ? "text-rose-700" : "text-stone-400")}>{t.count}</span>
+              <span className={cn("text-xs tabular-nums", t.key === "failed" && t.count > 0 ? "text-rose-700" : "text-muted-foreground")}>{t.count}</span>
             </Link>
           );
         })}
@@ -241,11 +241,11 @@ function Row({ r }: { r: QueueRow }) {
         <div className="flex items-center gap-2 whitespace-nowrap">
           <Avatar className="size-7">
             {r.account.avatarUrl && <AvatarImage src={r.account.avatarUrl} alt="" />}
-            <AvatarFallback className="bg-olive-100 text-[11px] font-semibold text-olive-800">{r.account.initials}</AvatarFallback>
+            <AvatarFallback className="bg-olive-100 text-xs font-semibold text-olive-800">{r.account.initials}</AvatarFallback>
           </Avatar>
           <div className="min-w-0">
             <p className="text-sm">{r.account.name}</p>
-            <PlatformLabel platform={r.platformId} size={12} className="text-[11px]" />
+            <PlatformLabel platform={r.platformId} size={12} className="text-xs" />
             {!connected && <StatusBadge def={AccountStatus} value={r.account.status} size="sm" className="mt-0.5" />}
           </div>
         </div>
@@ -276,15 +276,15 @@ function StatusCell({ r }: { r: QueueRow }) {
           </span>
         )}
       </div>
-      {r.nextAttempt && <p className="mt-1 text-[11px] whitespace-nowrap text-orange-700">Next attempt {r.nextAttempt}</p>}
+      {r.nextAttempt && <p className="mt-1 text-xs whitespace-nowrap text-orange-700">Next attempt {r.nextAttempt}</p>}
       {showError && (
-        <p className="mt-0.5 max-w-[190px] truncate text-[11px] text-muted-foreground" title={r.lastError ?? undefined}>
+        <p className="mt-0.5 max-w-[190px] truncate text-xs text-muted-foreground" title={r.lastError ?? undefined}>
           {r.lastError}
         </p>
       )}
-      {r.overdue && <p className="mt-1 text-[11px] text-amber-700">Due — goes out on the next worker run</p>}
+      {r.overdue && <p className="mt-1 text-xs text-amber-700">Due — goes out on the next worker run</p>}
       {r.publishedAgo && (
-        <p className="mt-1 text-[11px] text-muted-foreground">
+        <p className="mt-1 text-xs text-muted-foreground">
           {r.simulated ? "Simulated" : "Published"} {r.publishedAgo}
         </p>
       )}
@@ -322,7 +322,7 @@ function Attempts({ r }: { r: QueueRow }) {
                   Started {j.started}
                   {j.finished ? ` · finished ${j.finished} (${j.took})` : " · still running"}
                 </p>
-                {j.error && <p className="rounded-md border border-rose-100 bg-rose-50 p-1.5 font-mono text-[11px] break-words text-rose-800">{j.error}</p>}
+                {j.error && <p className="rounded-md border border-rose-100 bg-rose-50 p-1.5 font-mono text-xs break-words text-rose-800">{j.error}</p>}
               </li>
             );
           })}

@@ -28,9 +28,9 @@ export function SearchBox() {
         router.push(q ? `/content?q=${encodeURIComponent(q)}` : "/content");
       }}
     >
-      <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-stone-400" />
+      <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input ref={ref} name="q" className="h-9 bg-white/80 pr-14 pl-9" placeholder="Search title, tag, description…" />
-      <kbd className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded border border-stone-200 bg-white px-1.5 py-0.5 text-[10px] text-stone-400 sm:inline">Ctrl K</kbd>
+      <kbd className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded border border-stone-200 bg-white px-1.5 py-0.5 text-xs text-muted-foreground sm:inline">Ctrl K</kbd>
     </form>
   );
 }

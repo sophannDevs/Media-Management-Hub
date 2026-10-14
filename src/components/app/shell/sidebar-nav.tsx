@@ -55,7 +55,7 @@ function ActiveNavLinks({ counts, onNavigate }: { counts?: NavCounts; onNavigate
 function NavList({ counts, pathname, onNavigate }: { counts?: NavCounts; pathname: string | null; onNavigate?: () => void }) {
   return (
     <nav className="thin-scroll flex-1 space-y-0.5 overflow-y-auto p-3">
-      <p className="px-3 pt-2 pb-1.5 text-[11px] font-semibold tracking-wider text-stone-400 uppercase">Workspace</p>
+      <p className="px-3 pt-2 pb-1.5 text-xs font-semibold tracking-wider text-muted-foreground uppercase">Workspace</p>
       {NAV.map((n) => {
         const active = pathname !== null && (n.href === "/" ? pathname === "/" : pathname.startsWith(n.href));
         const count = "count" in n && counts ? counts[n.count] : null;
@@ -73,9 +73,9 @@ function NavList({ counts, pathname, onNavigate }: { counts?: NavCounts; pathnam
             <n.icon className={cn("size-[18px]", active ? "text-white" : "text-stone-500")} />
             <span>{n.label}</span>
             {alert ? (
-              <span className={cn("ml-auto flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold", active ? "bg-white text-rose-700" : "bg-rose-100 text-rose-700")}>{alert}</span>
+              <span className={cn("ml-auto flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-semibold", active ? "bg-white text-rose-700" : "bg-rose-100 text-rose-700")}>{alert}</span>
             ) : count !== null ? (
-              <span className={cn("ml-auto text-xs", active ? "text-olive-100" : "text-stone-400")}>{count}</span>
+              <span className={cn("ml-auto text-xs", active ? "text-olive-100" : "text-muted-foreground")}>{count}</span>
             ) : null}
           </Link>
         );
@@ -92,7 +92,7 @@ function Brand({ workspaceName }: { workspaceName?: string }) {
       </span>
       <div className="leading-tight">
         <p className="font-semibold">MediaFlow</p>
-        <p className="max-w-40 truncate text-[11px] text-muted-foreground">{workspaceName && workspaceName !== "MediaFlow" ? workspaceName : "AI content studio"}</p>
+        <p className="max-w-40 truncate text-xs text-muted-foreground">{workspaceName && workspaceName !== "MediaFlow" ? workspaceName : "AI content studio"}</p>
       </div>
     </div>
   );

@@ -47,7 +47,7 @@ export function ContentThumb({
         <Icon className="size-[38%] max-h-7 max-w-7 opacity-90" aria-hidden />
       )}
       {durationSec ? (
-        <span className="absolute right-1 bottom-1 rounded bg-black/65 px-1 text-[10px] font-medium text-white">{formatDuration(durationSec)}</span>
+        <span className="absolute right-1 bottom-1 rounded bg-black/65 px-1 text-xs font-medium text-white">{formatDuration(durationSec)}</span>
       ) : null}
     </div>
   );

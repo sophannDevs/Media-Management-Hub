@@ -42,7 +42,7 @@ export function MediaFilterBar({ contents }: { contents: MediaContentOption[] })
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-card p-3 shadow-card">
       <div className="relative w-full sm:w-auto sm:min-w-[220px] sm:flex-1">
-        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-stone-400" />
+        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           ref={search}
           type="search"

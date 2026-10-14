@@ -186,7 +186,7 @@ export function UploadDropzone({
           {hint && !uploading && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
         </>
       )}
-      {uploading && <Progress value={progress ?? 0} className="mt-3 h-1.5 w-full max-w-xs" />}
+      {uploading && <Progress value={progress ?? 0} aria-label="Upload progress" className="mt-3 h-1.5 w-full max-w-xs" />}
     </label>
   );
 }

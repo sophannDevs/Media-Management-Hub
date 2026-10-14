@@ -196,7 +196,7 @@ function ScheduleFields({ data, opts, onDone, onSwitchContent }: { data: Schedul
               <p className="truncate text-sm font-medium">{content?.title}</p>
             ) : (
               <Select value={content?.id ?? ""} onValueChange={onSwitchContent}>
-                <SelectTrigger className="w-full bg-white"><SelectValue placeholder="Choose content" /></SelectTrigger>
+                <SelectTrigger aria-label="Content" className="w-full bg-white"><SelectValue placeholder="Choose content" /></SelectTrigger>
                 <SelectContent>
                   {data.contents.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
@@ -238,7 +238,7 @@ function ScheduleFields({ data, opts, onDone, onSwitchContent }: { data: Schedul
                     >
                       <PlatformIcon platform={p.id} size={18} />
                       <span className="truncate">{p.name}</span>
-                      {!usable && <span className="ml-auto text-[9px] font-semibold uppercase text-muted-foreground">Soon</span>}
+                      {!usable && <span className="ml-auto text-xs font-semibold uppercase text-muted-foreground">Soon</span>}
                     </button>
                   );
                 })}
@@ -249,7 +249,9 @@ function ScheduleFields({ data, opts, onDone, onSwitchContent }: { data: Schedul
               <div className="sm:col-span-2">
                 <Label className="mb-1.5">{meta?.id === "facebook" ? "Facebook Page" : `${meta?.name ?? ""} ${accountNoun}`}</Label>
                 <Select value={accountId} onValueChange={setAccountId}>
-                  <SelectTrigger className="w-full"><SelectValue placeholder={`Choose a ${accountNoun.toLowerCase()}`} /></SelectTrigger>
+                  <SelectTrigger aria-label={meta?.id === "facebook" ? "Facebook Page" : `${meta?.name ?? ""} ${accountNoun}`.trim()} className="w-full">
+                    <SelectValue placeholder={`Choose a ${accountNoun.toLowerCase()}`} />
+                  </SelectTrigger>
                   <SelectContent>
                     {accountsFor(platformId).map((a) => (
                       <SelectItem key={a.id} value={a.id}>
@@ -273,7 +275,7 @@ function ScheduleFields({ data, opts, onDone, onSwitchContent }: { data: Schedul
               <div className="sm:col-span-2">
                 <Label className="mb-1.5">Timezone</Label>
                 <Select value={timezone} onValueChange={setTimezone}>
-                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectTrigger aria-label="Timezone" className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>{TIMEZONES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
                 </Select>
               </div>

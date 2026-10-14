@@ -28,6 +28,16 @@ function luminance([r, g, b]: number[]) {
 
 const rgb = (c: number[]) => `rgb(${c.join(" ")})`;
 
+/**
+ * Text colour for a cell: white or black, whichever contrasts more. With pure
+ * black the worse of the two is still ≥ 4.58:1 on any background, so every
+ * value meets WCAG AA (a softer dark grey leaves a mid-ramp band below 4.5).
+ */
+function textOn(bg: number[]) {
+  const l = luminance(bg);
+  return 1.05 / (l + 0.05) >= (l + 0.05) / 0.05 ? "#ffffff" : "#000000";
+}
+
 export function PostingHeatmap({ data }: { data: AnalyticsHeatmap }) {
   const { days, slots, cells, best, max } = data;
   const bestCell = best ? cells[best.day][best.slot] : null;
@@ -38,14 +48,14 @@ export function PostingHeatmap({ data }: { data: AnalyticsHeatmap }) {
         <div role="row" className="contents">
           <span role="columnheader" />
           {slots.map((s) => (
-            <span key={s.label} role="columnheader" className="pb-1 text-center text-[11px] text-muted-foreground tabular-nums">
+            <span key={s.label} role="columnheader" className="pb-1 text-center text-xs text-muted-foreground tabular-nums">
               {s.label}
             </span>
           ))}
         </div>
         {days.map((day, d) => (
           <div key={day.short} role="row" className="contents">
-            <span role="rowheader" className="flex items-center text-[11px] text-muted-foreground">
+            <span role="rowheader" className="flex items-center text-xs text-muted-foreground">
               {day.short}
             </span>
             {cells[d].map((cell, s) => {
@@ -61,11 +71,11 @@ export function PostingHeatmap({ data }: { data: AnalyticsHeatmap }) {
                       tabIndex={0}
                       aria-label={cell.avg === null ? `${where}: no posts` : `${where}: ${formatInt(cell.avg)} average views across ${posts}`}
                       className={cn(
-                        "flex h-9 items-center justify-center rounded-md text-[11px] font-medium tabular-nums outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring",
-                        color ? "hover:ring-2 hover:ring-foreground/25" : "border border-[#efecd9] bg-white text-stone-400 hover:border-stone-300",
+                        "flex h-9 items-center justify-center rounded-md text-xs font-medium tabular-nums outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring",
+                        color ? "hover:ring-2 hover:ring-foreground/25" : "border border-[#efecd9] bg-white text-muted-foreground hover:border-stone-300",
                         isBest && "ring-2 ring-foreground ring-offset-1 ring-offset-card hover:ring-foreground",
                       )}
-                      style={color ? { background: rgb(color), color: luminance(color) < 0.2 ? "#ffffff" : "#2b2a24" } : undefined}
+                      style={color ? { background: rgb(color), color: textOn(color) } : undefined}
                     >
                       {cell.avg === null ? "—" : formatCompact(cell.avg)}
                     </span>
