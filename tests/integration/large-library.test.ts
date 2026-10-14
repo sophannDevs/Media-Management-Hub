@@ -48,7 +48,8 @@ describe(`a library of ${ITEMS} content items`, () => {
     const queue = await getQueueData({ status: "all" });
     const media = await getMediaLibrary(parseMediaFilters({}));
 
-    expect(list.total).toBe(ITEMS);
+    expect(list.page.matching).toBe(ITEMS);
+    expect(list.items).toHaveLength(50);
     expect(dashboard.counts.total).toBe(ITEMS);
     expect(calendar.events.length).toBeGreaterThan(0);
     expect(queue.rows.length).toBeGreaterThan(0);

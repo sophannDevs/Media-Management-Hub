@@ -1,26 +1,20 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { addDaysToKey, dayKey, dayRangeUtc, fmtDate, fmtDateTime, fmtShort, fmtTime, relativeDay, timeAgo, weekKeys } from "@/lib/dates";
 import { mediaUrl } from "@/lib/media-url";
 import { providerMeta } from "@/lib/platforms/registry";
 import { checklist, completion, deriveStage, imageStage, isReadyToPost, missingRequirements, wordCount } from "@/lib/workflow/rules";
-import { PRODUCTION_STAGES } from "@/lib/workflow/statuses";
+import { Priority, PRODUCTION_STAGES, Stage } from "@/lib/workflow/statuses";
 import { isClaudeConfigured } from "@/lib/ai/claude";
+import { type ContentListParams, type ContentSort, parseSort, type SortDir } from "@/lib/content-list";
 import { toContentState } from "../services/content-state";
 import { contentSummarySelect, getContentFormOptions, getPageContext, onlySimulatedPosts, toSummary } from "./shared";
 
 // ---------- List ----------
 
-export interface ContentListParams {
-  q?: string;
-  stage?: string;
-  platform?: string;
-  category?: string;
-  priority?: string;
-  created?: string;
-  scheduled?: string;
-  view?: string;
-}
+export type { ContentListParams };
+
+export const PAGE_SIZE = 50;
 
 /** Stage filters shown as quick tabs. Pipeline stages (SCRIPT, IMAGES…) also work as deep links. */
 export const QUICK_FILTERS = [
@@ -33,61 +27,159 @@ export const QUICK_FILTERS = [
   { key: "IDEA", label: "Ideas" },
 ] as const;
 
-function matchesStage(stage: string, filter: string) {
-  if (!filter || filter === "ALL") return true;
-  if (filter === "PRODUCTION") return (PRODUCTION_STAGES as string[]).includes(stage);
-  return stage === filter;
-}
+/** SQL sort key of each sortable column, over `c` (Content) and `n` (next post). */
+const SORT_KEYS: Record<ContentSort, (dir: SortDir) => Prisma.Sql> = {
+  updated: () => Prisma.sql`c."updatedAt"`,
+  created: () => Prisma.sql`c."createdAt"`,
+  title: () => Prisma.sql`lower(c."title")`,
+  priority: () => Prisma.sql`COALESCE(array_position(${Priority.codes}::text[], c."priority"), 99)`,
+  stage: () => Prisma.sql`COALESCE(array_position(${Stage.codes}::text[], c."stage"), 99)`,
+  completion: () => Prisma.sql`c."completion"`,
+  // Items without an upcoming post come last in both directions
+  next: (dir) => (dir === "asc" ? Prisma.sql`COALESCE(n."at", 'infinity')` : Prisma.sql`COALESCE(n."at", '-infinity')`),
+};
 
-export async function getContentList(params: ContentListParams) {
-  const { now, tz } = await getPageContext();
+const ACTIVE_POSTS = ["WAITING", "RETRY_SCHEDULED", "PROCESSING"];
 
-  const where: Prisma.ContentWhereInput = { archivedAt: null };
+/** `n."at"`: the next post still waiting, retrying or publishing (posts more than a day overdue don't count). */
+const nextPostJoin = (since: Date) => Prisma.sql`
+  LEFT JOIN LATERAL (
+    SELECT MIN(s."scheduledAt") AS "at" FROM "PublishingSchedule" s
+    WHERE s."contentId" = c."id" AND s."status" IN (${Prisma.join(ACTIVE_POSTS)})
+      AND s."scheduledAt" >= (${since} AT TIME ZONE 'UTC')
+  ) n ON true`;
+
+/** The list filters as SQL over `c` and `n`, except the stage (the counts group by it). */
+function filterSql(params: ContentListParams, now: Date, tz: string) {
+  const parts = [Prisma.sql`c."archivedAt" IS NULL`];
   const q = params.q?.trim();
   if (q) {
-    // PostgreSQL's contains is case-sensitive; search shouldn't be
-    const match = { contains: q, mode: "insensitive" } as const;
-    where.OR = [{ title: match }, { description: match }, { idea: match }, { tags: { some: { name: match } } }];
+    // Case-insensitive substring; % and _ in the search are literal
+    const like = `%${q.replace(/[\\%_]/g, "\\$&")}%`;
+    parts.push(Prisma.sql`(c."title" ILIKE ${like} OR c."description" ILIKE ${like} OR c."idea" ILIKE ${like}
+      OR EXISTS (SELECT 1 FROM "_ContentToTag" ct JOIN "Tag" t ON t."id" = ct."B" WHERE ct."A" = c."id" AND t."name" ILIKE ${like}))`);
   }
-  if (params.platform) where.platforms = { some: { platformId: params.platform } };
-  if (params.category) where.categoryId = params.category;
-  if (params.priority) where.priority = params.priority;
+  if (params.platform) parts.push(Prisma.sql`EXISTS (SELECT 1 FROM "ContentPlatform" cp WHERE cp."contentId" = c."id" AND cp."platformId" = ${params.platform})`);
+  if (params.category) parts.push(Prisma.sql`c."categoryId" = ${params.category}`);
+  if (params.priority) parts.push(Prisma.sql`c."priority" = ${params.priority}`);
   if (params.created === "7" || params.created === "30") {
-    where.createdAt = { gte: new Date(now.getTime() - Number(params.created) * 86_400_000) };
+    parts.push(Prisma.sql`c."createdAt" >= (${new Date(now.getTime() - Number(params.created) * 86_400_000)} AT TIME ZONE 'UTC')`);
   }
-
-  const rows = await db.content.findMany({ where, select: contentSummarySelect, orderBy: [{ updatedAt: "desc" }] });
-  let items = rows.map((r) => toSummary(r, now));
-
-  // "Scheduled" date filter works on the next upcoming post
+  // "Scheduled" works on the next upcoming post, in the workspace timezone
   const today = dayKey(now, tz);
   const thisWeek = weekKeys(today);
-  const nextWeek = weekKeys(addDaysToKey(thisWeek[6], 1));
-  const weekRange = dayRangeUtc(today, thisWeek[6], tz);
-  const nextRange = dayRangeUtc(nextWeek[0], nextWeek[6], tz);
-  if (params.scheduled === "none") items = items.filter((c) => !c.nextSchedule);
-  if (params.scheduled === "week") items = items.filter((c) => c.nextSchedule && c.nextSchedule.scheduledAt >= weekRange.gte && c.nextSchedule.scheduledAt < weekRange.lt);
-  if (params.scheduled === "next") items = items.filter((c) => c.nextSchedule && c.nextSchedule.scheduledAt >= nextRange.gte && c.nextSchedule.scheduledAt < nextRange.lt);
+  const range =
+    params.scheduled === "week" ? dayRangeUtc(today, thisWeek[6], tz) : params.scheduled === "next" ? dayRangeUtc(addDaysToKey(thisWeek[6], 1), addDaysToKey(thisWeek[6], 7), tz) : null;
+  if (params.scheduled === "none") parts.push(Prisma.sql`n."at" IS NULL`);
+  if (range) parts.push(Prisma.sql`n."at" >= (${range.gte} AT TIME ZONE 'UTC') AND n."at" < (${range.lt} AT TIME ZONE 'UTC')`);
+  return Prisma.join(parts, " AND ");
+}
 
+function stageSql(stage: string) {
+  if (stage === "ALL") return Prisma.sql`TRUE`;
+  if (stage === "PRODUCTION") return Prisma.sql`c."stage" IN (${Prisma.join(PRODUCTION_STAGES)})`;
+  return Prisma.sql`c."stage" = ${stage}`;
+}
+
+/**
+ * One page of the list (PERF-01): filtering, sorting, counting and paging run
+ * in SQL on the stored stage (WF-03), so the cost doesn't grow with the
+ * library. Paging is by keyset: `after` / `before` name the row the page
+ * starts after / ends before, and its sort key is read from the row itself.
+ */
+export async function getContentList(params: ContentListParams) {
+  const ctx = await getPageContext();
+  // The row a link paged from was deleted (or nothing is left past it): start over
+  return (await listPage(params, ctx)) ?? (await listPage({ ...params, after: undefined, before: undefined }, ctx))!;
+}
+
+async function listPage(params: ContentListParams, { now, tz }: { now: Date; tz: string }) {
+  const { sort, dir } = parseSort(params);
   const stageFilter = params.stage?.toUpperCase() || "ALL";
-  const counts = Object.fromEntries(QUICK_FILTERS.map((f) => [f.key, items.filter((c) => matchesStage(c.stage, f.key)).length])) as Record<string, number>;
-  const visible = items.filter((c) => matchesStage(c.stage, stageFilter));
+  // The next-post join only when something reads n."at"
+  const join = sort === "next" || params.scheduled ? nextPostJoin(new Date(now.getTime() - 86_400_000)) : Prisma.empty;
+  const filters = filterSql(params, now, tz);
+  const key = SORT_KEYS[sort](dir);
 
-  const [options, total] = await Promise.all([getContentFormOptions(), db.content.count({ where: { archivedAt: null } })]);
+  const cursor = params.after ?? params.before ?? null;
+  const backwards = !params.after && !!params.before;
+  // Walking backwards reads the page in reverse order, then flips it
+  const forward = backwards ? (dir === "asc" ? "desc" : "asc") : dir;
+  const order = forward === "asc" ? Prisma.sql`ASC` : Prisma.sql`DESC`;
+  const beyond = forward === "asc" ? Prisma.sql`>` : Prisma.sql`<`;
+
+  const pageQuery = db.$queryRaw<{ id: string }[]>`
+    WITH base AS (
+      SELECT c."id", ${key} AS k FROM "Content" c ${join}
+      WHERE ${filters} AND ${stageSql(stageFilter)}
+    ),
+    cur AS (SELECT ${key} AS k, c."id" FROM "Content" c ${join} WHERE c."id" = ${cursor})
+    SELECT b."id" FROM base b
+    WHERE ${cursor}::text IS NULL OR (b.k, b."id") ${beyond} (SELECT k, "id" FROM cur)
+    ORDER BY b.k ${order}, b."id" ${order}
+    LIMIT ${PAGE_SIZE + 1}`;
+  const countsQuery = db.$queryRaw<{ stage: string; n: number }[]>`
+    SELECT c."stage", COUNT(*)::int AS n FROM "Content" c ${join} WHERE ${filters} GROUP BY c."stage"`;
+  const [pageRows, stageRows, options] = await Promise.all([pageQuery, countsQuery, getContentFormOptions()]);
+  if (cursor && !pageRows.length) return null;
+
+  const more = pageRows.length > PAGE_SIZE;
+  const ids = pageRows.slice(0, PAGE_SIZE).map((r) => r.id);
+  if (backwards) ids.reverse();
+
+  const byStage = new Map(stageRows.map((r) => [r.stage, r.n]));
+  const sum = (stages: readonly string[]) => stages.reduce((n, s) => n + (byStage.get(s) ?? 0), 0);
+  const counts = Object.fromEntries(
+    QUICK_FILTERS.map((f) => [f.key, f.key === "ALL" ? sum([...byStage.keys()]) : f.key === "PRODUCTION" ? sum(PRODUCTION_STAGES) : sum([f.key])]),
+  ) as Record<string, number>;
+  const matching = stageFilter === "ALL" ? counts.ALL : stageFilter === "PRODUCTION" ? counts.PRODUCTION : sum([stageFilter]);
+
+  // Position of the page, for "51–100 of 873": rows sorted before its first one
+  let offset = 0;
+  if (cursor && ids.length) {
+    const before = dir === "asc" ? Prisma.sql`<` : Prisma.sql`>`;
+    const [{ n }] = await db.$queryRaw<{ n: number }[]>`
+      WITH base AS (
+        SELECT c."id", ${key} AS k FROM "Content" c ${join}
+        WHERE ${filters} AND ${stageSql(stageFilter)}
+      )
+      SELECT COUNT(*)::int AS n FROM base b WHERE (b.k, b."id") ${before} (SELECT k, "id" FROM base WHERE "id" = ${ids[0]})`;
+    offset = n;
+  }
+
+  const rows = ids.length ? await db.content.findMany({ where: { id: { in: ids } }, select: contentSummarySelect }) : [];
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const items = ids.flatMap((id) => {
+    const r = byId.get(id);
+    if (!r) return [];
+    const c = toSummary(r, now);
+    return [
+      {
+        ...c,
+        createdLabel: fmtShort(c.createdAt, tz),
+        targetLabel: c.targetPublishDate ? fmtShort(c.targetPublishDate, tz) : null,
+        next: c.nextSchedule
+          ? { platformId: c.nextSchedule.platformId, day: relativeDay(c.nextSchedule.scheduledAt, now, tz), time: fmtTime(c.nextSchedule.scheduledAt, tz), status: c.nextSchedule.status }
+          : null,
+      },
+    ];
+  });
 
   return {
-    total,
     stageFilter,
+    sort,
+    dir,
     counts,
     options,
-    items: visible.map((c) => ({
-      ...c,
-      createdLabel: fmtShort(c.createdAt, tz),
-      targetLabel: c.targetPublishDate ? fmtShort(c.targetPublishDate, tz) : null,
-      next: c.nextSchedule
-        ? { platformId: c.nextSchedule.platformId, day: relativeDay(c.nextSchedule.scheduledAt, now, tz), time: fmtTime(c.nextSchedule.scheduledAt, tz), status: c.nextSchedule.status }
-        : null,
-    })),
+    items,
+    page: {
+      from: items.length ? offset + 1 : 0,
+      to: offset + items.length,
+      matching,
+      /** Cursor for the previous / next page, or null at either end */
+      prev: items.length && (backwards ? more : !!cursor) ? items[0].id : null,
+      next: items.length && (backwards ? true : more) ? items[items.length - 1].id : null,
+    },
   };
 }
 export type ContentListData = Awaited<ReturnType<typeof getContentList>>;

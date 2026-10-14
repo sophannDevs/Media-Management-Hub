@@ -2,6 +2,7 @@ import { Bell, Plus } from "lucide-react";
 import { io } from "next/cache";
 import { type ReactNode, Suspense } from "react";
 import { CreateContentDialog } from "@/components/app/create-content-dialog";
+import { PlatformIconSprite } from "@/components/app/platform-icon";
 import { ScheduleDialogProvider } from "@/components/app/schedule-dialog";
 import { Button } from "@/components/ui/button";
 import { timeAgo } from "@/lib/dates";
@@ -53,6 +54,7 @@ export function CreateContentButtonFallback() {
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <ScheduleDialogProvider>
+      <PlatformIconSprite />
       <Suspense fallback={<Sidebar footer={<UserFooter />} />}>
         <SidebarWithCounts />
       </Suspense>

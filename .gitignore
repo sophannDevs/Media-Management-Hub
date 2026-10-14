@@ -16,6 +16,7 @@
 /playwright-report/
 /blob-report/
 /.e2e-storage/
+/.perf-storage/
 /playwright/.auth/
 
 # next.js

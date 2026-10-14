@@ -2,8 +2,14 @@
 
 import {
   Archive,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   CalendarPlus,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  CircleAlert,
   CircleCheck,
   CircleDashed,
   CircleDot,
@@ -18,7 +24,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CompletionBar, EmptyState, MiniSteps, PriorityBadge } from "@/components/app/content-bits";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
@@ -43,6 +49,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useServerAction } from "@/hooks/use-server-action";
+import { buildHref, CONTENT_SORTS, type ContentListParams, type ContentSort, type ContentView, type SortDir } from "@/lib/content-list";
 import { cn } from "@/lib/utils";
 import { ContentType, ImageStatus, ReviewStatus, ScriptStatus, Stage, stageLabel, VideoStatus } from "@/lib/workflow/statuses";
 import {
@@ -53,7 +60,7 @@ import {
   deleteContentAction,
   duplicateContentAction,
 } from "@/server/actions/content";
-import type { ContentListItem } from "@/server/queries/content";
+import type { ContentListData, ContentListItem } from "@/server/queries/content";
 
 const STATUS_FIELDS = [
   ["scriptStatus", "Script", ScriptStatus],
@@ -64,16 +71,56 @@ const STATUS_FIELDS = [
 
 type Confirm = { kind: "archive" | "delete"; ids: string[]; title: string } | null;
 
+type Sorting = { params: ContentListParams; sort: ContentSort; dir: SortDir };
+
+/** Column header that sorts the list (server-side) by that column; a second click reverses it. */
+function SortHead({ col, children, params, sort, dir, className }: Sorting & { col: ContentSort; children: string; className?: string }) {
+  const active = sort === col;
+  const next = active ? (dir === "asc" ? "desc" : "asc") : CONTENT_SORTS[col].dir;
+  const Icon = active ? (dir === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <TableHead className={className} aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : undefined}>
+      <Link href={buildHref(params, { sort: col, dir: next })} scroll={false} className="-mx-1 inline-flex items-center gap-1 rounded px-1 hover:text-foreground">
+        {children}
+        <Icon className={cn("size-3.5", !active && "text-muted-foreground")} />
+      </Link>
+    </TableHead>
+  );
+}
+
+function Pager({ page, params, className }: { page: ContentListData["page"]; params: ContentListParams; className?: string }) {
+  const step = (cursor: string | null, patch: Partial<ContentListParams>, label: string, icon: ReactNode, after?: boolean) =>
+    cursor ? (
+      <Button variant="outline" size="sm" className="bg-white" asChild>
+        <Link href={buildHref(params, patch)} scroll={false}>{!after && icon}{label}{after && icon}</Link>
+      </Button>
+    ) : (
+      <Button variant="outline" size="sm" className="bg-white" disabled>{!after && icon}{label}{after && icon}</Button>
+    );
+  return (
+    <nav aria-label="Pages" className={cn("flex flex-wrap items-center justify-between gap-2 border-t border-[#f1eedf] px-4 py-3 text-sm text-muted-foreground", className)}>
+      <span className="tabular-nums">Showing {page.from}–{page.to} of {page.matching}</span>
+      <div className="flex gap-2">
+        {step(page.prev, { before: page.prev ?? undefined, after: undefined }, "Previous", <ChevronLeft />)}
+        {step(page.next, { after: page.next ?? undefined, before: undefined }, "Next", <ChevronRight />, true)}
+      </div>
+    </nav>
+  );
+}
+
 export function ContentBrowser({
   items,
-  total,
+  page,
+  params,
+  sort,
+  dir,
   view,
   categories,
   hasFilters,
-}: {
+}: Sorting & {
   items: ContentListItem[];
-  total: number;
-  view?: string;
+  page: ContentListData["page"];
+  view: ContentView;
   categories: { id: string; name: string }[];
   hasFilters: boolean;
 }) {
@@ -164,8 +211,7 @@ export function ContentBrowser({
       <span className="text-xs whitespace-nowrap text-muted-foreground">{c.targetLabel ? `Target ${c.targetLabel}` : "—"}</span>
     );
 
-  const showTable = view !== "cards";
-  const showCards = view !== "table";
+  const sorting = { params, sort, dir };
 
   return (
     <>
@@ -214,23 +260,23 @@ export function ContentBrowser({
         </div>
       )}
 
-      {showTable && (
-        <div className={cn("overflow-hidden rounded-2xl border bg-card shadow-card", !view && "hidden md:block")}>
+      {view === "table" ? (
+        <div className="overflow-hidden rounded-2xl border bg-card shadow-card">
           <div className="thin-scroll overflow-x-auto">
             <Table className="min-w-[1000px]">
               <TableHeader>
                 <TableRow className="bg-[#fcfbf3] hover:bg-[#fcfbf3]">
                   <TableHead className="w-10 pl-4">
-                    <Checkbox checked={allSelected} onCheckedChange={(v) => setSelected(v ? new Set(items.map((i) => i.id)) : new Set())} aria-label="Select all" />
+                    <Checkbox checked={allSelected} onCheckedChange={(v) => setSelected(v ? new Set(items.map((i) => i.id)) : new Set())} aria-label="Select all on this page" />
                   </TableHead>
-                  <TableHead>Content</TableHead>
+                  <SortHead col="title" {...sorting}>Content</SortHead>
                   <TableHead>Platforms</TableHead>
                   <TableHead>Production</TableHead>
-                  <TableHead>Checklist</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Priority</TableHead>
-                  <TableHead>Next post</TableHead>
-                  <TableHead>Created</TableHead>
+                  <SortHead col="completion" {...sorting}>Checklist</SortHead>
+                  <SortHead col="stage" {...sorting}>Status</SortHead>
+                  <SortHead col="priority" {...sorting}>Priority</SortHead>
+                  <SortHead col="next" {...sorting}>Next post</SortHead>
+                  <SortHead col="created" {...sorting}>Created</SortHead>
                   <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
@@ -266,51 +312,52 @@ export function ContentBrowser({
               </TableBody>
             </Table>
           </div>
-          <div className="flex items-center justify-between border-t border-[#f1eedf] px-4 py-3 text-sm text-muted-foreground">
-            <span>Showing {items.length} of {total}</span>
-          </div>
+          <Pager page={page} params={params} />
         </div>
-      )}
-
-      {showCards && (
-        <div className={cn("grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4", !view && "md:hidden")}>
-          {items.map((c) => (
-            <div key={c.id} className="group overflow-hidden rounded-2xl border bg-card shadow-card transition-colors hover:border-olive-300">
-              <div className="relative">
-                <Link href={`/content/${c.id}`} className="block" aria-label={c.title}>
-                  <ContentThumb src={c.thumbUrl} seed={c.id} icon={thumbIconFor(c)} durationSec={c.durationSec} className="aspect-video w-full rounded-none" />
-                </Link>
-                {/* 24px target (WCAG 2.5.8): it sits on top of the card's image link */}
-                <div className="absolute top-2 left-2 rounded-md bg-white/90 p-0.5">
-                  <Checkbox className="size-6" checked={selected.has(c.id)} onCheckedChange={(v) => toggle(c.id, !!v)} aria-label={`Select ${c.title}`} />
+      ) : (
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+            {items.map((c) => (
+              <div key={c.id} className="group overflow-hidden rounded-2xl border bg-card shadow-card transition-colors hover:border-olive-300">
+                <div className="relative">
+                  <Link href={`/content/${c.id}`} className="block" aria-label={c.title}>
+                    <ContentThumb src={c.thumbUrl} seed={c.id} icon={thumbIconFor(c)} durationSec={c.durationSec} className="aspect-video w-full rounded-none" />
+                  </Link>
+                  {/* 24px target (WCAG 2.5.8): it sits on top of the card's image link */}
+                  <div className="absolute top-2 left-2 rounded-md bg-white/90 p-0.5">
+                    <Checkbox className="size-6" checked={selected.has(c.id)} onCheckedChange={(v) => toggle(c.id, !!v)} aria-label={`Select ${c.title}`} />
+                  </div>
+                  <div className="absolute top-2.5 right-2.5"><StatusBadge def={Stage} value={c.stage} label={stageLabel(c.stage, c.simulated)} className="shadow-sm" /></div>
                 </div>
-                <div className="absolute top-2.5 right-2.5"><StatusBadge def={Stage} value={c.stage} label={stageLabel(c.stage, c.simulated)} className="shadow-sm" /></div>
-              </div>
-              <div className="p-4">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{c.category?.name ?? "Uncategorized"} · {ContentType.label(c.contentType)}</span>
-                  <PlatformStack platforms={c.platforms} />
-                </div>
-                <Link href={`/content/${c.id}`} className="mt-1.5 line-clamp-2 min-h-10 font-medium hover:underline">{c.title}</Link>
-                <div className="mt-3 flex items-center justify-between">
-                  <MiniSteps {...c} />
-                  <PriorityBadge priority={c.priority} />
-                </div>
-                <CompletionBar value={c.completion} className="mt-3" />
-                <div className="mt-3 flex min-h-9 items-center justify-between gap-2 border-t border-[#f3f1e4] pt-3 text-xs">
-                  {c.missing.length ? (
-                    <span className="flex min-w-0 items-center gap-1.5 text-amber-800"><CircleDashed className="size-3.5 shrink-0" /><span className="truncate">{c.missing[0].label}{c.missing.length > 1 ? ` +${c.missing.length - 1}` : ""}</span></span>
-                  ) : (
-                    <span className="flex items-center gap-1.5 text-olive-700"><CircleCheck className="size-3.5" />All assets ready</span>
-                  )}
-                  <div className="flex shrink-0 items-center gap-1">
-                    {nextCell(c)}
-                    {rowMenu(c)}
+                <div className="p-4">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>{c.category?.name ?? "Uncategorized"} · {ContentType.label(c.contentType)}</span>
+                    <PlatformStack platforms={c.platforms} />
+                  </div>
+                  <Link href={`/content/${c.id}`} className="mt-1.5 line-clamp-2 min-h-10 font-medium hover:underline">{c.title}</Link>
+                  <div className="mt-3 flex items-center justify-between">
+                    <MiniSteps {...c} />
+                    <PriorityBadge priority={c.priority} />
+                  </div>
+                  <CompletionBar value={c.completion} className="mt-3" />
+                  <div className="mt-3 flex min-h-9 items-center justify-between gap-2 border-t border-[#f3f1e4] pt-3 text-xs">
+                    {c.missing.length ? (
+                      <span className="flex min-w-0 items-center gap-1.5 text-amber-800"><CircleAlert className="size-3.5 shrink-0" /><span className="truncate">{c.missing[0].label}{c.missing.length > 1 ? ` +${c.missing.length - 1}` : ""}</span></span>
+                    ) : (
+                      <span className="flex items-center gap-1.5 text-olive-700"><CircleCheck className="size-3.5" />All assets ready</span>
+                    )}
+                    <div className="flex shrink-0 items-center gap-1">
+                      {nextCell(c)}
+                      {rowMenu(c)}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+          <div className="overflow-hidden rounded-2xl border bg-card shadow-card">
+            <Pager page={page} params={params} className="border-t-0" />
+          </div>
         </div>
       )}
 

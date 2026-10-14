@@ -132,6 +132,75 @@ const SCHEDULES: [string, string, string, number, string, string, { error?: stri
   ["c120", "facebook", "fb1", -16, "12:00", "PUBLISHED"],
 ];
 
+/** Production states the generated items cycle through: [script, images, video, review, post] */
+const BULK_STATES = [
+  ["NOT_STARTED", "NOT_STARTED", "NOT_STARTED", "NOT_STARTED", null],
+  ["GENERATED", "NOT_STARTED", "NOT_STARTED", "NOT_STARTED", null],
+  ["APPROVED", "GENERATED", "NOT_STARTED", "NOT_STARTED", null],
+  ["APPROVED", "APPROVED", "EDITING", "NOT_STARTED", null],
+  ["APPROVED", "APPROVED", "FINAL", "IN_REVIEW", null],
+  ["APPROVED", "APPROVED", "FINAL", "APPROVED", null],
+  ["APPROVED", "APPROVED", "FINAL", "APPROVED", "WAITING"],
+  ["APPROVED", "APPROVED", "FINAL", "APPROVED", "PUBLISHED"],
+] as const;
+
+/**
+ * SEED_BULK_ITEMS=5000 adds that many generated items (scripts, two images
+ * each, a final video from the video stage on, posts for the last two states)
+ * so list pages can be measured at size: scripts/perf-library.mjs.
+ */
+async function seedBulk(count: number, catIds: Record<string, string>, accountId: string) {
+  const cats = Object.values(catIds);
+  const topics = CONTENT.map((c) => c.title);
+  for (let start = 0; start < count; start += 500) {
+    const batch = Array.from({ length: Math.min(500, count - start) }, (_, j) => start + j);
+    const state = (i: number) => BULK_STATES[i % BULK_STATES.length];
+    const id = (i: number) => `bulk_${String(i).padStart(6, "0")}`;
+    await db.content.createMany({
+      data: batch.map((i) => {
+        const [script, image, video, review] = state(i);
+        return {
+          id: id(i),
+          title: `${topics[i % topics.length]} (part ${Math.floor(i / topics.length) + 1})`,
+          description: CONTENT[i % CONTENT.length].description,
+          idea: CONTENT[i % CONTENT.length].idea,
+          priority: ["HIGH", "MEDIUM", "LOW"][i % 3],
+          categoryId: cats[i % cats.length],
+          scriptStatus: script,
+          imageStatus: image,
+          videoStatus: video,
+          reviewStatus: review,
+          hashtags: review === "APPROVED" ? "#generated #bulk" : "",
+          targetPublishDate: at((i % 60) - 20, "12:00"),
+          createdAt: at(-(i % 200), "09:00"),
+        };
+      }),
+    });
+    await db.contentPlatform.createMany({ data: batch.flatMap((i) => [{ contentId: id(i), platformId: "youtube" }, ...(i % 2 ? [] : [{ contentId: id(i), platformId: "facebook" }])]) });
+    await db.script.createMany({ data: batch.map((i) => ({ contentId: id(i), body: state(i)[0] === "NOT_STARTED" ? "" : scriptFor(CONTENT[i % CONTENT.length].title, CONTENT[i % CONTENT.length].idea) })) });
+    await db.mediaAsset.createMany({
+      data: batch.flatMap((i) => {
+        const [, image, video] = state(i);
+        const images = image === "NOT_STARTED" ? [] : [0, 1].map((k) => ({ contentId: id(i), type: "IMAGE", fileName: `scene-${k + 1}.svg`, storageKey: `bulk/${i}/scene-${k + 1}.svg`, mimeType: "image/svg+xml", isSelected: image === "APPROVED" && k === 0 }));
+        const final = video === "NOT_STARTED" ? [] : [{ contentId: id(i), type: "VIDEO", fileName: `bulk-${i}.mp4`, mimeType: "video/mp4", size: 250_000_000, durationSec: 300 + (i % 400) }];
+        return [...images, ...final];
+      }),
+    });
+    const posts = batch.filter((i) => state(i)[4]);
+    await db.publishingSchedule.createMany({
+      data: posts.map((i) => {
+        const status = state(i)[4]!;
+        const scheduledAt = status === "PUBLISHED" ? at(-(i % 90) - 1, "18:00") : at((i % 30) + 1, "18:00");
+        return {
+          contentId: id(i), platformId: "youtube", accountId, scheduledAt, timezone: TZ, title: topics[i % topics.length], status,
+          activeKey: scheduleActiveKey(status, id(i), accountId), publishedAt: status === "PUBLISHED" ? scheduledAt : null, simulated: status === "PUBLISHED",
+        };
+      }),
+    });
+  }
+  await db.$executeRaw`UPDATE "Content" c SET "videoAssetId" = m."id" FROM "MediaAsset" m WHERE m."contentId" = c."id" AND m."type" = 'VIDEO' AND c."id" LIKE 'bulk\_%'`;
+}
+
 async function wipe() {
   await db.analyticsSnapshot.deleteMany();
   await db.publishingJob.deleteMany();
@@ -320,6 +389,9 @@ async function main() {
   for (const [i, [name, category, provider, content]] of prompts.entries()) {
     await db.aiPrompt.create({ data: { name, category, provider, content, createdAt: at(-70 + i, "10:00"), updatedAt: at(-12 + i, "10:00") } });
   }
+
+  const bulk = Number(process.env.SEED_BULK_ITEMS) || 0;
+  if (bulk > 0) await seedBulk(bulk, catIds, accounts.yt1.id);
 
   await syncAllPublishingStatuses();
   await syncMockAnalytics(NOW);

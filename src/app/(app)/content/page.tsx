@@ -1,11 +1,13 @@
 import { Download, Plus } from "lucide-react";
 import type { Metadata } from "next";
+import { cookies, headers } from "next/headers";
 import { Suspense } from "react";
 import { PageHeader } from "@/components/app/content-bits";
 import { CreateContentButton, CreateContentButtonFallback } from "@/components/app/shell/app-shell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { type ContentListParams, getContentList } from "@/server/queries/content";
+import { type ContentListParams, type ContentView, LIST_PARAMS, VIEW_COOKIE } from "@/lib/content-list";
+import { getContentList } from "@/server/queries/content";
 import { ContentBrowser } from "./_components/content-browser";
 import { ContentFilters } from "./_components/content-filters";
 
@@ -43,24 +45,34 @@ export default function ContentPage({ searchParams }: PageProps<"/content">) {
   );
 }
 
+/**
+ * Table or cards, decided here so only one is rendered (PERF-01): the link's
+ * ?view=, else the last choice (cookie), else cards on phones.
+ */
+async function chooseView(param: string | undefined): Promise<ContentView> {
+  if (param === "table" || param === "cards") return param;
+  const saved = (await cookies()).get(VIEW_COOKIE)?.value;
+  if (saved === "table" || saved === "cards") return saved;
+  return /Mobi/i.test((await headers()).get("user-agent") ?? "") ? "cards" : "table";
+}
+
 async function ContentList({ searchParams }: { searchParams: PageProps<"/content">["searchParams"] }) {
   const sp = await searchParams;
-  const pick = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : undefined);
-  const params: ContentListParams = {
-    q: pick("q"),
-    stage: pick("stage"),
-    platform: pick("platform"),
-    category: pick("category"),
-    priority: pick("priority"),
-    created: pick("created"),
-    scheduled: pick("scheduled"),
-    view: pick("view"),
-  };
-  const data = await getContentList(params);
+  const params: ContentListParams = Object.fromEntries(LIST_PARAMS.flatMap((k) => (typeof sp[k] === "string" ? [[k, sp[k]]] : [])));
+  const [data, view] = await Promise.all([getContentList(params), chooseView(params.view)]);
   return (
     <>
-      <ContentFilters params={params} counts={data.counts} stage={data.stageFilter} options={data.options} />
-      <ContentBrowser items={data.items} total={data.total} view={params.view} categories={data.options.categories} hasFilters={Boolean(params.q || params.platform || params.category || params.priority || params.created || params.scheduled || (params.stage && params.stage !== "ALL"))} />
+      <ContentFilters params={params} counts={data.counts} stage={data.stageFilter} sort={data.sort} dir={data.dir} view={view} options={data.options} />
+      <ContentBrowser
+        items={data.items}
+        page={data.page}
+        params={params}
+        sort={data.sort}
+        dir={data.dir}
+        view={view}
+        categories={data.options.categories}
+        hasFilters={Boolean(params.q || params.platform || params.category || params.priority || params.created || params.scheduled || (params.stage && params.stage !== "ALL"))}
+      />
     </>
   );
 }

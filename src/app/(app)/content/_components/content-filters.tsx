@@ -1,15 +1,15 @@
 "use client";
 
-import { LayoutGrid, Rows3, Search, X } from "lucide-react";
+import { ArrowDown, ArrowUp, LayoutGrid, Rows3, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { buildHref, CONTENT_SORTS, type ContentListParams, type ContentSort, type ContentView, type SortDir, VIEW_COOKIE } from "@/lib/content-list";
 import { cn } from "@/lib/utils";
 import { Priority, Stage } from "@/lib/workflow/statuses";
-import type { ContentListParams } from "@/server/queries/content";
 import type { ContentFormOptions } from "@/server/queries/shared";
 
 const ALL = "__all";
@@ -23,23 +23,26 @@ const QUICK = [
   ["IDEA", "Ideas"],
 ] as const;
 
-export function buildHref(params: ContentListParams, patch: Partial<ContentListParams>) {
-  const next = { ...params, ...patch };
-  const sp = new URLSearchParams();
-  for (const [k, v] of Object.entries(next)) if (v && v !== ALL && !(k === "stage" && v === "ALL")) sp.set(k, v);
-  const s = sp.toString();
-  return s ? `/content?${s}` : "/content";
+/** The server renders the remembered view next time /content opens without ?view= */
+function rememberView(view: ContentView) {
+  document.cookie = `${VIEW_COOKIE}=${view}; path=/; max-age=31536000; samesite=lax`;
 }
 
 export function ContentFilters({
   params,
   counts,
   stage,
+  sort,
+  dir,
+  view,
   options,
 }: {
   params: ContentListParams;
   counts: Record<string, number>;
   stage: string;
+  sort: ContentSort;
+  dir: SortDir;
+  view: ContentView;
   options: ContentFormOptions;
 }) {
   const router = useRouter();
@@ -102,16 +105,11 @@ export function ContentFilters({
               key={v}
               href={buildHref(params, { view: v })}
               scroll={false}
+              onClick={() => rememberView(v)}
+              aria-current={view === v ? "true" : undefined}
               className={cn(
                 "flex h-8 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium",
-                params.view
-                  ? params.view === v
-                    ? "bg-white text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                  : // No explicit choice: phones show cards, larger screens the table
-                    v === "table"
-                    ? "text-muted-foreground hover:text-foreground md:bg-white md:text-foreground md:shadow-sm"
-                    : "bg-white text-foreground shadow-sm md:bg-transparent md:text-muted-foreground md:shadow-none",
+                view === v ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
               )}
             >
               <Icon className="size-3.5" />
@@ -131,6 +129,30 @@ export function ContentFilters({
         <FilterSelect label="Any priority" value={params.priority} onChange={(v) => go({ priority: v })} items={Priority.options.map((p) => [p.value, p.label])} />
         <FilterSelect label="Created: any time" value={params.created} onChange={(v) => go({ created: v })} items={[["7", "Last 7 days"], ["30", "Last 30 days"]]} />
         <FilterSelect label="Scheduled: any" value={params.scheduled} onChange={(v) => go({ scheduled: v })} items={[["week", "This week"], ["next", "Next week"], ["none", "Not scheduled"]]} />
+        <div className="flex items-center">
+          <Select value={sort} onValueChange={(v) => go({ sort: v, dir: CONTENT_SORTS[v as ContentSort].dir })}>
+            <SelectTrigger aria-label="Sort by" className="w-auto rounded-r-none bg-white data-[size=default]:h-9">
+              <span className="text-muted-foreground">Sort:</span>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(CONTENT_SORTS).map(([k, s]) => (
+                <SelectItem key={k} value={k}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-9 rounded-l-none border-l-0 bg-white"
+            aria-label={dir === "asc" ? "Ascending, switch to descending" : "Descending, switch to ascending"}
+            onClick={() => go({ sort, dir: dir === "asc" ? "desc" : "asc" })}
+          >
+            {dir === "asc" ? <ArrowUp /> : <ArrowDown />}
+          </Button>
+        </div>
         {active && (
           <Button variant="ghost" size="sm" onClick={() => { setQ(""); go({ q: undefined, platform: undefined, category: undefined, priority: undefined, created: undefined, scheduled: undefined }); }}>
             <X />Clear
