@@ -11,6 +11,8 @@ type Reconciler = (req: PublishRequest, uploadState: Record<string, unknown> | n
 class FakePlatform {
   calls: PublishRequest[] = [];
   reconcileCalls: PublishRequest[] = [];
+  /** Whether the provider reports itself as simulated (PlatformProvider.isMock). */
+  mock = true;
   private behavior: Behavior = async () => this.success();
   /** null: the provider can't reconcile (no `reconcile` method). */
   private reconciler: Reconciler | null = async () => ({ status: "not_found" });
@@ -43,6 +45,7 @@ class FakePlatform {
   reset() {
     this.calls = [];
     this.reconcileCalls = [];
+    this.mock = true;
     this.behavior = async () => this.success();
     this.reconciler = async () => ({ status: "not_found" });
   }
@@ -59,7 +62,7 @@ class FakePlatform {
       maxTitleLength: 100,
       maxCaptionLength: 5000,
       supportsThumbnail: true,
-      isMock: true,
+      isMock: this.mock,
       publish: (req, ctx) => {
         this.calls.push(req);
         return this.behavior(req, ctx);

@@ -7,7 +7,7 @@ import { checklist, completion, deriveStage, imageStage, isReadyToPost, missingR
 import { PRODUCTION_STAGES } from "@/lib/workflow/statuses";
 import { isClaudeConfigured } from "@/lib/ai/claude";
 import { toContentState } from "../services/content-state";
-import { contentSummarySelect, getContentFormOptions, getPageContext, toSummary } from "./shared";
+import { contentSummarySelect, getContentFormOptions, getPageContext, onlySimulatedPosts, toSummary } from "./shared";
 
 // ---------- List ----------
 
@@ -201,6 +201,8 @@ export async function getContentWorkspace(id: string) {
       completion: completion(state),
       imageStage: imageStage(state),
       rules,
+      /** Every post that went out was simulated */
+      simulated: onlySimulatedPosts(c.schedules),
     },
     script: {
       body: c.script?.body ?? "",
@@ -243,7 +245,9 @@ export async function getContentWorkspace(id: string) {
       attempts: s.attempts,
       lastError: s.lastError,
       nextAttemptLabel: s.nextAttemptAt ? fmtDateTime(s.nextAttemptAt, tz) : null,
-      externalUrl: s.externalUrl,
+      simulated: s.simulated,
+      /** Simulated posts have made-up URLs: never link to them */
+      externalUrl: s.simulated ? null : s.externalUrl,
       publishedLabel: s.publishedAt ? fmtDateTime(s.publishedAt, tz) : null,
       jobs: s.jobs.map((j) => ({ id: j.id, attempt: j.attempt, status: j.status, error: j.error, startedLabel: fmtDateTime(j.startedAt, tz) })),
     })),

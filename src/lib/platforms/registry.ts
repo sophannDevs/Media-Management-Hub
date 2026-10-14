@@ -15,6 +15,11 @@ export function listProviders() {
   return Object.values(providers);
 }
 
+/** True while any platform is simulated: nothing it "publishes" reaches the real platform. */
+export function isSimulationMode() {
+  return listProviders().some((p) => p.isMock);
+}
+
 /** Serializable subset for Client Components (no functions). */
 export function providerMeta(platformId: string) {
   const p = getProvider(platformId);

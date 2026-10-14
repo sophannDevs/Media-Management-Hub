@@ -84,6 +84,16 @@ export const ScheduleStatus = defs({
 export type ScheduleStatusCode = (typeof ScheduleStatus.codes)[number];
 export const ACTIVE_SCHEDULE_STATUSES: ScheduleStatusCode[] = ["WAITING", "PROCESSING", "RETRY_SCHEDULED"];
 
+/**
+ * Badge text for a schedule. A post published by a simulated provider never
+ * reached the platform, so it is never called "Published".
+ */
+export function scheduleLabel(status: string, simulated?: boolean) {
+  if (status === "WAITING") return "Scheduled";
+  if (status === "PUBLISHED" && simulated) return "Simulated";
+  return ScheduleStatus.label(status);
+}
+
 /** One execution attempt of a schedule (PublishingJob.status). */
 export const JobStatus = defs({
   PROCESSING: { label: "Processing", tone: "progress" },
@@ -156,6 +166,11 @@ export const Stage = defs({
   FAILED: { label: "Failed", tone: "danger" },
 });
 export type StageCode = (typeof Stage.codes)[number];
+
+/** Stage badge text: content whose posts were all published by a simulated provider reads "Simulated". */
+export function stageLabel(stage: string, simulated?: boolean) {
+  return stage === "PUBLISHED" && simulated ? "Simulated" : Stage.label(stage);
+}
 export const PIPELINE_STAGES: StageCode[] = ["IDEA", "SCRIPT", "IMAGES", "VIDEO", "REVIEW", "READY", "SCHEDULED", "PUBLISHED"];
 export const PRODUCTION_STAGES: StageCode[] = ["IDEA", "SCRIPT", "IMAGES", "VIDEO", "REVIEW"];
 

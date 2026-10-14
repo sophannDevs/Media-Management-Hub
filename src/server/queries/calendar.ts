@@ -14,6 +14,7 @@ const eventSelect = {
   status: true,
   platformId: true,
   scheduledAt: true,
+  simulated: true,
   account: { select: { name: true, status: true } },
   thumbnailAsset: { select: { storageKey: true, externalUrl: true } },
   content: {
@@ -104,6 +105,7 @@ export async function getCalendarData(params: CalendarParams) {
     timeLabel: fmtTime(s.scheduledAt, tz),
     accountName: s.account.name,
     accountConnected: s.account.status === "CONNECTED",
+    simulated: s.simulated,
     /** Published / publishing posts can't be moved */
     movable: s.status !== "PUBLISHED" && s.status !== "PROCESSING",
     content: {
@@ -153,6 +155,8 @@ export async function getCalendarData(params: CalendarParams) {
     ready,
     bestTimes: best.slots,
     bestTimesBasedOn: best.posts,
+    /** Built from generated (simulated) metrics */
+    bestTimesSimulated: best.simulated,
   };
 }
 export type CalendarData = Awaited<ReturnType<typeof getCalendarData>>;
@@ -171,9 +175,10 @@ async function getBestPostingTimes(tz: string, platformId: string | null) {
     ...(platformId ? { platformId } : {}),
   } satisfies Prisma.PublishingScheduleWhereInput;
 
-  const [published, totals] = await Promise.all([
+  const [published, totals, generated] = await Promise.all([
     db.publishingSchedule.findMany({ where, select: { id: true, platformId: true, publishedAt: true } }),
     db.analyticsSnapshot.groupBy({ by: ["scheduleId"], where: { schedule: { is: where } }, _sum: { views: true } }),
+    db.analyticsSnapshot.count({ where: { schedule: { is: where }, source: "MOCK" } }),
   ]);
   const views = new Map(totals.map((t) => [t.scheduleId, t._sum.views ?? 0]));
 
@@ -204,5 +209,5 @@ async function getBestPostingTimes(tz: string, platformId: string | null) {
       posts: s.posts,
       platforms: [...s.platforms],
     }));
-  return { slots: top, posts };
+  return { slots: top, posts, simulated: generated > 0 };
 }

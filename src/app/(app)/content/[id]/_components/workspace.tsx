@@ -38,7 +38,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useServerAction } from "@/hooks/use-server-action";
 import type { Requirement } from "@/lib/workflow/rules";
-import { ContentType, Stage } from "@/lib/workflow/statuses";
+import { ContentType, Stage, stageLabel } from "@/lib/workflow/statuses";
 import { archiveContentAction, deleteContentAndRedirectAction, duplicateContentAction } from "@/server/actions/content";
 import type { ContentWorkspace } from "@/server/queries/content";
 
@@ -124,7 +124,7 @@ export function WorkspaceHeader({ data }: { data: ContentWorkspace }) {
       <ContentThumb src={c.thumbUrl} seed={c.id} durationSec={c.durationSec} className="aspect-video w-full sm:w-64 lg:w-44" />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge def={Stage} value={data.workflow.stage} />
+          <StatusBadge def={Stage} value={data.workflow.stage} label={stageLabel(data.workflow.stage, data.workflow.simulated)} />
           {c.archived && <StatusBadge tone="neutral" label="Archived" />}
           <PriorityBadge priority={c.priority} />
           {c.seriesName && (

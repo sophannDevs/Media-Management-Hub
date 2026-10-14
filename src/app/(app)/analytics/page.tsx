@@ -32,7 +32,7 @@ export default function AnalyticsPage({ searchParams }: PageProps<"/analytics">)
     <AnalyticsTransition>
       <PageHeader
         title="Analytics"
-        description="Demo metrics — will sync from YouTube Analytics and Facebook Insights."
+        description="Views, watch time and engagement across platforms."
         actions={
           <Suspense fallback={<Skeleton className="h-[42px] w-[352px] max-w-full rounded-xl" />}>
             <Filters searchParams={searchParams} />
@@ -82,6 +82,12 @@ async function AnalyticsContent({ searchParams }: { searchParams: SearchParams }
 
   return (
     <PendingFrame className="space-y-4 md:space-y-6">
+      {d.simulated && (
+        <p role="note" className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-950">
+          <strong className="font-semibold">Simulated metrics.</strong> These numbers were generated for simulated posts so you can try this page. Real views will
+          sync from YouTube Analytics and Facebook Insights once accounts are connected for real.
+        </p>
+      )}
       <KpiTiles d={d} />
 
       <section className="grid gap-4 md:gap-6 lg:grid-cols-12">

@@ -135,7 +135,7 @@ function BestTimes({ d }: { d: CalendarData }) {
   return (
     <Panel
       title="Best posting times"
-      description={`Avg views per post · ${d.bestTimesBasedOn} ${d.platformName ?? "published"} post${d.bestTimesBasedOn === 1 ? "" : "s"}`}
+      description={`${d.bestTimesSimulated ? "Simulated data · " : ""}Avg views per post · ${d.bestTimesBasedOn} ${d.platformName ?? "published"} post${d.bestTimesBasedOn === 1 ? "" : "s"}`}
     >
       <ul className="space-y-3 p-4 text-sm">
         {d.bestTimes.map((s) => (
@@ -152,7 +152,10 @@ function BestTimes({ d }: { d: CalendarData }) {
           </li>
         ))}
       </ul>
-      <p className="border-t border-[#f1eedf] px-4 py-2.5 text-[11px] text-muted-foreground">Times in {d.tz}</p>
+      <p className="border-t border-[#f1eedf] px-4 py-2.5 text-[11px] text-muted-foreground">
+        Times in {d.tz}
+        {d.bestTimesSimulated && " · based on generated numbers, not real audience data"}
+      </p>
     </Panel>
   );
 }

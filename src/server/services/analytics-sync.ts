@@ -28,8 +28,9 @@ export function mockDailyMetrics(seed: string, platformId: string, dayIndex: num
 }
 
 export async function syncMockAnalytics(now = new Date()) {
+  // Only simulated posts get generated numbers; real posts wait for the platform sync
   const published = await db.publishingSchedule.findMany({
-    where: { status: "PUBLISHED", publishedAt: { not: null } },
+    where: { status: "PUBLISHED", simulated: true, publishedAt: { not: null } },
     select: { id: true, contentId: true, platformId: true, publishedAt: true },
   });
   const today = startOfUtcDay(now);
@@ -47,8 +48,8 @@ export async function syncMockAnalytics(now = new Date()) {
       const m = mockDailyMetrics(s.id, s.platformId, i);
       await db.analyticsSnapshot.upsert({
         where: { contentId_platformId_date: { contentId: s.contentId, platformId: s.platformId, date } },
-        update: { ...m, scheduleId: s.id },
-        create: { ...m, contentId: s.contentId, platformId: s.platformId, scheduleId: s.id, date },
+        update: { ...m, scheduleId: s.id, source: "MOCK" },
+        create: { ...m, contentId: s.contentId, platformId: s.platformId, scheduleId: s.id, date, source: "MOCK" },
       });
     }
   }

@@ -8,6 +8,7 @@ import { getContentFormOptions, getNavCounts, getNotifications, getNow } from "@
 import { NotificationsMenu } from "./notifications-menu";
 import { SearchBox } from "./search-box";
 import { MobileNav, Sidebar } from "./sidebar-nav";
+import { SimulationBanner } from "./simulation-banner";
 
 async function SidebarWithCounts() {
   return <Sidebar counts={await getNavCounts()} />;
@@ -70,6 +71,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </header>
+        <SimulationBanner />
         <main className="mx-auto w-full max-w-[1600px] flex-1 space-y-6 px-4 py-6 md:px-8 md:py-8">{children}</main>
       </div>
     </ScheduleDialogProvider>

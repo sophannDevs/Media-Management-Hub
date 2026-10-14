@@ -5,7 +5,7 @@ import type { QueueParams, QueueTab } from "@/app/(app)/schedule/_components/que
 import { dayKey, fmt, fmtDateTime, fmtTime, relativeDay, timeAgo } from "@/lib/dates";
 import { db } from "@/lib/db";
 import { mediaUrl } from "@/lib/media-url";
-import { listProviders, providerMeta } from "@/lib/platforms/registry";
+import { isSimulationMode, listProviders, providerMeta } from "@/lib/platforms/registry";
 import { getPageContext } from "./shared";
 
 /** Status codes and sort order behind each queue tab. */
@@ -35,6 +35,7 @@ const rowSelect = {
   lastError: true,
   externalUrl: true,
   publishedAt: true,
+  simulated: true,
   platform: { select: { name: true } },
   account: { select: { id: true, name: true, status: true, avatarUrl: true } },
   thumbnailAsset: { select: assetSelect },
@@ -102,7 +103,9 @@ function toRow(s: Row, now: Date, tz: string) {
     lastError: s.lastError,
     nextAttempt: s.status === "RETRY_SCHEDULED" && s.nextAttemptAt ? `${relativeDay(s.nextAttemptAt, now, tz)}, ${fmtTime(s.nextAttemptAt, tz)}` : null,
     publishedAgo: s.status === "PUBLISHED" && s.publishedAt ? timeAgo(s.publishedAt, now) : null,
-    externalUrl: safeUrl(s.externalUrl),
+    simulated: s.simulated,
+    /** Simulated posts have made-up URLs: never link to them */
+    externalUrl: s.simulated ? null : safeUrl(s.externalUrl),
     visibility: meta?.visibilityOptions.find((v) => v.value === s.visibility)?.label ?? s.visibility,
     account: { id: s.account.id, name: s.account.name, status: s.account.status, avatarUrl: s.account.avatarUrl, initials: initials(s.account.name) },
     content: {
@@ -146,7 +149,7 @@ export async function getQueueData(params: QueueParams) {
   } satisfies Prisma.PublishingScheduleWhereInput;
   const isFiltered = !!(platform || account);
 
-  const [globalCounts, filteredCounts, rows, failedRows, lastJob] = await Promise.all([
+  const [globalCounts, filteredCounts, rows, failedRows, lastJob, publishedSimulated] = await Promise.all([
     db.publishingSchedule.groupBy({ by: ["status"], where: live, _count: { _all: true } }),
     isFiltered ? db.publishingSchedule.groupBy({ by: ["status"], where: filtered, _count: { _all: true } }) : null,
     db.publishingSchedule.findMany({
@@ -166,6 +169,7 @@ export async function getQueueData(params: QueueParams) {
       orderBy: { finishedAt: "desc" },
       select: { finishedAt: true },
     }),
+    db.publishingSchedule.count({ where: { ...live, status: "PUBLISHED", simulated: true } }),
   ]);
 
   const countOf = (counts: typeof globalCounts, statuses: string[] | null) =>
@@ -183,6 +187,8 @@ export async function getQueueData(params: QueueParams) {
     isFiltered,
     worker: {
       enabled: process.env.PUBLISH_WORKER_ENABLED !== "false",
+      /** Publishing goes through simulated providers: nothing reaches the platforms */
+      simulated: isSimulationMode(),
       // Mirrors the worker's own clamp (min 15s)
       intervalSec: Number.isFinite(interval) && interval > 0 ? Math.max(15, Math.round(interval)) : 60,
       lastRunAgo: lastJob?.finishedAt ? timeAgo(lastJob.finishedAt, now) : null,
@@ -196,6 +202,7 @@ export async function getQueueData(params: QueueParams) {
       retrying: byStatus("RETRY_SCHEDULED"),
       failed: failedTotal,
       published: byStatus("PUBLISHED"),
+      publishedSimulated,
     },
     tabs: (Object.keys(TABS) as QueueTab[]).map((key) => ({ key, label: TABS[key].label, count: countOf(tabCounts, TABS[key].statuses) })),
     tabTotal: countOf(tabCounts, tab.statuses),

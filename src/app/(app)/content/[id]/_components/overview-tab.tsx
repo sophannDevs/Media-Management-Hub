@@ -176,7 +176,10 @@ function ProductionStatus({ data }: { data: ContentWorkspace }) {
         </div>
 
         <div className="space-y-1.5 rounded-xl border border-[#f1eedf] bg-[#fcfbf3] p-3 sm:col-span-2">
-          <p className="flex flex-wrap items-center gap-2 text-sm"><WandSparkles className="size-4 text-primary" />Publishing status <StatusBadge def={PublishingStatus} value={c.publishingStatus} /></p>
+          <p className="flex flex-wrap items-center gap-2 text-sm">
+            <WandSparkles className="size-4 text-primary" />Publishing status{" "}
+            <StatusBadge def={PublishingStatus} value={c.publishingStatus} label={c.publishingStatus === "PUBLISHED" && data.workflow.simulated ? "Simulated" : undefined} />
+          </p>
           <p className="text-xs text-muted-foreground">{required.length ? `${required.join(" + ")} → Ready to Post` : "No requirements enabled — content is Ready to Post as soon as it's created (Settings → Workflow rules)."}</p>
         </div>
       </div>

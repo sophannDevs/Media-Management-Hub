@@ -28,7 +28,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { compactNumber, dayKey, fmt, fmtTime, relativeDay, timeAgo } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import { PIPELINE_STAGES, ScheduleStatus, Stage } from "@/lib/workflow/statuses";
+import { PIPELINE_STAGES, ScheduleStatus, Stage, scheduleLabel } from "@/lib/workflow/statuses";
 import { getDashboardData, type DashboardData } from "@/server/queries/dashboard";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -136,7 +136,13 @@ function StatCards({ d }: { d: DashboardData }) {
     { label: "In production", value: c.inProduction, icon: Loader, sub: `${c.script} script · ${c.images} image · ${c.video} video · ${c.review} review`, href: "/content?stage=PRODUCTION" },
     { label: "Ready to post", value: c.ready, icon: Rocket, sub: "Waiting for a schedule", href: "/content?stage=READY", accent: true },
     { label: "Scheduled", value: c.scheduled, icon: CalendarClock, sub: `${c.scheduledThisWeek} post${c.scheduledThisWeek === 1 ? "" : "s"} left this week`, href: "/schedule" },
-    { label: "Published", value: c.published, icon: CircleCheck, sub: `${compactNumber(c.monthViews)} views this month`, href: "/analytics" },
+    {
+      label: c.published > 0 && c.publishedSimulated === c.published ? "Published (simulated)" : "Published",
+      value: c.published,
+      icon: CircleCheck,
+      sub: c.monthViewsSimulated ? `${compactNumber(c.monthViews)} simulated views this month` : `${compactNumber(c.monthViews)} views this month`,
+      href: "/analytics",
+    },
     { label: "Failed posts", value: c.failedPosts, icon: CircleAlert, sub: c.failedPosts ? "Needs your attention" : "All clear", href: "/schedule?status=failed", danger: c.failedPosts > 0 },
   ];
   return (
@@ -218,7 +224,7 @@ function Upcoming({ d }: { d: DashboardData }) {
               <p className={cn("text-sm font-medium", day === "Today" && "text-primary")}>{day}</p>
               <p className="text-xs text-muted-foreground">{fmtTime(s.scheduledAt, d.tz)}</p>
               <div className="mt-1">
-                <StatusBadge def={ScheduleStatus} value={s.status} label={s.status === "WAITING" ? "Scheduled" : undefined} size="sm" />
+                <StatusBadge def={ScheduleStatus} value={s.status} label={scheduleLabel(s.status, s.simulated)} size="sm" />
               </div>
             </div>
           </Link>
@@ -285,7 +291,7 @@ function WeekStrip({ d }: { d: DashboardData }) {
                     </div>
                     <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug font-medium">{s.content.title}</p>
                     <div className="mt-1">
-                      <StatusBadge def={ScheduleStatus} value={s.status} label={s.status === "WAITING" ? "Scheduled" : undefined} size="sm" />
+                      <StatusBadge def={ScheduleStatus} value={s.status} label={scheduleLabel(s.status, s.simulated)} size="sm" />
                     </div>
                   </Link>
                 ))}

@@ -73,10 +73,16 @@ export const contentSummarySelect = {
   videoAsset: { select: { durationSec: true } },
   media: { where: { type: "IMAGE" }, select: { isSelected: true, storageKey: true, externalUrl: true }, orderBy: { createdAt: "asc" } },
   schedules: {
-    select: { id: true, status: true, platformId: true, scheduledAt: true, accountId: true },
+    select: { id: true, status: true, platformId: true, scheduledAt: true, accountId: true, simulated: true },
     orderBy: { scheduledAt: "asc" },
   },
 } satisfies Prisma.ContentSelect;
+
+/** True when the content has published posts and every one of them was simulated. */
+export function onlySimulatedPosts(schedules: { status: string; simulated: boolean }[]) {
+  const published = schedules.filter((s) => s.status === "PUBLISHED");
+  return published.length > 0 && published.every((s) => s.simulated);
+}
 
 type SummaryRow = Prisma.ContentGetPayload<{ select: typeof contentSummarySelect }>;
 
@@ -111,6 +117,7 @@ export function toSummary(c: SummaryRow, rules: WorkflowRules, now: Date) {
     durationSec: c.videoAsset?.durationSec ?? null,
     nextSchedule,
     scheduleCount: c.schedules.filter((s) => s.status !== "CANCELLED").length,
+    simulated: onlySimulatedPosts(c.schedules),
   };
 }
 export type ContentSummary = ReturnType<typeof toSummary>;

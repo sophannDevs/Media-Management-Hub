@@ -10,6 +10,7 @@ const scheduleCardSelect = {
   platformId: true,
   scheduledAt: true,
   lastError: true,
+  simulated: true,
   account: { select: { name: true, status: true } },
   content: {
     select: {
@@ -30,7 +31,7 @@ export async function getDashboardData() {
   const todayRange = dayRangeUtc(todayKey, todayKey, tz);
   const monthStart = new Date(`${todayKey.slice(0, 7)}-01T00:00:00Z`);
 
-  const [rows, upcoming, weekSchedules, failed, accountIssues, activity, monthViews, publishedThisMonth] = await Promise.all([
+  const [rows, upcoming, weekSchedules, failed, accountIssues, activity, monthViews, simulatedMonthViews, publishedThisMonth] = await Promise.all([
     db.content.findMany({ where: { archivedAt: null }, select: contentSummarySelect }),
     db.publishingSchedule.findMany({
       where: { status: { in: ["WAITING", "RETRY_SCHEDULED", "PROCESSING"] }, scheduledAt: { gte: todayRange.gte }, content: { archivedAt: null } },
@@ -55,6 +56,7 @@ export async function getDashboardData() {
       select: { id: true, type: true, message: true, createdAt: true, content: { select: { id: true, title: true } } },
     }),
     db.analyticsSnapshot.aggregate({ _sum: { views: true }, where: { date: { gte: monthStart } } }),
+    db.analyticsSnapshot.count({ where: { date: { gte: monthStart }, source: "MOCK" } }),
     db.publishingSchedule.count({ where: { status: "PUBLISHED", publishedAt: { gte: monthStart } } }),
   ]);
 
@@ -69,6 +71,7 @@ export async function getDashboardData() {
     scheduledAt: s.scheduledAt,
     accountName: s.account.name,
     lastError: s.lastError,
+    simulated: s.simulated,
     content: {
       id: s.content.id,
       title: s.content.title,
@@ -108,7 +111,11 @@ export async function getDashboardData() {
       scheduledToday: weekSchedules.filter((s) => s.scheduledAt >= todayRange.gte && s.scheduledAt < todayRange.lt && s.status !== "PUBLISHED").length,
       scheduledThisWeek: weekSchedules.filter((s) => s.status !== "PUBLISHED" && s.scheduledAt >= now).length,
       monthViews: monthViews._sum.views ?? 0,
+      /** Some of this month's views were generated for simulated posts */
+      monthViewsSimulated: simulatedMonthViews > 0,
       publishedThisMonth,
+      /** Content at stage Published whose posts were all simulated */
+      publishedSimulated: items.filter((c) => c.stage === "PUBLISHED" && c.simulated).length,
     },
     byStage,
     ready: items.filter((c) => c.stage === "READY"),

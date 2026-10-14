@@ -103,7 +103,7 @@ export async function getAnalyticsData({ range, platform }: AnalyticsParams) {
   const within = (d: Date, r: { gte: Date; lt: Date }) => d >= r.gte && d < r.lt;
   const onPlatform = platform ? { platformId: platform } : {};
 
-  const [dailyRows, topRows, scheduleRows, schedules] = await Promise.all([
+  const [dailyRows, topRows, scheduleRows, schedules, generated] = await Promise.all([
     db.analyticsSnapshot.groupBy({
       by: ["date", "platformId"],
       where: { date: { gte: utcDay(prevFromKey), lte: utcDay(todayKey) } },
@@ -133,6 +133,7 @@ export async function getAnalyticsData({ range, platform }: AnalyticsParams) {
         content: { select: contentCardSelect },
       },
     }),
+    db.analyticsSnapshot.count({ where: { source: "MOCK" } }),
   ]);
 
   const topContent = topRows.length
@@ -262,6 +263,8 @@ export async function getAnalyticsData({ range, platform }: AnalyticsParams) {
     todayKey,
     periodLabel: `${dayLabel(fromKey)} – ${dayLabel(todayKey)}`,
     hasAnyPublished: published.length > 0,
+    /** Some numbers were generated for simulated posts (AnalyticsSnapshot.source = MOCK) */
+    simulated: generated > 0,
     kpis,
     daily,
     platforms,

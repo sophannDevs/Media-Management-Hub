@@ -284,6 +284,9 @@ model PublishingSchedule {
   externalId       String?
   externalUrl      String?
   publishedAt      DateTime?
+  /// Published by a simulated provider: nothing reached the platform, and the
+  /// external id / URL are made up. Never shown as "Published".
+  simulated        Boolean             @default(false)
   jobs             PublishingJob[]
   snapshots        AnalyticsSnapshot[]
   createdAt        DateTime            @default(now())
@@ -343,6 +346,8 @@ model Notification {
 /// Daily metrics per content/platform (mock for now; synced from APIs later).
 model AnalyticsSnapshot {
   id           String              @id @default(cuid())
+  /// MOCK (generated for simulated posts) | API (synced from the platform). Never mixed in one figure without a label.
+  source       String              @default("MOCK")
   contentId    String
   content      Content             @relation(fields: [contentId], references: [id], onDelete: Cascade)
   platformId   String

@@ -44,7 +44,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useServerAction } from "@/hooks/use-server-action";
 import { cn } from "@/lib/utils";
-import { ContentType, ImageStatus, ReviewStatus, ScriptStatus, Stage, VideoStatus } from "@/lib/workflow/statuses";
+import { ContentType, ImageStatus, ReviewStatus, ScriptStatus, Stage, stageLabel, VideoStatus } from "@/lib/workflow/statuses";
 import {
   archiveContentAction,
   bulkCategoryAction,
@@ -256,7 +256,7 @@ export function ContentBrowser({
                     <TableCell><PlatformStack platforms={c.platforms} /></TableCell>
                     <TableCell><MiniSteps {...c} /></TableCell>
                     <TableCell className="w-32"><CompletionBar value={c.completion} /></TableCell>
-                    <TableCell><StatusBadge def={Stage} value={c.stage} /></TableCell>
+                    <TableCell><StatusBadge def={Stage} value={c.stage} label={stageLabel(c.stage, c.simulated)} /></TableCell>
                     <TableCell><PriorityBadge priority={c.priority} /></TableCell>
                     <TableCell>{nextCell(c)}</TableCell>
                     <TableCell className="whitespace-nowrap text-muted-foreground">{c.createdLabel}</TableCell>
@@ -281,7 +281,7 @@ export function ContentBrowser({
                   <ContentThumb src={c.thumbUrl} seed={c.id} icon={thumbIconFor(c)} durationSec={c.durationSec} className="aspect-video w-full rounded-none" />
                 </Link>
                 <div className="absolute top-2.5 left-2.5 rounded bg-white/90 p-0.5"><Checkbox checked={selected.has(c.id)} onCheckedChange={(v) => toggle(c.id, !!v)} aria-label={`Select ${c.title}`} /></div>
-                <div className="absolute top-2.5 right-2.5"><StatusBadge def={Stage} value={c.stage} className="shadow-sm" /></div>
+                <div className="absolute top-2.5 right-2.5"><StatusBadge def={Stage} value={c.stage} label={stageLabel(c.stage, c.simulated)} className="shadow-sm" /></div>
               </div>
               <div className="p-4">
                 <div className="flex items-center justify-between text-xs text-muted-foreground">

@@ -279,6 +279,8 @@ async function main() {
         lastError: extra?.error ?? null,
         nextAttemptAt: status === "RETRY_SCHEDULED" ? scheduledAt : null,
         publishedAt: status === "PUBLISHED" ? scheduledAt : null,
+        // Demo posts never reached a platform
+        simulated: status === "PUBLISHED",
         externalUrl: status === "PUBLISHED" ? (platformId === "youtube" ? "https://youtu.be/demo" : "https://facebook.com/watch/?v=demo") : null,
         createdAt: at(Math.min(offset, 0) - 3, "13:30"),
       },

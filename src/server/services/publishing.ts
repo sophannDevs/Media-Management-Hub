@@ -158,11 +158,12 @@ async function attempt(scheduleId: string, heartbeat: Heartbeat): Promise<Proces
 
   const request = toRequest(s);
   const uploadState = parseJson(s.uploadState);
+  const simulated = provider.isMock;
 
   // The previous attempt ended without a clear answer: ask the platform before sending again
   if (s.lastErrorCode === "UNKNOWN_OUTCOME") {
     const check = await reconcile(provider, request, uploadState);
-    if (check.status === "published") return recordSuccess(s, jobId, check.result, true);
+    if (check.status === "published") return recordSuccess(s, jobId, check.result, { simulated, reconciled: true });
     if (check.status === "unknown") {
       const err = new PublishError(
         `Couldn't confirm whether the earlier attempt went live (${check.reason}). Check ${s.platform.name} first and retry only if the post isn't there.`,
@@ -185,7 +186,7 @@ async function attempt(scheduleId: string, heartbeat: Heartbeat): Promise<Proces
   } catch (e) {
     return recordFailure(s, jobId, classify(e, provider), settings);
   }
-  return recordSuccess(s, jobId, result, false);
+  return recordSuccess(s, jobId, result, { simulated, reconciled: false });
 }
 
 /** Checks that need no platform call. A failure here means nothing was sent. */
@@ -217,12 +218,19 @@ async function reconcile(provider: PlatformProvider, req: PublishRequest, upload
   }
 }
 
-async function recordSuccess(s: LoadedSchedule, jobId: string, result: PublishResult, reconciled: boolean): Promise<ProcessResult> {
+async function recordSuccess(
+  s: LoadedSchedule,
+  jobId: string,
+  result: PublishResult,
+  { simulated, reconciled }: { simulated: boolean; reconciled: boolean },
+): Promise<ProcessResult> {
   const now = new Date();
   try {
     // The platform's id is saved first, on its own: if the full update below
     // keeps failing, recovery still sees the post as sent and won't send it again.
-    await persist("save external id", () => db.publishingSchedule.update({ where: { id: s.id }, data: { externalId: result.externalId, externalUrl: result.url } }));
+    await persist("save external id", () =>
+      db.publishingSchedule.update({ where: { id: s.id }, data: { externalId: result.externalId, externalUrl: result.url, simulated } }),
+    );
     await persist("mark published", () =>
       db.$transaction([
         db.publishingSchedule.update({
@@ -255,15 +263,17 @@ async function recordSuccess(s: LoadedSchedule, jobId: string, result: PublishRe
     logActivity({
       contentId: s.contentId,
       type: ActivityType.PUBLISHED,
-      message: `Published to ${s.platform.name} (${s.account.name})${reconciled ? ", confirmed after an interrupted attempt" : ""}`,
-      meta: { url: result.url },
+      message: `${simulated ? "Simulated publish to" : "Published to"} ${s.platform.name} (${s.account.name})${reconciled ? ", confirmed after an interrupted attempt" : ""}`,
+      meta: { url: result.url, simulated },
     }),
   );
   await bestEffort("notification", () =>
     notify({
       type: NotificationType.PUBLISHED,
-      title: "Successfully published",
-      message: `"${s.content.title}" is live on ${s.platform.name}.`,
+      title: simulated ? "Simulated publish complete" : "Successfully published",
+      message: simulated
+        ? `"${s.content.title}" went through the simulated ${s.platform.name} publisher. Nothing was sent to ${s.platform.name}.`
+        : `"${s.content.title}" is live on ${s.platform.name}.`,
       href: `/content/${s.contentId}?tab=publishing`,
       dedupeKey: `published:${s.id}`,
     }),

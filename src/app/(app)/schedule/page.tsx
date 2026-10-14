@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { AccountStatus, JobStatus, ScheduleStatus } from "@/lib/workflow/statuses";
+import { AccountStatus, JobStatus, ScheduleStatus, scheduleLabel } from "@/lib/workflow/statuses";
 import { getQueueData, type QueueData, type QueueRow } from "@/server/queries/schedule";
 import { QueueHeaderActions } from "./_components/header-actions";
 import { FailedActions, RowActions } from "./_components/queue-actions";
@@ -62,7 +62,12 @@ function WorkerCard({ d }: { d: QueueData }) {
     { label: "Processing", value: d.counts.processing, className: "text-amber-700", tab: "upcoming" },
     { label: "Retrying", value: d.counts.retrying, className: "text-orange-700", tab: "failed" },
     { label: "Failed", value: d.counts.failed, className: "text-rose-700", tab: "failed" },
-    { label: "Published", value: d.counts.published, className: "text-olive-700", tab: "published" },
+    {
+      label: d.counts.published > 0 && d.counts.publishedSimulated === d.counts.published ? "Simulated" : "Published",
+      value: d.counts.published,
+      className: "text-olive-700",
+      tab: "published",
+    },
   ];
   return (
     <section className="flex flex-col gap-4 rounded-2xl border bg-card p-4 shadow-card md:flex-row md:items-center" aria-label="Publishing worker">
@@ -76,7 +81,10 @@ function WorkerCard({ d }: { d: QueueData }) {
           <span className="size-2.5 shrink-0 rounded-full bg-stone-300" aria-hidden />
         )}
         <div className="min-w-0">
-          <p className="text-sm font-medium">{w.enabled ? "Publishing worker is running" : "Publishing worker is disabled"}</p>
+          <p className="text-sm font-medium">
+            {w.enabled ? "Publishing worker is running" : "Publishing worker is disabled"}
+            {w.simulated && <span className="font-normal text-orange-800"> · simulated publishing, nothing is sent to the platforms</span>}
+          </p>
           <p className="text-xs text-muted-foreground">
             {w.enabled ? (
               `Checks the queue every ${w.intervalSec} seconds`
@@ -260,7 +268,7 @@ function StatusCell({ r }: { r: QueueRow }) {
   const showError = (r.status === "FAILED" || r.status === "RETRY_SCHEDULED") && r.lastError;
   return (
     <div className="min-w-[150px]">
-      <StatusBadge def={ScheduleStatus} value={r.status} label={r.status === "WAITING" ? "Scheduled" : undefined} />
+      <StatusBadge def={ScheduleStatus} value={r.status} label={scheduleLabel(r.status, r.simulated)} />
       {r.nextAttempt && <p className="mt-1 text-[11px] whitespace-nowrap text-orange-700">Next attempt {r.nextAttempt}</p>}
       {showError && (
         <p className="mt-0.5 max-w-[190px] truncate text-[11px] text-muted-foreground" title={r.lastError ?? undefined}>
@@ -268,7 +276,11 @@ function StatusCell({ r }: { r: QueueRow }) {
         </p>
       )}
       {r.overdue && <p className="mt-1 text-[11px] text-amber-700">Due — goes out on the next worker run</p>}
-      {r.publishedAgo && <p className="mt-1 text-[11px] text-muted-foreground">Published {r.publishedAgo}</p>}
+      {r.publishedAgo && (
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          {r.simulated ? "Simulated" : "Published"} {r.publishedAgo}
+        </p>
+      )}
     </div>
   );
 }

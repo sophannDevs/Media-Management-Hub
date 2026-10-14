@@ -11,7 +11,7 @@ import { StatusBadge } from "@/components/app/status-badge";
 import { useServerAction } from "@/hooks/use-server-action";
 import { zonedToUtc } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import { ScheduleStatus } from "@/lib/workflow/statuses";
+import { ScheduleStatus, scheduleLabel } from "@/lib/workflow/statuses";
 import { rescheduleAction } from "@/server/actions/schedule";
 import type { CalendarData, CalendarEvent } from "@/server/queries/calendar";
 import { calendarHref, decodeContentDrag, DRAG_CONTENT, DRAG_SCHEDULE, FIRST_HOUR, LAST_HOUR, pad2, rowHour } from "./calendar-shared";
@@ -28,10 +28,9 @@ const STATUS_BORDER: Record<string, string> = {
   RETRY_SCHEDULED: "border-l-orange-500",
 };
 
-const statusLabel = (status: string) => (status === "WAITING" ? "Scheduled" : ScheduleStatus.label(status));
 const contentHref = (ev: CalendarEvent) => `/content/${ev.content.id}?tab=publishing`;
 const chipTitle = (ev: CalendarEvent) =>
-  `${ev.content.title}\n${statusLabel(ev.status)} · ${PLATFORM_NAMES[ev.platformId] ?? ev.platformId} · ${ev.accountName}\n${ev.timeLabel}${ev.movable ? "\nDrag to reschedule" : ""}`;
+  `${ev.content.title}\n${scheduleLabel(ev.status, ev.simulated)} · ${PLATFORM_NAMES[ev.platformId] ?? ev.platformId} · ${ev.accountName}\n${ev.timeLabel}${ev.movable ? "\nDrag to reschedule" : ""}`;
 const hasType = (e: DragEvent, type: string) => Array.from(e.dataTransfer.types).includes(type);
 /** Reads the clock — only call from event handlers, never during render. */
 const hasPassed = (at: Date) => at.getTime() <= Date.now();
@@ -334,7 +333,7 @@ function DayChip({ ev, dimmed, onDragStart, onDragEnd }: ChipProps) {
           <span className="tabular-nums">{ev.timeLabel}</span>
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
-          <StatusBadge def={ScheduleStatus} value={ev.status} label={ev.status === "WAITING" ? "Scheduled" : undefined} size="sm" />
+          <StatusBadge def={ScheduleStatus} value={ev.status} label={scheduleLabel(ev.status, ev.simulated)} size="sm" />
           <span className="truncate text-xs text-muted-foreground">{ev.accountName}</span>
         </div>
       </div>

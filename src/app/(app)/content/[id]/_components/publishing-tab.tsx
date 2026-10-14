@@ -12,7 +12,7 @@ import { useRetrySchedule } from "@/components/app/use-retry-schedule";
 import { Button } from "@/components/ui/button";
 import { useServerAction } from "@/hooks/use-server-action";
 import { cn } from "@/lib/utils";
-import { AccountStatus, ScheduleStatus } from "@/lib/workflow/statuses";
+import { AccountStatus, ScheduleStatus, scheduleLabel } from "@/lib/workflow/statuses";
 import { cancelScheduleAction } from "@/server/actions/schedule";
 import type { ContentWorkspace } from "@/server/queries/content";
 
@@ -96,7 +96,7 @@ function ScheduleCard({ s }: { s: Schedule }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-medium">{s.platformName}</p>
-            <StatusBadge def={ScheduleStatus} value={s.status} label={s.status === "WAITING" ? "Scheduled" : undefined} />
+            <StatusBadge def={ScheduleStatus} value={s.status} label={scheduleLabel(s.status, s.simulated)} />
             {s.account.status !== "CONNECTED" && <StatusBadge def={AccountStatus} value={s.account.status} size="sm" />}
           </div>
           <p className="mt-0.5 truncate text-sm text-muted-foreground">{s.account.name} · {s.visibilityLabel} · {s.timezone}</p>
@@ -123,7 +123,11 @@ function ScheduleCard({ s }: { s: Schedule }) {
         </div>
       </div>
 
-      {s.status === "PUBLISHED" && s.publishedLabel && <p className="mt-3 text-xs text-muted-foreground">Published {s.publishedLabel}</p>}
+      {s.status === "PUBLISHED" && s.publishedLabel && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          {s.simulated ? `Simulated publish ${s.publishedLabel}. Nothing was sent to ${s.platformName}.` : `Published ${s.publishedLabel}`}
+        </p>
+      )}
 
       {failed && s.lastError && (
         <div className="mt-4 flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900 sm:flex-row sm:items-center">
