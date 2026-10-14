@@ -19,6 +19,56 @@ test("renders one view: cards on phones, the table elsewhere, and remembers a ch
   await expect(page.getByRole("table")).toHaveCount(isMobile ? 1 : 0);
 });
 
+// UX-02. These change the shared e2e database, so they run once (desktop).
+
+test("changes a production status from the list in one click", async ({ page }, info) => {
+  test.skip(info.project.name !== "desktop", "mutates the shared e2e database");
+  await page.goto("/content?view=table&q=Morning%20Routine");
+  await page.waitForLoadState("networkidle");
+  const row = page.getByRole("row").filter({ hasText: "Morning Routine of Highly Productive People" });
+  await row.getByRole("button", { name: /^Script: Generated/ }).click();
+  await page.getByRole("menuitem", { name: "Needs Revision" }).click();
+  await expect(page.getByText("Script updated")).toBeVisible();
+  await expect(row.getByRole("button", { name: /^Script: Needs Revision/ })).toBeVisible();
+});
+
+test("archiving from the list can be undone", async ({ page }, info) => {
+  test.skip(info.project.name !== "desktop", "mutates the shared e2e database");
+  const title = "Stoic Lessons for Modern Life";
+  await page.goto("/content?view=table&q=Stoic");
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("row").filter({ hasText: title }).getByRole("button", { name: "Actions" }).click();
+  await page.getByRole("menuitem", { name: "Archive" }).click();
+  await page.getByRole("button", { name: "Archive", exact: true }).click();
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(page.getByText("Restored", { exact: true })).toBeVisible();
+  await expect(page.getByRole("row").filter({ hasText: title })).toBeVisible();
+});
+
+test("saves the current filters and sort as a view and reopens it", async ({ page }, info) => {
+  test.skip(info.project.name !== "desktop", "mutates the shared e2e database");
+  await page.goto("/content?priority=HIGH&sort=title&dir=asc");
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "Saved views" }).click();
+  await page.getByRole("menuitem", { name: "Save current view…" }).click();
+  await page.getByLabel("Name").fill("E2E high priority");
+  await page.getByRole("button", { name: "Save view" }).click();
+  await expect(page.getByText("Saved view “E2E high priority”")).toBeVisible();
+
+  await page.goto("/content");
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "Saved views" }).click();
+  await page.getByRole("menuitem", { name: "E2E high priority" }).click();
+  await expect(page).toHaveURL(/\/content\?priority=HIGH&sort=title&dir=asc$/);
+  const menu = page.getByRole("button", { name: "Saved views, showing E2E high priority" });
+  await expect(menu).toBeVisible();
+
+  await page.waitForLoadState("networkidle");
+  await menu.click();
+  await page.getByRole("menuitem", { name: "Delete “E2E high priority”" }).click();
+  await expect(page.getByText("View deleted")).toBeVisible();
+});
+
 test("sorts by a column header, then reverses", async ({ page }) => {
   await page.goto("/content?view=table");
   await page.waitForLoadState("networkidle");

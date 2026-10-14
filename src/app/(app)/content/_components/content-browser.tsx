@@ -26,7 +26,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { CompletionBar, EmptyState, MiniSteps, PriorityBadge } from "@/components/app/content-bits";
+import { CompletionBar, EmptyState, PriorityBadge } from "@/components/app/content-bits";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { ContentThumb, thumbIconFor } from "@/components/app/content-thumb";
 import { PlatformIcon, PlatformStack } from "@/components/app/platform-icon";
@@ -54,6 +54,7 @@ import { cn } from "@/lib/utils";
 import { ContentType, ImageStatus, ReviewStatus, ScriptStatus, Stage, stageLabel, VideoStatus } from "@/lib/workflow/statuses";
 import {
   archiveContentAction,
+  restoreContentAction,
   bulkCategoryAction,
   bulkStatusAction,
   bulkTagAction,
@@ -61,6 +62,7 @@ import {
   duplicateContentAction,
 } from "@/server/actions/content";
 import type { ContentListData, ContentListItem } from "@/server/queries/content";
+import { StatusChips } from "./status-chips";
 
 const STATUS_FIELDS = [
   ["scriptStatus", "Script", ScriptStatus],
@@ -300,7 +302,7 @@ export function ContentBrowser({
                       </div>
                     </TableCell>
                     <TableCell><PlatformStack platforms={c.platforms} /></TableCell>
-                    <TableCell><MiniSteps {...c} /></TableCell>
+                    <TableCell><StatusChips item={c} /></TableCell>
                     <TableCell className="w-32"><CompletionBar value={c.completion} /></TableCell>
                     <TableCell><StatusBadge def={Stage} value={c.stage} label={stageLabel(c.stage, c.simulated)} /></TableCell>
                     <TableCell><PriorityBadge priority={c.priority} /></TableCell>
@@ -336,7 +338,7 @@ export function ContentBrowser({
                   </div>
                   <Link href={`/content/${c.id}`} className="mt-1.5 line-clamp-2 min-h-10 font-medium hover:underline">{c.title}</Link>
                   <div className="mt-3 flex items-center justify-between">
-                    <MiniSteps {...c} />
+                    <StatusChips item={c} />
                     <PriorityBadge priority={c.priority} />
                   </div>
                   <CompletionBar value={c.completion} className="mt-3" />
@@ -370,13 +372,21 @@ export function ContentBrowser({
         description={
           confirm?.kind === "delete"
             ? "This permanently removes the content, its script versions, uploaded media and schedules. This cannot be undone."
-            : "Archived content is hidden from lists and its pending posts are cancelled. You can restore it from Settings."
+            : "Archived content is hidden from lists and its waiting posts are taken out of the queue. You can undo right after, or restore it with its posts from Settings."
         }
         onConfirm={() => {
           if (!confirm) return;
           const target = confirm.ids;
           if (confirm.kind === "delete") run(() => deleteContentAction(target), { onSuccess: clear });
-          else run(() => archiveContentAction(target), { onSuccess: clear });
+          else
+            run(() => archiveContentAction(target), {
+              success: false,
+              onSuccess: (_, message) => {
+                clear();
+                // Undo puts the content and its posts back as they were (WF-07)
+                toast.success(message ?? "Archived", { duration: 10_000, action: { label: "Undo", onClick: () => run(() => restoreContentAction(target, true)) } });
+              },
+            });
         }}
       />
 

@@ -29,6 +29,20 @@ model User {
   createdAt    DateTime      @default(now())
   activities   ActivityLog[]
   sessions     Session[]
+  savedViews   SavedView[]
+}
+
+/// A named set of Content list filters and sort, per user (UX-02)
+model SavedView {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  /// The list's query string without paging, e.g. "stage=READY&sort=priority"
+  query     String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, name])
 }
 
 /// A signed-in browser. The cookie holds a random token; only its SHA-256 is stored here.

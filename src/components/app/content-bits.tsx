@@ -19,45 +19,41 @@ export function PriorityBadge({ priority, className }: { priority: string; class
   );
 }
 
+/** The four production steps behind the S / I / V / R chips, and the status that completes each. */
+export const PRODUCTION_STEPS = [
+  { field: "scriptStatus", key: "S", name: "Script", def: ScriptStatus, done: "APPROVED" },
+  { field: "imageStatus", key: "I", name: "Images", def: ImageStatus, done: "APPROVED" },
+  { field: "videoStatus", key: "V", name: "Video", def: VideoStatus, done: "FINAL" },
+  { field: "reviewStatus", key: "R", name: "Review", def: ReviewStatus, done: "APPROVED" },
+] as const;
+
+export type ProductionStatuses = { scriptStatus: string; imageStatus: string; videoStatus: string; reviewStatus: string };
+
+/** Look of a production chip for a status code. */
+export function stepChipClass(code: string, done: boolean) {
+  const warn = code === "NEEDS_REVISION" || code === "CHANGES_REQUESTED";
+  const busy = ["GENERATING", "EDITING", "IN_REVIEW", "GENERATED"].includes(code);
+  return cn(
+    "flex size-6 items-center justify-center rounded-md text-xs font-semibold",
+    done
+      ? "bg-primary text-primary-foreground"
+      : warn
+        ? "bg-orange-100 text-orange-800 ring-1 ring-orange-200"
+        : busy
+          ? "bg-amber-50 text-amber-800 ring-1 ring-amber-200"
+          : "bg-stone-100 text-muted-foreground",
+  );
+}
+
 /** Compact S / I / V / R production indicator. */
-export function MiniSteps({
-  scriptStatus,
-  imageStatus,
-  videoStatus,
-  reviewStatus,
-}: {
-  scriptStatus: string;
-  imageStatus: string;
-  videoStatus: string;
-  reviewStatus: string;
-}) {
-  const steps = [
-    ["S", "Script", ScriptStatus.label(scriptStatus), scriptStatus, scriptStatus === "APPROVED"],
-    ["I", "Images", ImageStatus.label(imageStatus), imageStatus, imageStatus === "APPROVED"],
-    ["V", "Video", VideoStatus.label(videoStatus), videoStatus, videoStatus === "FINAL"],
-    ["R", "Review", ReviewStatus.label(reviewStatus), reviewStatus, reviewStatus === "APPROVED"],
-  ] as const;
+export function MiniSteps(statuses: ProductionStatuses) {
   return (
     <div className="flex items-center gap-1">
-      {steps.map(([k, name, label, code, done]) => {
-        const warn = code === "NEEDS_REVISION" || code === "CHANGES_REQUESTED";
-        const busy = ["GENERATING", "EDITING", "IN_REVIEW", "GENERATED"].includes(code);
+      {PRODUCTION_STEPS.map((s) => {
+        const code = statuses[s.field];
         return (
-          <span
-            key={k}
-            title={`${name}: ${label}`}
-            className={cn(
-              "flex size-6 items-center justify-center rounded-md text-xs font-semibold",
-              done
-                ? "bg-primary text-primary-foreground"
-                : warn
-                  ? "bg-orange-100 text-orange-800 ring-1 ring-orange-200"
-                  : busy
-                    ? "bg-amber-50 text-amber-800 ring-1 ring-amber-200"
-                    : "bg-stone-100 text-muted-foreground",
-            )}
-          >
-            {k}
+          <span key={s.key} title={`${s.name}: ${s.def.label(code)}`} className={stepChipClass(code, code === s.done)}>
+            {s.key}
           </span>
         );
       })}

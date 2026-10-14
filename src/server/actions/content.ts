@@ -6,6 +6,8 @@ import { ContentType, Priority } from "@/lib/workflow/statuses";
 import * as content from "../services/content";
 import * as imagePrompt from "../services/image-prompt";
 import * as script from "../services/script";
+import * as views from "../services/views";
+import { currentUserId } from "../auth/actor";
 import { requireActionUser } from "../auth/dal";
 import { type ActionResult, ServiceError } from "../errors";
 import { id, ids, runAction } from "./_run";
@@ -127,6 +129,28 @@ export async function bulkStatusAction(contentIds: string[], field: content.Stat
     ({ ids, field, value }) => content.bulkSetStatus(ids, field, value),
     (r) => (r.errors.length ? `Updated ${r.updated}, skipped ${contentIds.length - r.updated}: ${r.errors[0]}` : `Updated ${r.updated} item(s)`),
   );
+}
+
+// ---------- Saved views (UX-02) ----------
+
+/** The signed-in user an action runs as (set by runAction). */
+function actingUser() {
+  const id = currentUserId();
+  if (!id) throw new ServiceError("Sign in again to save views.", undefined, "UNAUTHENTICATED");
+  return id;
+}
+
+export async function saveViewAction(name: string, query: string) {
+  return runAction(
+    z.object({ name: z.string().trim().min(1, "Give the view a name.").max(60, "Keep the name under 60 characters."), query: z.string().max(2000) }),
+    { name, query },
+    ({ name, query }) => views.saveView(actingUser(), name, query),
+    (v) => `Saved view “${v.name}”`,
+  );
+}
+
+export async function deleteViewAction(viewId: string) {
+  return runAction(id, viewId, (id) => views.deleteView(actingUser(), id), "View deleted");
 }
 
 // ---------- Script ----------

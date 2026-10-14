@@ -8,7 +8,8 @@ import type { ActionFailure, ActionResult } from "@/server/errors";
 /**
  * Runs a Server Action inside a transition and shows a toast with the result.
  * Usage: `const { run, pending } = useServerAction(); run(() => doThing(id))`
- * Return `true` from `onError` to handle the failure yourself (no toast).
+ * Return `true` from `onError` to handle the failure yourself (no toast);
+ * `success: false` leaves the success toast to `onSuccess`, which gets the action's message.
  */
 export function useServerAction() {
   const [pending, startTransition] = useTransition();
@@ -16,7 +17,11 @@ export function useServerAction() {
 
   function run<T>(
     action: () => Promise<ActionResult<T>>,
-    opts: { success?: string | false; onSuccess?: (data: T) => void; onError?: (error: string, details?: string[], failure?: ActionFailure) => boolean | void } = {},
+    opts: {
+      success?: string | false;
+      onSuccess?: (data: T, message?: string) => void;
+      onError?: (error: string, details?: string[], failure?: ActionFailure) => boolean | void;
+    } = {},
   ) {
     startTransition(async () => {
       try {
@@ -26,7 +31,7 @@ export function useServerAction() {
         if (r.ok) {
           const msg = opts.success ?? r.message;
           if (msg) toast.success(msg);
-          opts.onSuccess?.(r.data);
+          opts.onSuccess?.(r.data, r.message);
         } else if (r.code === "UNAUTHENTICATED") {
           // The session ended (signed out elsewhere or expired): sign in and come back
           router.push(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);

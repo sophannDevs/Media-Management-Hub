@@ -62,7 +62,7 @@ async function ContentList({ searchParams }: { searchParams: PageProps<"/content
   const [data, view] = await Promise.all([getContentList(params), chooseView(params.view)]);
   return (
     <>
-      <ContentFilters params={params} counts={data.counts} stage={data.stageFilter} sort={data.sort} dir={data.dir} view={view} options={data.options} />
+      <ContentFilters params={params} counts={data.counts} stage={data.stageFilter} sort={data.sort} dir={data.dir} view={view} views={data.views} options={data.options} />
       <ContentBrowser
         items={data.items}
         page={data.page}
@@ -84,7 +84,10 @@ function ListSkeleton() {
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <Skeleton className="h-10 w-full max-w-[620px] rounded-xl" />
-          <Skeleton className="ml-auto h-10 w-[170px] rounded-xl" />
+          <div className="ml-auto flex items-center gap-2">
+            <Skeleton className="h-10 w-[96px] rounded-md" />
+            <Skeleton className="h-10 w-[170px] rounded-xl" />
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-card p-3 shadow-card">
           <Skeleton className="h-9 min-w-[220px] flex-1" />

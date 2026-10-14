@@ -7,7 +7,9 @@ import { checklist, completion, deriveStage, imageStage, isReadyToPost, missingR
 import { Priority, PRODUCTION_STAGES, Stage } from "@/lib/workflow/statuses";
 import { isClaudeConfigured } from "@/lib/ai/claude";
 import { type ContentListParams, type ContentSort, parseSort, type SortDir } from "@/lib/content-list";
+import { requireUser } from "../auth/dal";
 import { toContentState } from "../services/content-state";
+import { listViews } from "../services/views";
 import { contentSummarySelect, getContentFormOptions, getPageContext, onlySimulatedPosts, toSummary } from "./shared";
 
 // ---------- List ----------
@@ -89,8 +91,9 @@ function stageSql(stage: string) {
  */
 export async function getContentList(params: ContentListParams) {
   const ctx = await getPageContext();
+  const [page, views] = await Promise.all([listPage(params, ctx), listViews((await requireUser()).id)]);
   // The row a link paged from was deleted (or nothing is left past it): start over
-  return (await listPage(params, ctx)) ?? (await listPage({ ...params, after: undefined, before: undefined }, ctx))!;
+  return { ...(page ?? (await listPage({ ...params, after: undefined, before: undefined }, ctx))!), views };
 }
 
 async function listPage(params: ContentListParams, { now, tz }: { now: Date; tz: string }) {

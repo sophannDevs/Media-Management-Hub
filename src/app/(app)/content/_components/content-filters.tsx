@@ -11,6 +11,7 @@ import { buildHref, CONTENT_SORTS, type ContentListParams, type ContentSort, typ
 import { cn } from "@/lib/utils";
 import { Priority, Stage } from "@/lib/workflow/statuses";
 import type { ContentFormOptions } from "@/server/queries/shared";
+import { SavedViews, type SavedViewItem } from "./saved-views";
 
 const ALL = "__all";
 const QUICK = [
@@ -35,6 +36,7 @@ export function ContentFilters({
   sort,
   dir,
   view,
+  views,
   options,
 }: {
   params: ContentListParams;
@@ -43,6 +45,7 @@ export function ContentFilters({
   sort: ContentSort;
   dir: SortDir;
   view: ContentView;
+  views: SavedViewItem[];
   options: ContentFormOptions;
 }) {
   const router = useRouter();
@@ -94,28 +97,31 @@ export function ContentFilters({
             )}
           </div>
         </div>
-        <div className="ml-auto inline-flex gap-1 rounded-xl border border-[#ebe7c6] bg-secondary p-1">
-          {(
-            [
-              ["table", "Table", Rows3],
-              ["cards", "Cards", LayoutGrid],
-            ] as const
-          ).map(([v, label, Icon]) => (
-            <Link
-              key={v}
-              href={buildHref(params, { view: v })}
-              scroll={false}
-              onClick={() => rememberView(v)}
-              aria-current={view === v ? "true" : undefined}
-              className={cn(
-                "flex h-8 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium",
-                view === v ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <Icon className="size-3.5" />
-              {label}
-            </Link>
-          ))}
+        <div className="ml-auto flex items-center gap-2">
+          <SavedViews views={views} params={params} />
+          <div className="inline-flex gap-1 rounded-xl border border-[#ebe7c6] bg-secondary p-1">
+            {(
+              [
+                ["table", "Table", Rows3],
+                ["cards", "Cards", LayoutGrid],
+              ] as const
+            ).map(([v, label, Icon]) => (
+              <Link
+                key={v}
+                href={buildHref(params, { view: v })}
+                scroll={false}
+                onClick={() => rememberView(v)}
+                aria-current={view === v ? "true" : undefined}
+                className={cn(
+                  "flex h-8 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium",
+                  view === v ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Icon className="size-3.5" />
+                {label}
+              </Link>
+            ))}
+          </div>
         </div>
       </div>
 

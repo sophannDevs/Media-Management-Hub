@@ -44,6 +44,21 @@ export function parseSort(params: Pick<ContentListParams, "sort" | "dir">): { so
 }
 
 /**
+ * A list query string as a saved view stores it (UX-02): known parameters
+ * only, without the page cursors, in a fixed order, so equal views compare equal.
+ */
+export function viewQuery(query: string | ContentListParams) {
+  const sp = typeof query === "string" ? new URLSearchParams(query.replace(/^\?/, "")) : null;
+  const out = new URLSearchParams();
+  for (const k of LIST_PARAMS) {
+    if (k === "after" || k === "before") continue;
+    const v = (sp ? sp.get(k) : (query as ContentListParams)[k])?.trim();
+    if (v && !(k === "stage" && v === "ALL")) out.set(k, v.slice(0, 200));
+  }
+  return out.toString();
+}
+
+/**
  * Link to the list with some parameters changed. Any change other than the
  * page itself starts again from the first page.
  */
