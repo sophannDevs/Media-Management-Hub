@@ -6,6 +6,7 @@ import { ContentType, Priority } from "@/lib/workflow/statuses";
 import * as content from "../services/content";
 import * as imagePrompt from "../services/image-prompt";
 import * as script from "../services/script";
+import { requireActionUser } from "../auth/dal";
 import { type ActionResult, ServiceError } from "../errors";
 import { id, ids, runAction } from "./_run";
 
@@ -82,9 +83,10 @@ export async function deleteContentAndRedirectAction(contentId: string): Promise
   const parsed = id.safeParse(contentId);
   if (!parsed.success) return { ok: false, error: "Invalid content." };
   try {
+    await requireActionUser();
     await content.deleteContents([parsed.data]);
   } catch (e) {
-    if (e instanceof ServiceError) return { ok: false, error: e.message };
+    if (e instanceof ServiceError) return { ok: false, error: e.message, code: e.code };
     throw e;
   }
   redirect("/content");

@@ -5,6 +5,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { db } from "../src/lib/db";
 import { zonedToUtc } from "../src/lib/dates";
 import { scheduleActiveKey, wordCount } from "../src/lib/workflow/rules";
+import { hashPassword } from "../src/server/auth/password";
 import { syncMockAnalytics } from "../src/server/services/analytics-sync";
 import { syncAllPublishingStatuses } from "../src/server/services/content";
 
@@ -160,7 +161,11 @@ async function main() {
   console.log("Seeding demo data…");
   await wipe();
 
-  await db.user.create({ data: { name: "Workspace Owner", email: "owner@mediaflow.local" } });
+  // No password: the first visit opens /setup. Tests set SEED_OWNER_PASSWORD to sign in directly.
+  const ownerPassword = process.env.SEED_OWNER_PASSWORD;
+  await db.user.create({
+    data: { name: "Workspace Owner", email: "owner@mediaflow.local", ...(ownerPassword ? { passwordHash: await hashPassword(ownerPassword) } : {}) },
+  });
   await db.workspaceSettings.create({ data: { id: 1, timezone: TZ } });
 
   const platforms = [

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
 import type { ActionFailure, ActionResult } from "@/server/errors";
@@ -11,6 +12,7 @@ import type { ActionFailure, ActionResult } from "@/server/errors";
  */
 export function useServerAction() {
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   function run<T>(
     action: () => Promise<ActionResult<T>>,
@@ -25,6 +27,9 @@ export function useServerAction() {
           const msg = opts.success ?? r.message;
           if (msg) toast.success(msg);
           opts.onSuccess?.(r.data);
+        } else if (r.code === "UNAUTHENTICATED") {
+          // The session ended (signed out elsewhere or expired): sign in and come back
+          router.push(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
         } else {
           if (opts.onError?.(r.error, r.details, r) === true) return;
           toast.error(r.error, { description: r.details?.join(" · ") });

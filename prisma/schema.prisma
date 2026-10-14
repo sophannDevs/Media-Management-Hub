@@ -13,13 +13,37 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// Single workspace owner for now; authentication is added in a later phase.
+/// The workspace owner (single user for now; roles come later).
 model User {
-  id         String        @id @default(cuid())
-  name       String
-  email      String        @unique
-  createdAt  DateTime      @default(now())
-  activities ActivityLog[]
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  /// Argon2id PHC string. Null until the owner sets a password at /setup.
+  passwordHash String?
+  /// OWNER for now
+  role         String        @default("OWNER")
+  /// Failed sign-ins in a row; at 5 the account is locked for 15 minutes
+  failedLogins Int           @default(0)
+  lockedUntil  DateTime?
+  lastLoginAt  DateTime?
+  createdAt    DateTime      @default(now())
+  activities   ActivityLog[]
+  sessions     Session[]
+}
+
+/// A signed-in browser. The cookie holds a random token; only its SHA-256 is stored here.
+model Session {
+  /// SHA-256 (hex) of the cookie token
+  id         String   @id
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+  lastSeenAt DateTime @default(now())
+  userAgent  String   @default("")
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 /// Workspace-wide configuration (single row, id = 1).

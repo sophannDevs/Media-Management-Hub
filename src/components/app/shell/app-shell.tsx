@@ -5,18 +5,22 @@ import { CreateContentDialog } from "@/components/app/create-content-dialog";
 import { ScheduleDialogProvider } from "@/components/app/schedule-dialog";
 import { Button } from "@/components/ui/button";
 import { timeAgo } from "@/lib/dates";
+import { requireUser } from "@/server/auth/dal";
 import { getContentFormOptions, getNavCounts, getNotifications, getNow } from "@/server/queries/shared";
 import { NotificationsMenu } from "./notifications-menu";
 import { SearchBox } from "./search-box";
 import { MobileNav, Sidebar } from "./sidebar-nav";
 import { SimulationBanner } from "./simulation-banner";
+import { UserFooter } from "./user-footer";
 
 async function SidebarWithCounts() {
-  return <Sidebar counts={await getNavCounts()} />;
+  const [counts, user] = await Promise.all([getNavCounts(), requireUser()]);
+  return <Sidebar counts={counts} footer={<UserFooter name={user.name} email={user.email} />} />;
 }
 
 async function MobileNavWithCounts() {
-  return <MobileNav counts={await getNavCounts()} />;
+  const [counts, user] = await Promise.all([getNavCounts(), requireUser()]);
+  return <MobileNav counts={counts} footer={<UserFooter name={user.name} email={user.email} />} />;
 }
 
 async function Notifications() {
@@ -33,6 +37,7 @@ async function Notifications() {
 export async function CreateContentButton({ trigger }: { trigger?: ReactNode }) {
   // Request time only: the options are cached across requests, never filled at build time
   await io();
+  await requireUser();
   return <CreateContentDialog options={await getContentFormOptions()} trigger={trigger} />;
 }
 
@@ -48,13 +53,13 @@ export function CreateContentButtonFallback() {
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <ScheduleDialogProvider>
-      <Suspense fallback={<Sidebar />}>
+      <Suspense fallback={<Sidebar footer={<UserFooter />} />}>
         <SidebarWithCounts />
       </Suspense>
       <div className="flex min-h-screen flex-col lg:pl-64">
         <header className="sticky top-0 z-30 h-16 border-b border-sidebar-border bg-background/85 backdrop-blur">
           <div className="flex h-full items-center gap-3 px-4 md:px-8">
-            <Suspense fallback={<MobileNav />}>
+            <Suspense fallback={<MobileNav footer={<UserFooter />} />}>
               <MobileNavWithCounts />
             </Suspense>
             <SearchBox />

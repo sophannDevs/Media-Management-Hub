@@ -7,10 +7,12 @@ import { dayKey, timeKey } from "@/lib/dates";
 import { mediaUrl } from "@/lib/media-url";
 import { providerMeta } from "@/lib/platforms/registry";
 import { isReadyToPost, missingRequirements } from "@/lib/workflow/rules";
+import { requireActionUser } from "../auth/dal";
 import { contentStateSelect, toContentState } from "../services/content-state";
 import { getSettings, rulesFrom } from "../services/settings";
 
 export async function getScheduleFormData(input: { contentId?: string | null; scheduleId?: string | null }) {
+  await requireActionUser();
   const settings = await getSettings();
   const rules = rulesFrom(settings);
   const schedule = input.scheduleId ? await db.publishingSchedule.findUnique({ where: { id: input.scheduleId } }) : null;
@@ -96,9 +98,11 @@ export type ScheduleFormData = Awaited<ReturnType<typeof getScheduleFormData>>;
 
 /** Content picker options for the media upload dialog. */
 export async function getContentPickerOptions() {
+  await requireActionUser();
   return db.content.findMany({ where: { archivedAt: null }, orderBy: { updatedAt: "desc" }, select: { id: true, title: true } });
 }
 
 export async function getScriptPromptOptions() {
+  await requireActionUser();
   return db.aiPrompt.findMany({ where: { category: "SCRIPT" }, orderBy: { updatedAt: "desc" }, select: { id: true, name: true } });
 }

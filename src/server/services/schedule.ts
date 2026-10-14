@@ -4,6 +4,7 @@ import { fmtDateTime, zonedToUtc } from "@/lib/dates";
 import { getProvider } from "@/lib/platforms/registry";
 import { normalizeHashtags, type Requirement, scheduleActiveKey, validateSchedule } from "@/lib/workflow/rules";
 import { ActivityType, ScheduleStatus } from "@/lib/workflow/statuses";
+import { currentUserId } from "../auth/actor";
 import { ServiceError } from "../errors";
 import { logActivity } from "./activity";
 import { getReadiness, syncPublishingStatus } from "./content";
@@ -35,8 +36,7 @@ const NO_OVERRIDE = { overrideRules: Prisma.DbNull, overrideReason: null, overri
 function overrideData(missing: Requirement[], override: ScheduleInput["override"]) {
   const waived = missing.filter((m) => !m.hard).map((m) => m.key);
   if (!override || !waived.length) return { columns: NO_OVERRIDE, waived: [] as string[] };
-  // overrideBy is filled with the signed-in user once sign-in exists (SEC-01)
-  return { columns: { overrideRules: waived, overrideReason: override.reason.trim(), overrideAt: new Date(), overrideBy: null }, waived };
+  return { columns: { overrideRules: waived, overrideReason: override.reason.trim(), overrideAt: new Date(), overrideBy: currentUserId() }, waived };
 }
 
 async function logOverride(contentId: string, scheduleId: string, platform: string, missing: Requirement[], reason: string) {

@@ -4,9 +4,19 @@
 // leaves behind) and the seeded e2e database from an e2e run
 // (E2E_DATABASE_URL, or mediaflow_e2e on the local cluster).
 import { execFileSync, spawn } from "node:child_process";
+import { createHash, randomBytes } from "node:crypto";
+import prisma from "@prisma/client";
 
 const databaseUrl =
   process.env.E2E_DATABASE_URL ?? execFileSync(process.execPath, ["scripts/db-local.mjs", "url", "mediaflow_e2e"], { encoding: "utf8" }).trim();
+
+// Pages need a session: create one for the seeded owner directly in the e2e database
+const db = new prisma.PrismaClient({ datasources: { db: { url: databaseUrl } } });
+const owner = await db.user.findFirstOrThrow({ orderBy: { createdAt: "asc" } });
+const token = randomBytes(32).toString("base64url");
+await db.session.create({ data: { id: createHash("sha256").update(token).digest("hex"), userId: owner.id, expiresAt: new Date(Date.now() + 3_600_000) } });
+await db.$disconnect();
+const cookie = `mf_session=${token}`;
 
 const port = Number(process.env.MEASURE_PORT ?? 3230);
 const routes = process.argv.slice(2).length ? process.argv.slice(2) : ["/", "/content", "/calendar", "/schedule", "/media", "/prompts", "/accounts", "/analytics", "/settings"];
@@ -28,16 +38,16 @@ server.stdout.on("data", (chunk) => (queries += (String(chunk).match(/prisma:que
 
 try {
   for (let i = 0; ; i++) {
-    if (await fetch(url("/")).then((r) => r.ok, () => false)) break;
+    if (await fetch(url("/login")).then((r) => r.ok, () => false)) break;
     if (i > 120) throw new Error("server did not start");
     await sleep(500);
   }
   console.log("route        queries");
   for (const route of routes) {
-    await (await fetch(url(route))).text(); // warm up (compile caches, first-request work)
+    await (await fetch(url(route), { headers: { cookie } })).text(); // warm up (compile caches, first-request work)
     await sleep(300);
     queries = 0;
-    await (await fetch(url(route))).text();
+    await (await fetch(url(route), { headers: { cookie } })).text();
     await sleep(500);
     console.log(`${route.padEnd(12)} ${queries}`);
   }

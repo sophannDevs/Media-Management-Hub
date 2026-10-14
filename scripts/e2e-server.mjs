@@ -33,6 +33,8 @@ const env = {
   STORAGE_DIR: "./.e2e-storage",
   PUBLISH_WORKER_ENABLED: "false",
   NEXT_TELEMETRY_DISABLED: "1",
+  // The seeded owner signs in with this (tests/e2e/auth.setup.ts)
+  SEED_OWNER_PASSWORD: process.env.E2E_OWNER_PASSWORD ?? "e2e-owner-password",
 };
 
 function run(args) {

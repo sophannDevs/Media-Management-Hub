@@ -8,6 +8,7 @@ import { type PlatformProvider, PublishError, type PublishMedia, type PublishReq
 import { storage } from "@/lib/storage";
 import { blockingRequirements, missingRequirements } from "@/lib/workflow/rules";
 import { ActivityType, NotificationType } from "@/lib/workflow/statuses";
+import { purgeExpiredSessions } from "../auth/session";
 import { logActivity } from "./activity";
 import { syncMockAnalytics } from "./analytics-sync";
 import { contentStateSelect, toContentState } from "./content-state";
@@ -483,4 +484,5 @@ export async function runMaintenance(now = new Date()) {
   }
 
   await syncMockAnalytics(now);
+  await purgeExpiredSessions();
 }

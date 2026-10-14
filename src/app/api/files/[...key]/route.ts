@@ -1,9 +1,12 @@
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { storage } from "@/lib/storage";
+import { unauthorizedResponse } from "@/server/auth/dal";
 
 // Streams uploaded media. Supports HTTP Range requests so videos can seek.
 export async function GET(req: NextRequest, ctx: RouteContext<"/api/files/[...key]">) {
+  const unauthorized = await unauthorizedResponse();
+  if (unauthorized) return unauthorized;
   const { key: parts } = await ctx.params;
   const key = parts.map(decodeURIComponent).join("/");
 

@@ -108,7 +108,7 @@ export function Sidebar({ counts, footer }: { counts?: NavCounts; footer?: React
   );
 }
 
-export function MobileNav({ counts }: { counts?: NavCounts }) {
+export function MobileNav({ counts, footer }: { counts?: NavCounts; footer?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -121,6 +121,7 @@ export function MobileNav({ counts }: { counts?: NavCounts }) {
         <SheetTitle className="sr-only">Navigation</SheetTitle>
         <Brand workspaceName={counts?.workspaceName} />
         <NavLinks counts={counts} onNavigate={() => setOpen(false)} />
+        {footer}
       </SheetContent>
     </Sheet>
   );

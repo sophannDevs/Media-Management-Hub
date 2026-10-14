@@ -7,7 +7,9 @@ export type ServiceErrorCode =
   /** The post changed (e.g. the worker started publishing it) since it was loaded. */
   | "CONFLICT"
   /** The last attempt may have gone live; resubmit with confirmation after checking the platform. */
-  | "CONFIRM_UNKNOWN_OUTCOME";
+  | "CONFIRM_UNKNOWN_OUTCOME"
+  /** No valid session: the client sends the user to /login. */
+  | "UNAUTHENTICATED";
 
 /** An error whose message is safe to show to the user. */
 export class ServiceError extends Error {

@@ -4,6 +4,7 @@ import { cache } from "react";
 import { db } from "@/lib/db";
 import { mediaUrl } from "@/lib/media-url";
 import { completion, deriveStage, missingRequirements, type WorkflowRules } from "@/lib/workflow/rules";
+import { requireUser } from "../auth/dal";
 import { CACHE_TAGS } from "../cache-tags";
 import { contentStateSelect, toContentState } from "../services/content-state";
 import { getSettings, rulesFrom } from "../services/settings";
@@ -24,9 +25,10 @@ export async function getNow() {
   return new Date();
 }
 
-/** Settings + rules + "now" — what most pages need to render. */
+/** Settings + rules + "now" — what most pages need to render. Every page loader starts here, so it checks the session. */
 export async function getPageContext() {
   const now = await getNow();
+  await requireUser();
   const settings = await getRenderSettings();
   return { now, settings, rules: rulesFrom(settings), tz: settings.timezone };
 }
@@ -34,6 +36,7 @@ export async function getPageContext() {
 /** Sidebar, mobile nav and the bell all show these: one query per request. */
 export const getNavCounts = cache(async () => {
   await io();
+  await requireUser();
   const [[row], settings] = await Promise.all([
     db.$queryRaw<{ content: bigint | number; failed: bigint | number; accountIssues: bigint | number; unread: bigint | number }[]>`
       SELECT
@@ -55,6 +58,7 @@ export const getNavCounts = cache(async () => {
 
 export const getNotifications = cache(async (limit: number = 20) => {
   await io();
+  await requireUser();
   return db.notification.findMany({ orderBy: { createdAt: "desc" }, take: limit });
 });
 

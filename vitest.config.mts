@@ -23,7 +23,7 @@ export default defineConfig({
           name: "integration",
           include: ["tests/integration/**/*.test.ts"],
           globalSetup: ["tests/setup/template-db.ts"],
-          setupFiles: ["tests/setup/test-db.ts"],
+          setupFiles: ["tests/setup/test-db.ts", "tests/setup/signed-in.ts"],
           testTimeout: 30_000,
           hookTimeout: 60_000,
         },

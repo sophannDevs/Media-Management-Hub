@@ -3,11 +3,14 @@ import { csvCell } from "@/lib/csv";
 import { db } from "@/lib/db";
 import { fmt } from "@/lib/dates";
 import { ContentType, ImageStatus, Priority, PublishingStatus, ReviewStatus, ScriptStatus, VideoStatus } from "@/lib/workflow/statuses";
+import { unauthorizedResponse } from "@/server/auth/dal";
 import { getSettings } from "@/server/services/settings";
 
 /** CSV export of all (non-archived) content with statuses and the next scheduled post. */
 export async function GET() {
   await connection(); // always run at request time
+  const unauthorized = await unauthorizedResponse();
+  if (unauthorized) return unauthorized;
   const { timezone: tz } = await getSettings();
   const rows = await db.content.findMany({
     where: { archivedAt: null },
