@@ -31,7 +31,9 @@ Tests never touch `prisma/dev.db` or `./storage`. The first `test:e2e` run needs
 | `STORAGE_DIR` | Where uploaded media is stored (default `./storage`). |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Enables **Generate with Claude** for scripts (default model `claude-opus-5-5`). Without a key, generation produces a mock draft. |
 | `PUBLISH_WORKER_ENABLED`, `PUBLISH_WORKER_INTERVAL_SECONDS` | The in-process publishing worker checks the queue every N seconds while the server runs. |
-| `CRON_SECRET` | Protects `POST /api/cron/publish`, which you can call from an external scheduler instead of the in-process worker. |
+| `CRON_SECRET` | Enables `POST /api/cron/publish` for an external scheduler (send `Authorization: Bearer <secret>`). Empty = the endpoint is disabled (503). |
+| `ALLOWED_ORIGINS` | Extra hosts allowed to POST to the API (CSRF check), e.g. behind a reverse proxy. The app's own host is always allowed. |
+| `HTTPS_ONLY` | `true` when served over HTTPS: adds HSTS and `upgrade-insecure-requests` to the security headers. |
 | `MOCK_PUBLISH_FAILURE_RATE` | Optional, e.g. `0.2`: makes the simulated publisher fail randomly so you can exercise the retry flow. |
 
 ## What's implemented (Phase 1)

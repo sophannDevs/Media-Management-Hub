@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { rejectCrossSite } from "@/lib/security/origin";
 import { makeStorageKey, storage } from "@/lib/storage";
 import { MediaType } from "@/lib/workflow/statuses";
 import { ServiceError } from "@/server/errors";
@@ -20,6 +21,9 @@ const ALLOWED: Record<string, RegExp> = {
 };
 
 export async function POST(req: Request) {
+  const crossSite = rejectCrossSite(req);
+  if (crossSite) return crossSite;
+
   let form: FormData;
   try {
     form = await req.formData();

@@ -179,7 +179,7 @@ function UploadForm({ contents, defaultType, defaultContentId, onDone }: { conte
           </TabsContent>
           <TabsContent value="link">
             <form id="link-media-form" onSubmit={link} className="grid gap-4 sm:grid-cols-2">
-              <Field label="File URL" required className="sm:col-span-2" hint="A direct link to the file, e.g. on Google Drive, Dropbox or a CDN.">
+              <Field label="File URL" required className="sm:col-span-2" hint="A direct https link to the file, e.g. on Google Drive, Dropbox or a CDN. Only https links are allowed.">
                 <Input type="url" required aria-label="File URL" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" />
               </Field>
               <Field label="File name" hint="Optional — taken from the URL when empty." className={timed ? undefined : "sm:col-span-2"}>

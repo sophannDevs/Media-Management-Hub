@@ -1,13 +1,9 @@
 import { connection } from "next/server";
+import { csvCell } from "@/lib/csv";
 import { db } from "@/lib/db";
 import { fmt } from "@/lib/dates";
 import { ContentType, ImageStatus, Priority, PublishingStatus, ReviewStatus, ScriptStatus, VideoStatus } from "@/lib/workflow/statuses";
 import { getSettings } from "@/server/services/settings";
-
-function csvCell(v: unknown) {
-  const s = v === null || v === undefined ? "" : String(v);
-  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
 
 /** CSV export of all (non-archived) content with statuses and the next scheduled post. */
 export async function GET() {

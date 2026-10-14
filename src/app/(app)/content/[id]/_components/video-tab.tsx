@@ -157,7 +157,7 @@ function LinkVideoForm({ contentId, onDone }: { contentId: string; onDone?: () =
         run(() => linkMediaAction({ contentId, type: "VIDEO", url }), { onSuccess: () => { setUrl(""); onDone?.(); } });
       }}
     >
-      <Input value={url} onChange={(e) => setUrl(e.target.value)} type="url" placeholder="…or paste a video URL (Google Drive, Dropbox, S3)" aria-label="Video URL" />
+      <Input value={url} onChange={(e) => setUrl(e.target.value)} type="url" placeholder="…or paste an https video link (Google Drive, Dropbox, S3)" aria-label="Video URL (https only)" />
       <Button type="submit" variant="outline" disabled={pending || !url.trim()}><Link2 />Link</Button>
     </form>
   );

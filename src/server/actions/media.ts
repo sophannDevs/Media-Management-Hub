@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { mediaLinkProblem } from "@/lib/security/url";
 import { MediaType } from "@/lib/workflow/statuses";
 import * as media from "../services/media";
 import { id, runAction } from "./_run";
@@ -31,7 +32,10 @@ export async function linkMediaAction(input: { contentId?: string | null; type: 
     z.object({
       contentId: z.string().nullish(),
       type: z.enum(MediaType.codes as [string, ...string[]]),
-      url: z.url("Enter a valid URL."),
+      url: z.string().trim().superRefine((url, ctx) => {
+        const problem = mediaLinkProblem(url);
+        if (problem) ctx.addIssue({ code: "custom", message: problem });
+      }),
       fileName: z.string().max(200).optional(),
       durationSec: z.number().positive().nullish(),
     }),
