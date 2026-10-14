@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/platforms/registry", async () => (await import("../helpers/fake-provider")).fakeRegistry);
 
@@ -17,23 +17,78 @@ vi.mock("@/server/services/content", async (importOriginal) => {
 });
 
 import { db } from "@/lib/db";
-import { updateSchedule } from "@/server/services/schedule";
+import { ServiceError } from "@/server/errors";
+import { cancelSchedule, reschedule, retrySchedule, updateSchedule } from "@/server/services/schedule";
 import { createAccount, createReadyContent, inMinutes, insertSchedule, seedPlatforms } from "../helpers/factories";
 
-describe("user edits racing the worker", () => {
-  it.fails("PUB-04: an edit is refused when the worker claims the post mid-edit", async () => {
-    await seedPlatforms();
-    const account = await createAccount("youtube");
-    const content = await createReadyContent();
-    const s = await insertSchedule(content.id, account.id, { scheduledAt: new Date(Date.now() + 3_600_000) });
+const claimByWorker = (id: string) => db.publishingSchedule.update({ where: { id }, data: { status: "PROCESSING", attempts: 1, lockedBy: "worker", lockedUntil: new Date(Date.now() + 60_000) } });
 
-    // The worker claims the post after the edit has checked its status
-    hooks.duringValidation = () => db.publishingSchedule.update({ where: { id: s.id }, data: { status: "PROCESSING", attempts: 1 } });
+/** Makes the next read of `id` return the row as it was, then lets the worker claim it before the write. */
+function claimAfterNextRead(id: string) {
+  const original = db.publishingSchedule.findUnique.bind(db.publishingSchedule);
+  const spy = vi.spyOn(db.publishingSchedule, "findUnique").mockImplementationOnce((async (args: Parameters<typeof original>[0]) => {
+    const stale = await original(args);
+    await claimByWorker(id);
+    return stale;
+  }) as unknown as typeof original);
+  return spy;
+}
+
+async function post(status: string) {
+  await seedPlatforms();
+  const account = await createAccount("youtube");
+  const content = await createReadyContent();
+  const s = await insertSchedule(content.id, account.id, {
+    status,
+    scheduledAt: new Date(Date.now() + 3_600_000),
+    activeKey: status === "WAITING" ? `${content.id}:${account.id}` : null,
+  });
+  return { account, content, s };
+}
+
+async function expectStillClaimed(id: string) {
+  const after = await db.publishingSchedule.findUniqueOrThrow({ where: { id } });
+  expect(after.status).toBe("PROCESSING");
+  expect(after.attempts).toBe(1);
+}
+
+beforeEach(() => {
+  hooks.duringValidation = null;
+  vi.restoreAllMocks();
+});
+
+describe("user edits racing the worker (PUB-04)", () => {
+  it("an edit is refused when the worker claims the post mid-edit", async () => {
+    const { account, content, s } = await post("WAITING");
+    hooks.duringValidation = () => claimByWorker(s.id);
+
     const edit = updateSchedule(s.id, { contentId: content.id, platformId: "youtube", accountId: account.id, title: "Edited", ...inMinutes(90) });
 
-    await expect(edit).rejects.toThrow();
-    const after = await db.publishingSchedule.findUniqueOrThrow({ where: { id: s.id } });
-    expect(after.status).toBe("PROCESSING");
-    expect(after.attempts).toBe(1);
+    await expect(edit).rejects.toMatchObject({ code: "CONFLICT" });
+    await expectStillClaimed(s.id);
+  });
+
+  it("a reschedule is refused when the worker claims the post first", async () => {
+    const { s } = await post("WAITING");
+    claimAfterNextRead(s.id);
+
+    await expect(reschedule(s.id, new Date(Date.now() + 7_200_000))).rejects.toBeInstanceOf(ServiceError);
+    await expectStillClaimed(s.id);
+  });
+
+  it("a cancel is refused when the worker claims the post first", async () => {
+    const { s } = await post("WAITING");
+    claimAfterNextRead(s.id);
+
+    await expect(cancelSchedule(s.id)).rejects.toMatchObject({ code: "CONFLICT" });
+    await expectStillClaimed(s.id);
+  });
+
+  it("a retry is refused when the worker claims the post first", async () => {
+    const { s } = await post("FAILED");
+    claimAfterNextRead(s.id);
+
+    await expect(retrySchedule(s.id)).rejects.toMatchObject({ code: "CONFLICT" });
+    await expectStillClaimed(s.id);
   });
 });

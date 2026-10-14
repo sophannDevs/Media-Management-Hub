@@ -47,5 +47,6 @@ next-env.d.ts
 # local data
 /prisma/*.db
 /prisma/*.db-journal
+/prisma/backups/
 /storage
 !.env.example

@@ -1,14 +1,20 @@
-import { PublishError, type PublishRequest } from "./types";
+import { PublishError, type PublishContext, type PublishRequest, type PublishResult, type ReconcileResult } from "./types";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// What the simulated platform has "posted", by schedule id. Kept until the
+// server restarts, like a platform that remembers its uploads.
+const g = globalThis as unknown as { __mediaflowSimulatedPosts?: Map<string, PublishResult> };
+const posted = (g.__mediaflowSimulatedPosts ??= new Map());
 
 /**
  * Shared simulated publish used until real OAuth integrations exist.
  * Fails the same way the real APIs would for the common cases, so the
  * retry / error-handling flow can be exercised end to end.
  */
-export async function simulatePublish(platform: string, req: PublishRequest, urlFor: (id: string) => string) {
-  await sleep(600 + Math.random() * 600);
+export async function simulatePublish(platform: string, req: PublishRequest, ctx: PublishContext, urlFor: (id: string) => string) {
+  await sleep(300 + Math.random() * 300);
+  ctx.progress({ bytesSent: 0, totalBytes: req.video?.size });
 
   if (req.account.status === "TOKEN_EXPIRED" || (req.account.tokenExpiresAt && req.account.tokenExpiresAt < new Date())) {
     throw new PublishError(
@@ -37,6 +43,16 @@ export async function simulatePublish(platform: string, req: PublishRequest, url
     );
   }
 
+  await sleep(300 + Math.random() * 300);
+  ctx.progress({ bytesSent: req.video.size, totalBytes: req.video.size });
   const externalId = `${platform.slice(0, 2)}_${Math.random().toString(36).slice(2, 12)}`;
-  return { externalId, url: urlFor(externalId) };
+  const result = { externalId, url: urlFor(externalId) };
+  posted.set(req.scheduleId, result);
+  return result;
+}
+
+/** Answers "did this post go out?" from the simulated platform's memory. */
+export async function simulateReconcile(req: PublishRequest): Promise<ReconcileResult> {
+  const result = posted.get(req.scheduleId);
+  return result ? { status: "published", result } : { status: "not_found" };
 }

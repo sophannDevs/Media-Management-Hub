@@ -4,7 +4,7 @@ import path from "node:path";
 import { formatInTimeZone } from "date-fns-tz";
 import { db } from "../src/lib/db";
 import { zonedToUtc } from "../src/lib/dates";
-import { wordCount } from "../src/lib/workflow/rules";
+import { scheduleActiveKey, wordCount } from "../src/lib/workflow/rules";
 import { syncMockAnalytics } from "../src/server/services/analytics-sync";
 import { syncAllPublishingStatuses } from "../src/server/services/content";
 
@@ -274,6 +274,7 @@ async function main() {
         hashtags: c.tags.map((t) => `#${t.replace(/\s/g, "")}`).join(" "),
         visibility: extra?.visibility ?? (platformId === "youtube" ? "PUBLIC" : "PUBLISH"),
         status,
+        activeKey: scheduleActiveKey(status, ids[key], accounts[acc as keyof typeof accounts].id),
         attempts: status === "FAILED" || status === "RETRY_SCHEDULED" ? 1 : status === "PUBLISHED" ? 1 : 0,
         lastError: extra?.error ?? null,
         nextAttemptAt: status === "RETRY_SCHEDULED" ? scheduledAt : null,

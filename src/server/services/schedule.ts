@@ -1,8 +1,9 @@
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { zonedToUtc } from "@/lib/dates";
+import { fmtDateTime, zonedToUtc } from "@/lib/dates";
 import { getProvider } from "@/lib/platforms/registry";
-import { normalizeHashtags, validateSchedule } from "@/lib/workflow/rules";
-import { ActivityType } from "@/lib/workflow/statuses";
+import { normalizeHashtags, scheduleActiveKey, validateSchedule } from "@/lib/workflow/rules";
+import { ActivityType, ScheduleStatus } from "@/lib/workflow/statuses";
 import { ServiceError } from "../errors";
 import { logActivity } from "./activity";
 import { getReadiness, syncPublishingStatus } from "./content";
@@ -20,7 +21,53 @@ export interface ScheduleInput {
   hashtags?: string;
   thumbnailAssetId?: string | null;
   visibility?: string;
+  /** Generated when the form opens: resubmitting the same form returns the post it already created. */
+  idempotencyKey?: string;
+  /** Post again to an account that already published this content. */
+  repost?: boolean;
 }
+
+// Every user-side change is conditional on the status the user saw, so a post
+// the worker has just claimed (PROCESSING) is never reset, moved or cancelled
+// under it. A change that loses that race is reported as a conflict.
+
+/** Statuses a person can edit or move. PROCESSING belongs to the worker; PUBLISHED is history. */
+const EDITABLE = ["WAITING", "RETRY_SCHEDULED", "FAILED", "CANCELLED"];
+const CANCELLABLE = ["WAITING", "RETRY_SCHEDULED", "FAILED"];
+const RETRYABLE = ["FAILED", "RETRY_SCHEDULED", "CANCELLED"];
+
+function isUniqueViolation(e: unknown, field: string) {
+  if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== "P2002") return false;
+  return String((e.meta as { target?: unknown } | undefined)?.target ?? "").includes(field);
+}
+
+async function alreadyScheduled(contentId: string, accountId: string) {
+  const other = await db.publishingSchedule.findFirst({
+    where: { contentId, accountId, status: { in: ["WAITING", "PROCESSING", "RETRY_SCHEDULED"] } },
+    include: { account: { select: { name: true } } },
+  });
+  if (!other) return new ServiceError("This content already has an active post for this account.", undefined, "ALREADY_SCHEDULED");
+  return new ServiceError(
+    `Already scheduled to ${other.account.name} for ${fmtDateTime(other.scheduledAt, other.timezone)}. Edit that post instead.`,
+    undefined,
+    "ALREADY_SCHEDULED",
+    { scheduleId: other.id },
+  );
+}
+
+/** The post changed after it was loaded (usually: the worker started publishing it). */
+async function conflict(id: string) {
+  const current = await db.publishingSchedule.findUnique({ where: { id }, select: { status: true } });
+  if (!current) return new ServiceError("Schedule not found.");
+  const message =
+    current.status === "PROCESSING"
+      ? "This post started publishing a moment ago, so it can't be changed now."
+      : `This post is now ${ScheduleStatus.label(current.status).toLowerCase()}, so it can't be changed. Reload to see the latest.`;
+  return new ServiceError(message, undefined, "CONFLICT");
+}
+
+/** Clears the last error, except an unknown outcome: the next attempt must still check the platform first. */
+const clearedError = (lastErrorCode: string | null) => ({ lastError: null, lastErrorCode: lastErrorCode === "UNKNOWN_OUTCOME" ? lastErrorCode : null });
 
 async function validate(input: ScheduleInput) {
   const provider = getProvider(input.platformId);
@@ -60,21 +107,52 @@ async function validate(input: ScheduleInput) {
 }
 
 export async function createSchedule(input: ScheduleInput) {
+  if (input.idempotencyKey) {
+    const existing = await db.publishingSchedule.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+    if (existing) return existing;
+  }
   const { provider, scheduledAt, account } = await validate(input);
-  const schedule = await db.publishingSchedule.create({
-    data: {
-      contentId: input.contentId,
-      platformId: input.platformId,
-      accountId: input.accountId,
-      scheduledAt,
-      timezone: input.timezone,
-      title: input.title.trim(),
-      caption: input.caption ?? "",
-      hashtags: normalizeHashtags(input.hashtags ?? ""),
-      thumbnailAssetId: input.thumbnailAssetId || null,
-      visibility: input.visibility || provider.defaultVisibility,
-    },
-  });
+
+  if (!input.repost) {
+    const published = await db.publishingSchedule.findFirst({
+      where: { contentId: input.contentId, accountId: input.accountId, status: "PUBLISHED" },
+      orderBy: { publishedAt: "desc" },
+    });
+    if (published) {
+      throw new ServiceError(
+        `Already published to ${account.name} on ${fmtDateTime(published.publishedAt ?? published.scheduledAt, published.timezone)}. Choose "Post again" to publish it a second time.`,
+        undefined,
+        "ALREADY_PUBLISHED",
+        { scheduleId: published.id },
+      );
+    }
+  }
+
+  let schedule;
+  try {
+    schedule = await db.publishingSchedule.create({
+      data: {
+        contentId: input.contentId,
+        platformId: input.platformId,
+        accountId: input.accountId,
+        scheduledAt,
+        timezone: input.timezone,
+        title: input.title.trim(),
+        caption: input.caption ?? "",
+        hashtags: normalizeHashtags(input.hashtags ?? ""),
+        thumbnailAssetId: input.thumbnailAssetId || null,
+        visibility: input.visibility || provider.defaultVisibility,
+        activeKey: scheduleActiveKey("WAITING", input.contentId, input.accountId),
+        idempotencyKey: input.idempotencyKey || null,
+      },
+    });
+  } catch (e) {
+    if (input.idempotencyKey && isUniqueViolation(e, "idempotencyKey")) {
+      return db.publishingSchedule.findUniqueOrThrow({ where: { idempotencyKey: input.idempotencyKey } });
+    }
+    if (isUniqueViolation(e, "activeKey")) throw await alreadyScheduled(input.contentId, input.accountId);
+    throw e;
+  }
   // Make sure the platform is listed as a target of the content
   await db.contentPlatform.upsert({
     where: { contentId_platformId: { contentId: input.contentId, platformId: input.platformId } },
@@ -84,8 +162,8 @@ export async function createSchedule(input: ScheduleInput) {
   await logActivity({
     contentId: input.contentId,
     type: ActivityType.SCHEDULE_CREATED,
-    message: `Scheduled for ${provider.name} (${account.name}) — ${input.date} ${input.time}`,
-    meta: { scheduleId: schedule.id },
+    message: `${input.repost ? "Repost scheduled" : "Scheduled"} for ${provider.name} (${account.name}) — ${input.date} ${input.time}`,
+    meta: { scheduleId: schedule.id, repost: !!input.repost },
   });
   await syncPublishingStatus(input.contentId);
   return schedule;
@@ -94,29 +172,38 @@ export async function createSchedule(input: ScheduleInput) {
 export async function updateSchedule(id: string, input: ScheduleInput) {
   const existing = await db.publishingSchedule.findUnique({ where: { id } });
   if (!existing) throw new ServiceError("Schedule not found.");
-  if (existing.status === "PUBLISHED" || existing.status === "PROCESSING") {
-    throw new ServiceError("This post is already being published and can't be edited.");
-  }
+  if (!EDITABLE.includes(existing.status)) throw await conflict(id);
   const { provider, scheduledAt } = await validate({ ...input, contentId: existing.contentId });
-  await db.publishingSchedule.update({
-    where: { id },
-    data: {
-      platformId: input.platformId,
-      accountId: input.accountId,
-      scheduledAt,
-      timezone: input.timezone,
-      title: input.title.trim(),
-      caption: input.caption ?? "",
-      hashtags: normalizeHashtags(input.hashtags ?? ""),
-      thumbnailAssetId: input.thumbnailAssetId || null,
-      visibility: input.visibility || provider.defaultVisibility,
-      // Editing a failed/cancelled post puts it back in the queue
-      status: "WAITING",
-      attempts: 0,
-      nextAttemptAt: null,
-      lastError: null,
-    },
-  });
+
+  let changed;
+  try {
+    changed = await db.publishingSchedule.updateMany({
+      where: { id, status: { in: EDITABLE } },
+      data: {
+        platformId: input.platformId,
+        accountId: input.accountId,
+        scheduledAt,
+        timezone: input.timezone,
+        title: input.title.trim(),
+        caption: input.caption ?? "",
+        hashtags: normalizeHashtags(input.hashtags ?? ""),
+        thumbnailAssetId: input.thumbnailAssetId || null,
+        visibility: input.visibility || provider.defaultVisibility,
+        // Editing a failed/cancelled post puts it back in the queue
+        status: "WAITING",
+        activeKey: scheduleActiveKey("WAITING", existing.contentId, input.accountId),
+        attempts: 0,
+        nextAttemptAt: null,
+        uploadState: null,
+        ...clearedError(existing.lastErrorCode),
+      },
+    });
+  } catch (e) {
+    if (isUniqueViolation(e, "activeKey")) throw await alreadyScheduled(existing.contentId, input.accountId);
+    throw e;
+  }
+  if (changed.count === 0) throw await conflict(id);
+
   await logActivity({
     contentId: existing.contentId,
     type: ActivityType.SCHEDULE_CHANGED,
@@ -134,10 +221,25 @@ export async function reschedule(id: string, scheduledAt: Date) {
   if (scheduledAt.getTime() <= Date.now()) throw new ServiceError("Scheduled time must be in the future.");
   if (s.account.status !== "CONNECTED") throw new ServiceError(`Reconnect "${s.account.name}" before rescheduling.`);
 
-  await db.publishingSchedule.update({
-    where: { id },
-    data: { scheduledAt, status: "WAITING", attempts: 0, nextAttemptAt: null, lastError: null },
-  });
+  let changed;
+  try {
+    changed = await db.publishingSchedule.updateMany({
+      where: { id, status: { in: EDITABLE } },
+      data: {
+        scheduledAt,
+        status: "WAITING",
+        activeKey: scheduleActiveKey("WAITING", s.contentId, s.accountId),
+        attempts: 0,
+        nextAttemptAt: null,
+        ...clearedError(s.lastErrorCode),
+      },
+    });
+  } catch (e) {
+    if (isUniqueViolation(e, "activeKey")) throw await alreadyScheduled(s.contentId, s.accountId);
+    throw e;
+  }
+  if (changed.count === 0) throw await conflict(id);
+
   await logActivity({
     contentId: s.contentId,
     type: ActivityType.SCHEDULE_CHANGED,
@@ -152,20 +254,55 @@ export async function cancelSchedule(id: string) {
   if (!s) throw new ServiceError("Schedule not found.");
   if (s.status === "PUBLISHED") throw new ServiceError("Published posts can't be cancelled.");
   if (s.status === "PROCESSING") throw new ServiceError("This post is publishing right now.");
-  await db.publishingSchedule.update({ where: { id }, data: { status: "CANCELLED", nextAttemptAt: null } });
+  if (s.status === "CANCELLED") return;
+
+  const changed = await db.publishingSchedule.updateMany({
+    where: { id, status: { in: CANCELLABLE } },
+    data: { status: "CANCELLED", activeKey: null, nextAttemptAt: null },
+  });
+  if (changed.count === 0) throw await conflict(id);
+
   await logActivity({ contentId: s.contentId, type: ActivityType.SCHEDULE_CANCELLED, message: `${s.platform.name} post cancelled` });
   await syncPublishingStatus(s.contentId);
 }
 
-/** Puts a failed post back in the queue for immediate processing. */
-export async function retrySchedule(id: string) {
-  const s = await db.publishingSchedule.findUnique({ where: { id }, include: { account: true } });
+/**
+ * Puts a failed post back in the queue for immediate processing. When the last
+ * attempt's outcome is unknown and the platform couldn't be checked, the user
+ * must confirm they looked on the platform first (`confirmUnknownOutcome`).
+ */
+export async function retrySchedule(id: string, opts: { confirmUnknownOutcome?: boolean } = {}) {
+  const s = await db.publishingSchedule.findUnique({ where: { id }, include: { account: true, platform: true } });
   if (!s) throw new ServiceError("Schedule not found.");
-  if (!["FAILED", "RETRY_SCHEDULED", "CANCELLED"].includes(s.status)) throw new ServiceError("Only failed posts can be retried.");
+  if (!RETRYABLE.includes(s.status)) throw new ServiceError("Only failed posts can be retried.");
   if (s.account.status !== "CONNECTED") throw new ServiceError(`Reconnect "${s.account.name}" before retrying.`);
-  await db.publishingSchedule.update({
-    where: { id },
-    data: { status: "RETRY_SCHEDULED", nextAttemptAt: new Date(), attempts: 0 },
-  });
+
+  const unconfirmed = s.status === "FAILED" && s.lastErrorCode === "UNKNOWN_OUTCOME";
+  if (unconfirmed && !opts.confirmUnknownOutcome) {
+    throw new ServiceError(
+      `The last attempt may have gone live on ${s.platform.name}. Look for the post there first, and retry only if it isn't there.`,
+      undefined,
+      "CONFIRM_UNKNOWN_OUTCOME",
+    );
+  }
+
+  let changed;
+  try {
+    changed = await db.publishingSchedule.updateMany({
+      where: { id, status: { in: RETRYABLE } },
+      data: {
+        status: "RETRY_SCHEDULED",
+        nextAttemptAt: new Date(),
+        attempts: 0,
+        activeKey: scheduleActiveKey("RETRY_SCHEDULED", s.contentId, s.accountId),
+        // The user checked the platform: send without asking it again
+        ...(unconfirmed ? { lastErrorCode: null } : {}),
+      },
+    });
+  } catch (e) {
+    if (isUniqueViolation(e, "activeKey")) throw await alreadyScheduled(s.contentId, s.accountId);
+    throw e;
+  }
+  if (changed.count === 0) throw await conflict(id);
   await syncPublishingStatus(s.contentId);
 }

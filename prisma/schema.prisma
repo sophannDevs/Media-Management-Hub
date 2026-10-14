@@ -264,9 +264,23 @@ model PublishingSchedule {
   options          String              @default("{}")
   /// WAITING | PROCESSING | PUBLISHED | FAILED | RETRY_SCHEDULED | CANCELLED
   status           String              @default("WAITING")
+  /// "contentId:accountId" while the post is active (waiting, processing or
+  /// retrying), null otherwise: one active schedule per content and account.
+  /// (Acts as the partial unique index Prisma can't express; see scheduleActiveKey.)
+  activeKey        String?             @unique
+  /// Token from the schedule form, so a resubmitted form can't create a second post
+  idempotencyKey   String?             @unique
+  /// Worker lease while PROCESSING: renewed by a heartbeat during the upload.
+  /// Only an expired lease is recovered, and the platform is checked first.
+  lockedBy         String?
+  lockedUntil      DateTime?
+  /// Provider state saved during an attempt (e.g. a resumable upload session), JSON
+  uploadState      String?
   attempts         Int                 @default(0)
   nextAttemptAt    DateTime?
   lastError        String?
+  /// AUTH | QUOTA | RATE | VALIDATION | NETWORK | UNKNOWN | UNKNOWN_OUTCOME
+  lastErrorCode    String?
   externalId       String?
   externalUrl      String?
   publishedAt      DateTime?
@@ -276,6 +290,7 @@ model PublishingSchedule {
   updatedAt        DateTime            @updatedAt
 
   @@index([status, scheduledAt])
+  @@index([status, lockedUntil])
   @@index([contentId])
 }
 
@@ -288,6 +303,7 @@ model PublishingJob {
   /// PROCESSING | SUCCEEDED | FAILED
   status     String
   error      String?
+  errorCode  String?
   startedAt  DateTime           @default(now())
   finishedAt DateTime?
 

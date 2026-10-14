@@ -1,7 +1,7 @@
 "use client";
 
 import { formatInTimeZone } from "date-fns-tz";
-import { CalendarCheck, CircleX, Globe, Link2, Lock, Plus, TriangleAlert } from "lucide-react";
+import { CalendarCheck, CircleX, Globe, Link2, Lock, Pencil, Plus, Repeat2, TriangleAlert } from "lucide-react";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { ContentThumb } from "@/components/app/content-thumb";
 import { PlatformIcon } from "@/components/app/platform-icon";
@@ -76,6 +76,14 @@ export function ScheduleButton({
 
 const VIS_ICONS: Record<string, typeof Globe> = { PUBLIC: Globe, UNLISTED: Link2, PRIVATE: Lock };
 
+/** Per-submission token: a resubmitted form (retry after a timeout, double click) can't create a second post. */
+const newToken = () =>
+  typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+
+type Notice = { code: "ALREADY_SCHEDULED" | "ALREADY_PUBLISHED"; message: string; scheduleId?: string };
+
 function ScheduleForm({ opts, onDone, onSwitchContent }: { opts: OpenOptions; onDone: () => void; onSwitchContent: (id: string) => void }) {
   const [data, setData] = useState<ScheduleFormData | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -128,26 +136,39 @@ function ScheduleFields({ data, opts, onDone, onSwitchContent }: { data: Schedul
   const meta = data.platforms.find((p) => p.id === platformId)?.meta ?? null;
   const [visibility, setVisibility] = useState(editing?.visibility ?? meta?.defaultVisibility ?? "");
   const [errors, setErrors] = useState<string[]>([]);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [token, setToken] = useState(newToken);
   const { run, pending } = useServerAction();
+  const { openSchedule } = useScheduleDialog();
 
   function changePlatform(p: string) {
     setPlatformId(p);
     setAccountId(defaultAccount(p));
     setVisibility(data.platforms.find((x) => x.id === p)?.meta?.defaultVisibility ?? "");
     setErrors([]);
+    setNotice(null);
   }
 
-  function submit(addAnother: boolean) {
+  function submit(addAnother: boolean, repost = false) {
     if (!content) return;
     setErrors([]);
-    const values = { contentId: content.id, platformId, accountId, date, time, timezone, title, caption, hashtags, thumbnailAssetId, visibility };
+    setNotice(null);
+    const values = { contentId: content.id, platformId, accountId, date, time, timezone, title, caption, hashtags, thumbnailAssetId, visibility, idempotencyKey: token, repost };
     run<unknown>(() => (editing ? updateScheduleAction(editing.id, values) : createScheduleAction(values)), {
       onSuccess: () => {
+        // The next "add another platform" is a different post
+        setToken(newToken());
         if (!addAnother) return onDone();
         const next = enabled.find((p) => p.id !== platformId && content.platforms.includes(p.id)) ?? enabled.find((p) => p.id !== platformId);
         if (next) changePlatform(next.id);
       },
-      onError: (_e, details) => setErrors(details ?? []),
+      onError: (error, details, failure) => {
+        if (failure?.code === "ALREADY_SCHEDULED" || failure?.code === "ALREADY_PUBLISHED") {
+          setNotice({ code: failure.code, message: error, scheduleId: failure.info?.scheduleId });
+          return true;
+        }
+        setErrors(details ?? []);
+      },
     });
   }
 
@@ -309,6 +330,28 @@ function ScheduleFields({ data, opts, onDone, onSwitchContent }: { data: Schedul
               <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
                 <p className="flex items-center gap-2 font-medium"><CircleX className="size-4" />Can&apos;t schedule yet</p>
                 <ul className="mt-2 ml-6 list-disc space-y-0.5">{errors.map((e) => <li key={e}>{e}</li>)}</ul>
+              </div>
+            )}
+
+            {notice && (
+              <div role="status" className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-900">
+                <p className="flex items-center gap-2 font-medium">
+                  <TriangleAlert className="size-4" />
+                  {notice.code === "ALREADY_SCHEDULED" ? "Already scheduled" : "Already published to this account"}
+                </p>
+                <p className="mt-1">{notice.message}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {notice.code === "ALREADY_SCHEDULED" && notice.scheduleId && (
+                    <Button size="sm" variant="outline" className="bg-white" onClick={() => openSchedule({ scheduleId: notice.scheduleId })}>
+                      <Pencil />Open that post
+                    </Button>
+                  )}
+                  {notice.code === "ALREADY_PUBLISHED" && (
+                    <Button size="sm" disabled={pending} onClick={() => submit(false, true)}>
+                      <Repeat2 />Post again
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
           </>

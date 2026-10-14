@@ -197,6 +197,16 @@ export function isActiveSchedule(status: string) {
   return (ACTIVE_SCHEDULE_STATUSES as string[]).includes(status);
 }
 
+/**
+ * Value of PublishingSchedule.activeKey: set while the post is active, null
+ * otherwise. Its unique index allows one active schedule per content and
+ * account (a repost of the same content to the same account is never queued
+ * twice by accident).
+ */
+export function scheduleActiveKey(status: string, contentId: string, accountId: string) {
+  return isActiveSchedule(status) ? `${contentId}:${accountId}` : null;
+}
+
 export function wordCount(text: string) {
   const t = text.trim();
   return t ? t.split(/\s+/).length : 0;

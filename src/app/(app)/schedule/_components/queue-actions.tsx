@@ -4,10 +4,11 @@ import { CalendarClock, ChartColumn, ExternalLink, KeyRound, RefreshCw, X } from
 import Link from "next/link";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { useScheduleDialog } from "@/components/app/schedule-dialog";
+import { useRetrySchedule } from "@/components/app/use-retry-schedule";
 import { Button } from "@/components/ui/button";
 import { useServerAction } from "@/hooks/use-server-action";
 import { cn } from "@/lib/utils";
-import { cancelScheduleAction, retryScheduleAction } from "@/server/actions/schedule";
+import { cancelScheduleAction } from "@/server/actions/schedule";
 
 interface ActionProps {
   id: string;
@@ -24,7 +25,9 @@ const CANCEL_COPY = {
 
 /** Row actions in the queue table. */
 export function RowActions({ id, status, externalUrl }: ActionProps) {
-  const { run, pending } = useServerAction();
+  const { run, pending: cancelling } = useServerAction();
+  const { retry, pending: retrying, dialog } = useRetrySchedule();
+  const pending = cancelling || retrying;
   const { openSchedule } = useScheduleDialog();
 
   if (status === "PUBLISHED") {
@@ -55,9 +58,10 @@ export function RowActions({ id, status, externalUrl }: ActionProps) {
   const editLabel = status === "WAITING" ? "Edit schedule" : "Reschedule";
   return (
     <div className="flex items-center justify-end gap-1">
+      {dialog}
       {failed && (
-        <Button variant="outline" size="sm" className="bg-white" disabled={pending} onClick={() => run(() => retryScheduleAction(id))}>
-          <RefreshCw className={cn(pending && "animate-spin")} />
+        <Button variant="outline" size="sm" className="bg-white" disabled={pending} onClick={() => retry(id)}>
+          <RefreshCw className={cn(retrying && "animate-spin")} />
           Retry
         </Button>
       )}
@@ -77,10 +81,13 @@ export function RowActions({ id, status, externalUrl }: ActionProps) {
 
 /** Actions on a failed-post callout: Reconnect (when needed), Retry, Reschedule, Cancel. */
 export function FailedActions({ id, accountConnected }: ActionProps) {
-  const { run, pending } = useServerAction();
+  const { run, pending: cancelling } = useServerAction();
+  const { retry, pending: retrying, dialog } = useRetrySchedule();
+  const pending = cancelling || retrying;
   const { openSchedule } = useScheduleDialog();
   return (
     <div className="flex shrink-0 flex-wrap gap-2">
+      {dialog}
       {!accountConnected && (
         <Button asChild>
           <Link href="/accounts">
@@ -89,9 +96,9 @@ export function FailedActions({ id, accountConnected }: ActionProps) {
           </Link>
         </Button>
       )}
-      <Button variant={accountConnected ? "default" : "outline"} className={cn(!accountConnected && "bg-white")} disabled={pending} onClick={() => run(() => retryScheduleAction(id))}>
-        <RefreshCw className={cn(pending && "animate-spin")} />
-        {pending ? "Retrying…" : "Retry"}
+      <Button variant={accountConnected ? "default" : "outline"} className={cn(!accountConnected && "bg-white")} disabled={pending} onClick={() => retry(id)}>
+        <RefreshCw className={cn(retrying && "animate-spin")} />
+        {retrying ? "Retrying…" : "Retry"}
       </Button>
       <Button variant="outline" className="bg-white" disabled={pending} onClick={() => openSchedule({ scheduleId: id })}>
         <CalendarClock />

@@ -8,11 +8,12 @@ import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { PlatformIcon } from "@/components/app/platform-icon";
 import { useScheduleDialog } from "@/components/app/schedule-dialog";
 import { StatusBadge } from "@/components/app/status-badge";
+import { useRetrySchedule } from "@/components/app/use-retry-schedule";
 import { Button } from "@/components/ui/button";
 import { useServerAction } from "@/hooks/use-server-action";
 import { cn } from "@/lib/utils";
 import { AccountStatus, ScheduleStatus } from "@/lib/workflow/statuses";
-import { cancelScheduleAction, retryScheduleAction } from "@/server/actions/schedule";
+import { cancelScheduleAction } from "@/server/actions/schedule";
 import type { ContentWorkspace } from "@/server/queries/content";
 
 type Schedule = ContentWorkspace["schedules"][number];
@@ -79,7 +80,8 @@ export function PublishingTab({ data }: { data: ContentWorkspace }) {
 
 function ScheduleCard({ s }: { s: Schedule }) {
   const { openSchedule } = useScheduleDialog();
-  const { run, pending } = useServerAction();
+  const { run } = useServerAction();
+  const { retry, pending, dialog } = useRetrySchedule();
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [history, setHistory] = useState(false);
   const failed = s.status === "FAILED" || s.status === "RETRY_SCHEDULED";
@@ -132,7 +134,7 @@ function ScheduleCard({ s }: { s: Schedule }) {
           </div>
           <div className="flex shrink-0 gap-2">
             <Button variant="outline" size="sm" className="bg-white" onClick={() => openSchedule({ scheduleId: s.id })}><CalendarClock />Reschedule</Button>
-            <Button size="sm" disabled={pending} onClick={() => run(() => retryScheduleAction(s.id))}><RefreshCw className={cn(pending && "animate-spin")} />Retry now</Button>
+            <Button size="sm" disabled={pending} onClick={() => retry(s.id)}><RefreshCw className={cn(pending && "animate-spin")} />Retry now</Button>
           </div>
         </div>
       )}
@@ -158,6 +160,7 @@ function ScheduleCard({ s }: { s: Schedule }) {
         </div>
       )}
 
+      {dialog}
       <ConfirmDialog
         open={confirmCancel}
         onOpenChange={setConfirmCancel}

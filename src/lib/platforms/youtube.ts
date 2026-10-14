@@ -1,7 +1,7 @@
-import { simulatePublish } from "./mock";
+import { simulatePublish, simulateReconcile } from "./mock";
 import type { PlatformProvider } from "./types";
 
-// TODO(phase 2): replace simulatePublish with the YouTube Data API v3
+// TODO(phase 3): replace simulatePublish with the YouTube Data API v3
 // (videos.insert resumable upload + thumbnails.set) using the account's OAuth token.
 export const youtube: PlatformProvider = {
   id: "youtube",
@@ -18,5 +18,6 @@ export const youtube: PlatformProvider = {
   maxCaptionLength: 5000,
   supportsThumbnail: true,
   isMock: true,
-  publish: (req) => simulatePublish("youtube", req, (id) => `https://youtu.be/${id}`),
+  publish: (req, ctx) => simulatePublish("youtube", req, ctx, (id) => `https://youtu.be/${id}`),
+  reconcile: (req) => simulateReconcile(req),
 };

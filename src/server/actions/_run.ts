@@ -21,7 +21,7 @@ export async function runAction<S extends z.ZodType, T>(
     refresh();
     return { ok: true, data, message: typeof message === "function" ? message(data) : message };
   } catch (e) {
-    if (e instanceof ServiceError) return { ok: false, error: e.message, details: e.details };
+    if (e instanceof ServiceError) return { ok: false, error: e.message, details: e.details, code: e.code, info: e.info };
     console.error(e);
     return { ok: false, error: "Something went wrong. Please try again." };
   }

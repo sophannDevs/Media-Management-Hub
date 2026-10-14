@@ -18,6 +18,8 @@ const scheduleSchema = z.object({
   hashtags: z.string().default(""),
   thumbnailAssetId: z.string().nullish(),
   visibility: z.string().optional(),
+  idempotencyKey: z.string().min(8).max(64).optional(),
+  repost: z.boolean().optional(),
 });
 export type ScheduleFormValues = z.input<typeof scheduleSchema>;
 
@@ -43,12 +45,12 @@ export async function cancelScheduleAction(scheduleId: string) {
 }
 
 /** Re-queues a failed post and publishes it right away. */
-export async function retryScheduleAction(scheduleId: string) {
+export async function retryScheduleAction(scheduleId: string, opts: { confirmUnknownOutcome?: boolean } = {}) {
   return runAction(
-    id,
-    scheduleId,
-    async (id) => {
-      await schedule.retrySchedule(id);
+    z.object({ id, confirmUnknownOutcome: z.boolean().optional() }),
+    { id: scheduleId, ...opts },
+    async ({ id, confirmUnknownOutcome }) => {
+      await schedule.retrySchedule(id, { confirmUnknownOutcome });
       return publishing.processSchedule(id);
     },
     (r) => (r === "published" ? "Published successfully" : r === "retry" ? "Still failing — another retry is scheduled" : r === "failed" ? "Publishing failed again — see the error" : "Queued"),

@@ -1,7 +1,7 @@
-import { simulatePublish } from "./mock";
+import { simulatePublish, simulateReconcile } from "./mock";
 import type { PlatformProvider } from "./types";
 
-// TODO(phase 2): replace simulatePublish with the Graph API
+// TODO(phase 3): replace simulatePublish with the Graph API
 // (POST /{page-id}/videos with a Page access token).
 export const facebook: PlatformProvider = {
   id: "facebook",
@@ -17,5 +17,6 @@ export const facebook: PlatformProvider = {
   maxCaptionLength: 63206,
   supportsThumbnail: true,
   isMock: true,
-  publish: (req) => simulatePublish("facebook", req, (id) => `https://facebook.com/watch/?v=${id}`),
+  publish: (req, ctx) => simulatePublish("facebook", req, ctx, (id) => `https://facebook.com/watch/?v=${id}`),
+  reconcile: (req) => simulateReconcile(req),
 };

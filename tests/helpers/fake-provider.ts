@@ -1,6 +1,7 @@
-import type { PlatformProvider, PublishRequest, PublishResult } from "@/lib/platforms/types";
+import type { PlatformProvider, PublishContext, PublishRequest, PublishResult, ReconcileResult } from "@/lib/platforms/types";
 
-type Behavior = (req: PublishRequest) => Promise<PublishResult>;
+type Behavior = (req: PublishRequest, ctx: PublishContext) => Promise<PublishResult>;
+type Reconciler = (req: PublishRequest, uploadState: Record<string, unknown> | null) => Promise<ReconcileResult>;
 
 /**
  * A scriptable stand-in for the YouTube / Facebook providers. Tests replace
@@ -9,7 +10,10 @@ type Behavior = (req: PublishRequest) => Promise<PublishResult>;
  */
 class FakePlatform {
   calls: PublishRequest[] = [];
+  reconcileCalls: PublishRequest[] = [];
   private behavior: Behavior = async () => this.success();
+  /** null: the provider can't reconcile (no `reconcile` method). */
+  private reconciler: Reconciler | null = async () => ({ status: "not_found" });
 
   success(): PublishResult {
     const n = this.calls.length;
@@ -19,6 +23,10 @@ class FakePlatform {
   /** Next publishes run this instead of succeeding immediately. */
   setBehavior(fn: Behavior) {
     this.behavior = fn;
+  }
+
+  setReconcile(fn: Reconciler | null) {
+    this.reconciler = fn;
   }
 
   /** Makes publishes hang until `release()` is called (simulates a long upload). */
@@ -34,10 +42,13 @@ class FakePlatform {
 
   reset() {
     this.calls = [];
+    this.reconcileCalls = [];
     this.behavior = async () => this.success();
+    this.reconciler = async () => ({ status: "not_found" });
   }
 
   provider(id: string): PlatformProvider {
+    const reconciler = this.reconciler;
     return {
       id,
       name: id === "youtube" ? "YouTube" : "Facebook",
@@ -49,10 +60,18 @@ class FakePlatform {
       maxCaptionLength: 5000,
       supportsThumbnail: true,
       isMock: true,
-      publish: (req) => {
+      publish: (req, ctx) => {
         this.calls.push(req);
-        return this.behavior(req);
+        return this.behavior(req, ctx);
       },
+      ...(reconciler
+        ? {
+            reconcile: (req: PublishRequest, state: Record<string, unknown> | null) => {
+              this.reconcileCalls.push(req);
+              return reconciler(req, state);
+            },
+          }
+        : {}),
     };
   }
 }

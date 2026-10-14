@@ -211,7 +211,7 @@ export async function archiveContents(ids: string[], archived = true) {
     // Archived content must never publish
     await db.publishingSchedule.updateMany({
       where: { contentId: { in: ids }, status: { in: ["WAITING", "RETRY_SCHEDULED"] } },
-      data: { status: "CANCELLED" },
+      data: { status: "CANCELLED", activeKey: null, nextAttemptAt: null },
     });
   }
   for (const id of ids) {

@@ -36,7 +36,38 @@ export interface PublishResult {
   url: string;
 }
 
-export type PublishErrorCode = "AUTH" | "QUOTA" | "VALIDATION" | "NETWORK" | "UNKNOWN";
+/** Hooks the publishing pipeline gives a provider while it uploads. */
+export interface PublishContext {
+  /** Provider state saved before the attempt (e.g. a resumable upload session), or null. */
+  uploadState: Record<string, unknown> | null;
+  /**
+   * Persists provider state (e.g. a resumable upload session URL) so an
+   * interrupted attempt can be resumed or reconciled instead of re-sent.
+   */
+  saveUploadState(state: Record<string, unknown>): Promise<void>;
+  /** Signals progress; keeps the lease alive during long uploads. */
+  progress(info?: { bytesSent?: number; totalBytes?: number }): void;
+}
+
+/**
+ * Result of asking the platform what happened to an attempt whose outcome is
+ * unknown (the process died mid-upload, or the connection dropped after the
+ * request was sent).
+ */
+export type ReconcileResult =
+  | { status: "published"; result: PublishResult }
+  /** The platform has no such post: safe to publish again. */
+  | { status: "not_found" }
+  /** Can't tell: a person has to check the platform before retrying. */
+  | { status: "unknown"; reason: string };
+
+/**
+ * AUTH, QUOTA, RATE and VALIDATION mean the platform refused the post.
+ * NETWORK means the request never reached the platform.
+ * UNKNOWN_OUTCOME means the post may or may not exist on the platform; it is
+ * never retried blindly (see processSchedule).
+ */
+export type PublishErrorCode = "AUTH" | "QUOTA" | "RATE" | "VALIDATION" | "NETWORK" | "UNKNOWN" | "UNKNOWN_OUTCOME";
 
 export class PublishError extends Error {
   constructor(
@@ -63,5 +94,10 @@ export interface PlatformProvider {
   supportsThumbnail: boolean;
   /** Real integrations set this once OAuth is implemented. */
   isMock: boolean;
-  publish(req: PublishRequest): Promise<PublishResult>;
+  publish(req: PublishRequest, ctx: PublishContext): Promise<PublishResult>;
+  /**
+   * Looks up the outcome of an interrupted attempt. Providers that can't
+   * answer leave this out, and the post is flagged for a person to check.
+   */
+  reconcile?(req: PublishRequest, uploadState: Record<string, unknown> | null): Promise<ReconcileResult>;
 }
