@@ -1,11 +1,12 @@
 // Measures pages on a large library (PERF-01, PERF-03, PERF-09).
-//   node scripts/perf-library.mjs [--items 5000] [--fresh] [/route ...]
+//   node scripts/perf-library.mjs [--items 5000] [--fresh] [--shifts] [/route ...]
 // Uses its own database (mediaflow_perf on the local cluster, or
 // PERF_DATABASE_URL): the demo seed plus N generated items, built on the first
 // run or with --fresh. Needs a production build (`npm run build`, or the one
 // `npm run test:e2e` leaves behind). Reports per route: server time (median of
 // 5 full responses), HTML size (raw and gzipped, i.e. transferred), and in
-// Chromium at 1440 / 820 / 390 px the DOM node count and cumulative layout shift.
+// Chromium at 1440 / 820 / 390 px the DOM node count and cumulative layout
+// shift (--shifts lists each shift and the elements that moved).
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { gzipSync } from "node:zlib";
@@ -95,8 +96,14 @@ try {
       const page = await context.newPage();
       await page.addInitScript(() => {
         window.__cls = 0;
+        window.__shifts = [];
+        const describe = (n) => (n?.tagName ? `${n.tagName.toLowerCase()}${n.className && typeof n.className === "string" ? `.${n.className.split(/\s+/).slice(0, 4).join(".")}` : ""}` : "?");
         new PerformanceObserver((list) => {
-          for (const e of list.getEntries()) if (!e.hadRecentInput) window.__cls += e.value;
+          for (const e of list.getEntries()) {
+            if (e.hadRecentInput) continue;
+            window.__cls += e.value;
+            window.__shifts.push({ value: e.value, sources: e.sources.map((s) => `${describe(s.node)} y ${Math.round(s.previousRect.y)}→${Math.round(s.currentRect.y)} h ${Math.round(s.previousRect.height)}→${Math.round(s.currentRect.height)}`) });
+          }
         }).observe({ type: "layout-shift", buffered: true });
       });
       try {
@@ -105,6 +112,9 @@ try {
         await sleep(500);
         dom.push(await page.evaluate(() => document.getElementsByTagName("*").length));
         cls.push((await page.evaluate(() => window.__cls)).toFixed(3));
+        if (args.includes("--shifts")) {
+          for (const s of await page.evaluate(() => window.__shifts)) console.log(`\n  [${device.viewport.width}px] shift ${s.value.toFixed(3)}\n    ${s.sources.join("\n    ")}`);
+        }
       } catch {
         dom.push("timeout");
         cls.push("timeout");

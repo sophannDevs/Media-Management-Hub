@@ -133,7 +133,7 @@ export function ContentFilters({
           <Select value={sort} onValueChange={(v) => go({ sort: v, dir: CONTENT_SORTS[v as ContentSort].dir })}>
             <SelectTrigger aria-label="Sort by" className="w-auto rounded-r-none bg-white data-[size=default]:h-9">
               <span className="text-muted-foreground">Sort:</span>
-              <SelectValue />
+              <SelectValue>{CONTENT_SORTS[sort].label}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {Object.entries(CONTENT_SORTS).map(([k, s]) => (
@@ -167,7 +167,9 @@ function FilterSelect({ label, value, items, onChange }: { label: string; value?
   return (
     <Select value={value ?? ALL} onValueChange={(v) => onChange(v === ALL ? undefined : v)}>
       <SelectTrigger aria-label={label} className={cn("w-auto bg-white data-[size=default]:h-9", value && "border-olive-300 bg-olive-50")}>
-        <SelectValue />
+        {/* The label is rendered on the server too: an empty value that fills in after
+            hydration widened every trigger and wrapped the bar, moving the list (PERF-09) */}
+        <SelectValue>{items.find(([v]) => v === value)?.[1] ?? label}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={ALL}>{label}</SelectItem>

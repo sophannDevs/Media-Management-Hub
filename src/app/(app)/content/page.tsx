@@ -77,16 +77,31 @@ async function ContentList({ searchParams }: { searchParams: PageProps<"/content
   );
 }
 
+/** The same blocks, paddings and wrapping as the filters and the list, so the page doesn't jump when they arrive (PERF-09). */
 function ListSkeleton() {
   return (
-    <div className="space-y-4">
-      <Skeleton className="h-10 w-full max-w-2xl rounded-xl" />
-      <Skeleton className="h-16 w-full rounded-2xl" />
-      <div className="space-y-2 rounded-2xl border bg-card p-4">
+    <>
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <Skeleton className="h-10 w-full max-w-[620px] rounded-xl" />
+          <Skeleton className="ml-auto h-10 w-[170px] rounded-xl" />
+        </div>
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-card p-3 shadow-card">
+          <Skeleton className="h-9 min-w-[220px] flex-1" />
+          {[130, 140, 120, 150, 140, 226].map((w, i) => (
+            <Skeleton key={i} className="h-9" style={{ width: w }} />
+          ))}
+        </div>
+      </div>
+      <div className="overflow-hidden rounded-2xl border bg-card shadow-card">
+        <Skeleton className="h-10 w-full rounded-none" />
         {Array.from({ length: 8 }, (_, i) => (
-          <Skeleton key={i} className="h-14 w-full" />
+          <div key={i} className="flex items-center gap-3 border-t border-[#f1eedf] px-4 py-3">
+            <Skeleton className="h-12 w-20 shrink-0" />
+            <Skeleton className="h-4 flex-1" />
+          </div>
         ))}
       </div>
-    </div>
+    </>
   );
 }
