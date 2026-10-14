@@ -8,7 +8,8 @@ import { pipeline } from "node:stream/promises";
 // S3 / R2 / GCS provider can replace it in phase 2 without touching callers.
 export interface StorageProvider {
   save(key: string, body: ReadableStream<Uint8Array>): Promise<{ size: number }>;
-  stat(key: string): Promise<{ size: number } | null>;
+  /** Size and last modification of a stored file, or null when it doesn't exist. */
+  stat(key: string): Promise<{ size: number; modifiedAt: Date } | null>;
   readStream(key: string, range?: { start: number; end: number }): ReadableStream<Uint8Array>;
   remove(key: string): Promise<void>;
   /** Absolute path for providers that need a local file (e.g. platform uploads). */
@@ -36,7 +37,7 @@ export const localStorageProvider: StorageProvider = {
   async stat(key) {
     try {
       const s = await stat(resolveKey(key));
-      return { size: s.size };
+      return { size: s.size, modifiedAt: s.mtime };
     } catch {
       return null;
     }
