@@ -10,7 +10,7 @@ import { requireUser } from "@/server/auth/dal";
 import { getContentFormOptions, getNavCounts, getNotifications, getNow } from "@/server/queries/shared";
 import { NotificationsMenu } from "./notifications-menu";
 import { SearchBox } from "./search-box";
-import { MobileNav, Sidebar } from "./sidebar-nav";
+import { MobileNav, MobileNavState, Sidebar } from "./sidebar-nav";
 import { SimulationBanner } from "./simulation-banner";
 import { UserFooter } from "./user-footer";
 
@@ -61,9 +61,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-h-screen flex-col lg:pl-64">
         <header className="sticky top-0 z-30 h-16 border-b border-sidebar-border bg-background/85 backdrop-blur">
           <div className="flex h-full items-center gap-3 px-4 md:px-8">
-            <Suspense fallback={<MobileNav footer={<UserFooter />} />}>
-              <MobileNavWithCounts />
-            </Suspense>
+            <MobileNavState>
+              <Suspense fallback={<MobileNav footer={<UserFooter />} />}>
+                <MobileNavWithCounts />
+              </Suspense>
+            </MobileNavState>
             <SearchBox />
             <div className="ml-auto flex items-center gap-2">
               <Suspense fallback={<CreateContentButtonFallback />}>

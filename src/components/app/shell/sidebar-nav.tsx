@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Suspense, useState } from "react";
+import { createContext, Suspense, useContext, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -108,8 +108,22 @@ export function Sidebar({ counts, footer }: { counts?: NavCounts; footer?: React
   );
 }
 
+const MobileNavOpen = createContext<[boolean, (open: boolean) => void] | null>(null);
+
+/**
+ * Holds the phone menu's open state above the Suspense boundary that swaps the
+ * loading menu for the one with counts, so a menu opened while the page loads
+ * stays open through the swap.
+ */
+export function MobileNavState({ children }: { children: React.ReactNode }) {
+  const state = useState(false);
+  return <MobileNavOpen.Provider value={state}>{children}</MobileNavOpen.Provider>;
+}
+
 export function MobileNav({ counts, footer }: { counts?: NavCounts; footer?: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
+  const shared = useContext(MobileNavOpen);
+  const local = useState(false);
+  const [open, setOpen] = shared ?? local;
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
