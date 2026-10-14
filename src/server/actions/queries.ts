@@ -40,7 +40,7 @@ export async function getScheduleFormData(input: { contentId?: string | null; sc
           videoAsset: { select: { durationSec: true } },
           media: {
             where: { type: { in: ["THUMBNAIL", "IMAGE"] } },
-            select: { id: true, type: true, fileName: true, storageKey: true, externalUrl: true, isSelected: true },
+            select: { id: true, type: true, fileName: true, storageKey: true, externalUrl: true, isSelected: true, createdAt: true },
             orderBy: [{ type: "desc" }, { createdAt: "asc" }],
           },
         },

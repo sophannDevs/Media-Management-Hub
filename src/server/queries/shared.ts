@@ -71,7 +71,9 @@ export const contentSummarySelect = {
   platforms: { select: { platformId: true } },
   thumbnailAsset: { select: { storageKey: true, externalUrl: true } },
   videoAsset: { select: { durationSec: true } },
-  media: { where: { type: "IMAGE" }, select: { isSelected: true, storageKey: true, externalUrl: true }, orderBy: { createdAt: "asc" } },
+  // createdAt is selected because the list is ordered by it: past ~1,000 parent rows Prisma
+  // (SQLite) loads relations in chunks and panics merging them on an unselected order field (PERF-02)
+  media: { where: { type: "IMAGE" }, select: { isSelected: true, storageKey: true, externalUrl: true, createdAt: true }, orderBy: { createdAt: "asc" } },
   schedules: {
     select: { id: true, status: true, platformId: true, scheduledAt: true, accountId: true, simulated: true },
     orderBy: { scheduledAt: "asc" },

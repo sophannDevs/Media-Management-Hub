@@ -46,7 +46,8 @@ const rowSelect = {
       contentType: true,
       thumbnailAsset: { select: assetSelect },
       videoAsset: { select: { durationSec: true } },
-      media: { where: { type: "IMAGE" }, select: assetSelect, orderBy: [{ isSelected: "desc" }, { createdAt: "asc" }], take: 1 },
+      // Order fields are selected too: Prisma panics merging chunked relations on unselected ones (PERF-02)
+      media: { where: { type: "IMAGE" }, select: { ...assetSelect, isSelected: true, createdAt: true }, orderBy: [{ isSelected: "desc" }, { createdAt: "asc" }], take: 1 },
     },
   },
   jobs: {

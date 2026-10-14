@@ -26,7 +26,8 @@ const eventSelect = {
       videoAsset: { select: { durationSec: true } },
       media: {
         where: { type: "IMAGE" },
-        select: { storageKey: true, externalUrl: true },
+        // Order fields are selected too: Prisma panics merging chunked relations on unselected ones (PERF-02)
+        select: { storageKey: true, externalUrl: true, isSelected: true, createdAt: true },
         orderBy: [{ isSelected: "desc" }, { createdAt: "asc" }],
         take: 1,
       },

@@ -91,7 +91,8 @@ const assetSelect = {
       archivedAt: true,
       // Poster for video cards: the content's thumbnail, else its first selected image
       thumbnailAsset: { select: { storageKey: true, externalUrl: true } },
-      media: { where: { type: "IMAGE", isSelected: true }, orderBy: { createdAt: "asc" }, take: 1, select: { storageKey: true, externalUrl: true } },
+      // createdAt is selected because it orders the list: Prisma panics on unselected order fields in chunked loads (PERF-02)
+      media: { where: { type: "IMAGE", isSelected: true }, orderBy: { createdAt: "asc" }, take: 1, select: { storageKey: true, externalUrl: true, createdAt: true } },
     },
   },
   videoFor: { select: { id: true, title: true } },
