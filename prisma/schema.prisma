@@ -288,6 +288,14 @@ model PublishingSchedule {
   /// Published by a simulated provider: nothing reached the platform, and the
   /// external id / URL are made up. Never shown as "Published".
   simulated        Boolean             @default(false)
+  /// Scheduled before "Ready to Post": the soft requirements waived for this
+  /// post (JSON array of requirement keys), why, when and by whom (WF-01).
+  /// Hard requirements can't be waived.
+  overrideRules    String?
+  overrideReason   String?
+  overrideAt       DateTime?
+  /// User id once sign-in exists
+  overrideBy       String?
   jobs             PublishingJob[]
   snapshots        AnalyticsSnapshot[]
   createdAt        DateTime            @default(now())

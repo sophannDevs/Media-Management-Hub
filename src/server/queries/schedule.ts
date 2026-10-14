@@ -36,6 +36,7 @@ const rowSelect = {
   externalUrl: true,
   publishedAt: true,
   simulated: true,
+  overrideReason: true,
   platform: { select: { name: true } },
   account: { select: { id: true, name: true, status: true, avatarUrl: true } },
   thumbnailAsset: { select: assetSelect },
@@ -107,6 +108,8 @@ function toRow(s: Row, now: Date, tz: string) {
     simulated: s.simulated,
     /** Simulated posts have made-up URLs: never link to them */
     externalUrl: s.simulated ? null : safeUrl(s.externalUrl),
+    /** Reason the post was scheduled before Ready to Post (WF-01) */
+    override: s.overrideReason,
     visibility: meta?.visibilityOptions.find((v) => v.value === s.visibility)?.label ?? s.visibility,
     account: { id: s.account.id, name: s.account.name, status: s.account.status, avatarUrl: s.account.avatarUrl, initials: initials(s.account.name) },
     content: {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  blockingRequirements,
   type ContentState,
   DEFAULT_RULES,
   derivePublishingStatus,
@@ -47,6 +48,36 @@ describe("missingRequirements", () => {
   it("only asks for a thumbnail when that rule is on", () => {
     expect(missingRequirements({ ...ready, hasThumbnail: false })).toEqual([]);
     expect(missingRequirements({ ...ready, hasThumbnail: false }, { ...DEFAULT_RULES, requireThumbnail: true })[0].key).toBe("thumbnail");
+  });
+});
+
+describe("hard and soft requirements (WF-01)", () => {
+  const allOff = { requireScriptApproved: false, requireImagesApproved: false, requireFinalVideo: false, requireReview: false, requireThumbnail: false };
+
+  it("still requires a video file with every rule switched off", () => {
+    const missing = missingRequirements({ ...ready, hasVideo: false }, allOff);
+    expect(missing).toEqual([{ key: "videoFile", label: "Final video is missing", tab: "video", hard: true }]);
+    expect(isReadyToPost({ ...ready, hasVideo: false }, allOff)).toBe(false);
+  });
+
+  it("lets an override waive soft requirements but never hard ones", () => {
+    const missing = missingRequirements({ ...ready, hasVideo: false, reviewStatus: "IN_REVIEW", scriptStatus: "GENERATED" });
+    const blocking = blockingRequirements(missing, ["review", "script", "videoFile"]);
+    expect(blocking.map((m) => m.key)).toEqual(["videoFile"]);
+  });
+
+  it("accepts a soft-only gap with an override and a reason, and nothing else", () => {
+    const now = new Date("2026-10-14T10:00:00Z");
+    const base = { platformId: "youtube", platformEnabled: true, account: { status: "CONNECTED", platformId: "youtube", name: "Main" }, scheduledAt: new Date("2026-10-15T10:00:00Z"), now };
+    const soft = missingRequirements({ ...ready, reviewStatus: "IN_REVIEW" });
+    const hard = missingRequirements({ ...ready, hasVideo: false });
+
+    expect(validateSchedule({ ...base, contentReady: false, missing: soft })).toEqual(['Video must be "Ready to Post" first: content has not been reviewed.']);
+    expect(validateSchedule({ ...base, contentReady: false, missing: soft, override: { reason: "  " } })).toEqual(["Give a reason for scheduling before the content is ready."]);
+    expect(validateSchedule({ ...base, contentReady: false, missing: soft, override: { reason: "Client approved by phone" } })).toEqual([]);
+    expect(validateSchedule({ ...base, contentReady: false, missing: hard, override: { reason: "Please" } })).toEqual([
+      "Can't schedule without this, and it can't be overridden: final video is missing.",
+    ]);
   });
 });
 

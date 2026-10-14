@@ -187,6 +187,8 @@ export const ActivityType = {
   SCHEDULE_CREATED: "schedule.created",
   SCHEDULE_CHANGED: "schedule.changed",
   SCHEDULE_CANCELLED: "schedule.cancelled",
+  /** A post was scheduled before Ready to Post, or its override was removed (WF-01) */
+  SCHEDULE_OVERRIDE: "schedule.override",
   PUBLISHED: "publish.succeeded",
   PUBLISH_FAILED: "publish.failed",
 } as const;

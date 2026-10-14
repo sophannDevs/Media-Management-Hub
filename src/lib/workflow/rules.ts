@@ -45,14 +45,21 @@ export interface ContentState {
 export type WorkspaceTab = "overview" | "script" | "images" | "video" | "publishing" | "activity";
 
 export interface Requirement {
-  key: "script" | "images" | "video" | "review" | "thumbnail";
+  key: "videoFile" | "script" | "images" | "video" | "review" | "thumbnail";
   label: string;
   tab: WorkspaceTab;
+  /** Hard requirements can't be switched off in Settings or overridden per post: publishing would fail without them. */
+  hard?: boolean;
 }
 
-/** What is still missing before the content can be marked "Ready to Post". */
+/** Never optional: every platform publishes a video file, so a post without one can only fail. */
+export function hardRequirements(c: ContentState): Requirement[] {
+  return c.hasVideo === false ? [{ key: "videoFile", label: "Final video is missing", tab: "video", hard: true }] : [];
+}
+
+/** What is still missing before the content can be marked "Ready to Post": hard requirements first, then the enabled rules. */
 export function missingRequirements(c: ContentState, rules: WorkflowRules = DEFAULT_RULES): Requirement[] {
-  const missing: Requirement[] = [];
+  const missing: Requirement[] = hardRequirements(c);
   if (rules.requireScriptApproved && c.scriptStatus !== "APPROVED") {
     missing.push({ key: "script", label: "Script is not approved", tab: "script" });
   }
@@ -60,9 +67,9 @@ export function missingRequirements(c: ContentState, rules: WorkflowRules = DEFA
     if (c.imageStatus !== "APPROVED") missing.push({ key: "images", label: "Images are not approved", tab: "images" });
     else if (c.selectedImageCount === 0) missing.push({ key: "images", label: "No final images selected", tab: "images" });
   }
-  if (rules.requireFinalVideo) {
-    if (c.hasVideo === false) missing.push({ key: "video", label: "Final video is missing", tab: "video" });
-    else if (c.videoStatus !== "FINAL") missing.push({ key: "video", label: "Video is not marked Final", tab: "video" });
+  // The file itself is a hard requirement above; this rule is about its status
+  if (rules.requireFinalVideo && c.hasVideo !== false && c.videoStatus !== "FINAL") {
+    missing.push({ key: "video", label: "Video is not marked Final", tab: "video" });
   }
   if (rules.requireReview && c.reviewStatus !== "APPROVED") {
     missing.push({ key: "review", label: "Content has not been reviewed", tab: "overview" });
@@ -75,6 +82,14 @@ export function missingRequirements(c: ContentState, rules: WorkflowRules = DEFA
 
 export function isReadyToPost(c: ContentState, rules: WorkflowRules = DEFAULT_RULES) {
   return missingRequirements(c, rules).length === 0;
+}
+
+/**
+ * What still stops a post: every hard requirement, plus the soft ones its
+ * override doesn't waive. An override is recorded per post with a reason.
+ */
+export function blockingRequirements(missing: Requirement[], overridden: readonly string[] = []) {
+  return missing.filter((m) => m.hard || !overridden.includes(m.key));
 }
 
 /**
@@ -158,6 +173,8 @@ export function imageStage(c: ContentState) {
 export interface ScheduleValidationInput {
   contentReady: boolean;
   missing?: Requirement[];
+  /** Schedule before Ready to Post, waiving the missing soft requirements. Needs a reason. */
+  override?: { reason?: string } | null;
   platformId?: string | null;
   platformEnabled?: boolean;
   account?: { status: string; platformId: string; name: string } | null;
@@ -167,15 +184,22 @@ export interface ScheduleValidationInput {
   maxTitleLength?: number;
 }
 
-/** Rule: a post can be scheduled only with a ready video, a platform, a connected account and a future time. */
+/**
+ * Rule: a post can be scheduled only with a ready video (or an override with a
+ * reason for the soft requirements), a platform, a connected account and a
+ * future time. Hard requirements can never be overridden.
+ */
 export function validateSchedule(i: ScheduleValidationInput): string[] {
   const errors: string[] = [];
   if (!i.contentReady) {
-    errors.push(
-      i.missing?.length
-        ? `Video must be "Ready to Post" first: ${i.missing.map((m) => m.label.toLowerCase()).join(", ")}.`
-        : 'Video must be "Ready to Post" before scheduling.',
-    );
+    const missing = i.missing ?? [];
+    const hard = missing.filter((m) => m.hard);
+    const soft = missing.filter((m) => !m.hard);
+    const list = (r: Requirement[]) => r.map((m) => m.label.toLowerCase()).join(", ");
+    if (!missing.length) errors.push('Video must be "Ready to Post" before scheduling.');
+    if (hard.length) errors.push(`Can't schedule without this, and it can't be overridden: ${list(hard)}.`);
+    if (soft.length && !i.override) errors.push(`Video must be "Ready to Post" first: ${list(soft)}.`);
+    if (soft.length && i.override && !i.override.reason?.trim()) errors.push("Give a reason for scheduling before the content is ready.");
   }
   if (!i.platformId) errors.push("Select a social platform.");
   else if (i.platformEnabled === false) errors.push("This platform is not available yet.");

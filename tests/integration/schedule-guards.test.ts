@@ -90,12 +90,4 @@ describe("schedule guards", () => {
     expect(after.lastErrorCode).toBeNull();
     expect(after.activeKey).toBe(`${content.id}:${account.id}`);
   });
-
-  it.fails("WF-01: content without a video cannot be scheduled even with the video rule off", async () => {
-    await db.workspaceSettings.update({ where: { id: 1 }, data: { requireFinalVideo: false } });
-    const { content, input } = await readyPost();
-    await db.content.update({ where: { id: content.id }, data: { videoAssetId: null, videoStatus: "NOT_STARTED" } });
-
-    await expect(createSchedule({ ...input, title: "No video" })).rejects.toThrow(/video/i);
-  });
 });

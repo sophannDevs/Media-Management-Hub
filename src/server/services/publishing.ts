@@ -6,7 +6,7 @@ import { dayDiff } from "@/lib/dates";
 import { getProvider } from "@/lib/platforms/registry";
 import { type PlatformProvider, PublishError, type PublishMedia, type PublishRequest, type PublishResult, type ReconcileResult } from "@/lib/platforms/types";
 import { storage } from "@/lib/storage";
-import { isReadyToPost } from "@/lib/workflow/rules";
+import { blockingRequirements, missingRequirements } from "@/lib/workflow/rules";
 import { ActivityType, NotificationType } from "@/lib/workflow/statuses";
 import { logActivity } from "./activity";
 import { syncMockAnalytics } from "./analytics-sync";
@@ -189,13 +189,27 @@ async function attempt(scheduleId: string, heartbeat: Heartbeat): Promise<Proces
   return recordSuccess(s, jobId, result, { simulated, reconciled: false });
 }
 
-/** Checks that need no platform call. A failure here means nothing was sent. */
+/**
+ * Checks that need no platform call. A failure here means nothing was sent.
+ * Hard requirements always apply; soft ones the post's override waived don't (WF-01).
+ */
 function preflight(s: LoadedSchedule, settings: Settings): PublishError | null {
   if (s.content.archivedAt) return new PublishError("Content is archived.", "VALIDATION", false);
-  if (!isReadyToPost(toContentState(s.content), rulesFrom(settings))) {
-    return new PublishError("Content is no longer Ready to Post (an asset or approval changed).", "VALIDATION", false);
+  const missing = missingRequirements(toContentState(s.content), rulesFrom(settings));
+  const blocking = blockingRequirements(missing, overriddenKeys(s.overrideRules));
+  if (blocking.length) {
+    return new PublishError(
+      `Content is no longer Ready to Post: ${blocking.map((m) => m.label.toLowerCase()).join(", ")}.`,
+      "VALIDATION",
+      false,
+    );
   }
   return null;
+}
+
+function overriddenKeys(json: string | null): string[] {
+  const parsed = json ? (JSON.parse(json) as unknown) : [];
+  return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === "string") : [];
 }
 
 /**

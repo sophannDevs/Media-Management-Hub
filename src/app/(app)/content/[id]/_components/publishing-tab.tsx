@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { useServerAction } from "@/hooks/use-server-action";
 import { cn } from "@/lib/utils";
 import { AccountStatus, ScheduleStatus, scheduleLabel } from "@/lib/workflow/statuses";
-import { cancelScheduleAction } from "@/server/actions/schedule";
+import { cancelScheduleAction, removeOverrideAction } from "@/server/actions/schedule";
 import type { ContentWorkspace } from "@/server/queries/content";
 
 type Schedule = ContentWorkspace["schedules"][number];
@@ -24,13 +24,15 @@ export function PublishingTab({ data }: { data: ContentWorkspace }) {
   const cancelled = data.schedules.filter((s) => s.status === "CANCELLED");
   const [showCancelled, setShowCancelled] = useState(false);
   const ready = data.workflow.ready;
+  // Missing soft requirements can be waived per post in the dialog; hard ones can't (WF-01)
+  const canSchedule = ready || !data.workflow.missing.some((m) => m.hard);
 
   return (
     <div className="grid gap-6 lg:grid-cols-12">
       <div className="space-y-4 lg:col-span-8">
         <div className="flex items-center justify-between">
           <p className="font-semibold">Platform schedules</p>
-          <Button size="sm" disabled={!ready || data.content.archived} onClick={() => openSchedule({ contentId: data.content.id })} title={ready ? undefined : "Content is not ready to post"}>
+          <Button size="sm" disabled={!canSchedule || data.content.archived} onClick={() => openSchedule({ contentId: data.content.id })} title={canSchedule ? undefined : "A final video file is required"}>
             <CalendarPlus />Add schedule
           </Button>
         </div>
@@ -80,7 +82,7 @@ export function PublishingTab({ data }: { data: ContentWorkspace }) {
 
 function ScheduleCard({ s }: { s: Schedule }) {
   const { openSchedule } = useScheduleDialog();
-  const { run } = useServerAction();
+  const { run, pending: running } = useServerAction();
   const { retry, pending, dialog } = useRetrySchedule();
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [history, setHistory] = useState(false);
@@ -97,6 +99,7 @@ function ScheduleCard({ s }: { s: Schedule }) {
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-medium">{s.platformName}</p>
             <StatusBadge def={ScheduleStatus} value={s.status} label={scheduleLabel(s.status, s.simulated)} />
+            {s.override && <StatusBadge tone="warn" label="Override" size="sm" />}
             {s.account.status !== "CONNECTED" && <StatusBadge def={AccountStatus} value={s.account.status} size="sm" />}
           </div>
           <p className="mt-0.5 truncate text-sm text-muted-foreground">{s.account.name} · {s.visibilityLabel} · {s.timezone}</p>
@@ -122,6 +125,19 @@ function ScheduleCard({ s }: { s: Schedule }) {
           ) : null}
         </div>
       </div>
+
+      {s.override && (
+        <div className="mt-3 flex flex-col gap-2 rounded-xl border border-orange-200 bg-orange-50 p-3 text-xs text-orange-950 sm:flex-row sm:items-center">
+          <p className="min-w-0 flex-1">
+            <span className="font-medium">Scheduled before Ready to Post{s.override.atLabel ? ` (${s.override.atLabel})` : ""}.</span> Reason: “{s.override.reason}”
+          </p>
+          {editable && (
+            <Button variant="outline" size="sm" className="bg-white" disabled={running} onClick={() => run(() => removeOverrideAction(s.id))}>
+              Remove override
+            </Button>
+          )}
+        </div>
+      )}
 
       {s.status === "PUBLISHED" && s.publishedLabel && (
         <p className="mt-3 text-xs text-muted-foreground">

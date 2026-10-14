@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { fmtDateTime, zonedToUtc } from "@/lib/dates";
 import { getProvider } from "@/lib/platforms/registry";
-import { normalizeHashtags, scheduleActiveKey, validateSchedule } from "@/lib/workflow/rules";
+import { normalizeHashtags, type Requirement, scheduleActiveKey, validateSchedule } from "@/lib/workflow/rules";
 import { ActivityType, ScheduleStatus } from "@/lib/workflow/statuses";
 import { ServiceError } from "../errors";
 import { logActivity } from "./activity";
@@ -25,6 +25,26 @@ export interface ScheduleInput {
   idempotencyKey?: string;
   /** Post again to an account that already published this content. */
   repost?: boolean;
+  /** Schedule before "Ready to Post", waiving the missing soft requirements (WF-01). */
+  override?: { reason: string } | null;
+}
+
+/** Override columns for a post: the waived soft requirements, or all null when nothing is waived. */
+function overrideData(missing: Requirement[], override: ScheduleInput["override"]) {
+  const waived = missing.filter((m) => !m.hard);
+  if (!override || !waived.length) return { overrideRules: null, overrideReason: null, overrideAt: null, overrideBy: null };
+  // overrideBy is filled with the signed-in user once sign-in exists (SEC-01)
+  return { overrideRules: JSON.stringify(waived.map((m) => m.key)), overrideReason: override.reason.trim(), overrideAt: new Date(), overrideBy: null };
+}
+
+async function logOverride(contentId: string, scheduleId: string, platform: string, missing: Requirement[], reason: string) {
+  const waived = missing.filter((m) => !m.hard);
+  await logActivity({
+    contentId,
+    type: ActivityType.SCHEDULE_OVERRIDE,
+    message: `${platform} post scheduled before Ready to Post. Reason: “${reason.trim()}”. Waived: ${waived.map((m) => m.label.toLowerCase()).join(", ")}.`,
+    meta: { scheduleId, waived: waived.map((m) => m.key), reason: reason.trim() },
+  });
 }
 
 // Every user-side change is conditional on the status the user saw, so a post
@@ -84,6 +104,7 @@ async function validate(input: ScheduleInput) {
   const errors = validateSchedule({
     contentReady: readiness.ready,
     missing: readiness.missing,
+    override: input.override,
     platformId: input.platformId,
     platformEnabled: !!platform?.enabled && !!provider,
     account: account ? { status: account.status, platformId: account.platformId, name: account.name } : null,
@@ -103,7 +124,7 @@ async function validate(input: ScheduleInput) {
     if (!t || t.contentId !== input.contentId) errors.push("Thumbnail must belong to this content.");
   }
   if (errors.length) throw new ServiceError("Can't schedule this post yet.", errors);
-  return { provider: provider!, scheduledAt: scheduledAt!, account: account! };
+  return { provider: provider!, scheduledAt: scheduledAt!, account: account!, missing: readiness.missing };
 }
 
 export async function createSchedule(input: ScheduleInput) {
@@ -111,7 +132,8 @@ export async function createSchedule(input: ScheduleInput) {
     const existing = await db.publishingSchedule.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
     if (existing) return existing;
   }
-  const { provider, scheduledAt, account } = await validate(input);
+  const { provider, scheduledAt, account, missing } = await validate(input);
+  const override = overrideData(missing, input.override);
 
   if (!input.repost) {
     const published = await db.publishingSchedule.findFirst({
@@ -144,6 +166,7 @@ export async function createSchedule(input: ScheduleInput) {
         visibility: input.visibility || provider.defaultVisibility,
         activeKey: scheduleActiveKey("WAITING", input.contentId, input.accountId),
         idempotencyKey: input.idempotencyKey || null,
+        ...override,
       },
     });
   } catch (e) {
@@ -165,6 +188,7 @@ export async function createSchedule(input: ScheduleInput) {
     message: `${input.repost ? "Repost scheduled" : "Scheduled"} for ${provider.name} (${account.name}) — ${input.date} ${input.time}`,
     meta: { scheduleId: schedule.id, repost: !!input.repost },
   });
+  if (override.overrideReason) await logOverride(input.contentId, schedule.id, provider.name, missing, override.overrideReason);
   await syncPublishingStatus(input.contentId);
   return schedule;
 }
@@ -173,7 +197,10 @@ export async function updateSchedule(id: string, input: ScheduleInput) {
   const existing = await db.publishingSchedule.findUnique({ where: { id } });
   if (!existing) throw new ServiceError("Schedule not found.");
   if (!EDITABLE.includes(existing.status)) throw await conflict(id);
-  const { provider, scheduledAt } = await validate({ ...input, contentId: existing.contentId });
+  const { provider, scheduledAt, missing } = await validate({ ...input, contentId: existing.contentId });
+  // Re-recorded on every edit: kept while it's still needed, cleared once the content is ready
+  const override = overrideData(missing, input.override);
+  const overrideChanged = override.overrideReason !== null && (override.overrideReason !== existing.overrideReason || override.overrideRules !== existing.overrideRules);
 
   let changed;
   try {
@@ -196,6 +223,9 @@ export async function updateSchedule(id: string, input: ScheduleInput) {
         nextAttemptAt: null,
         uploadState: null,
         ...clearedError(existing.lastErrorCode),
+        ...override,
+        // Keep the original time and author of an override that didn't change
+        ...(override.overrideReason && !overrideChanged ? { overrideAt: existing.overrideAt, overrideBy: existing.overrideBy } : {}),
       },
     });
   } catch (e) {
@@ -210,7 +240,26 @@ export async function updateSchedule(id: string, input: ScheduleInput) {
     message: `${provider.name} schedule changed to ${input.date} ${input.time}`,
     meta: { scheduleId: id },
   });
+  if (overrideChanged) await logOverride(existing.contentId, id, provider.name, missing, override.overrideReason!);
   await syncPublishingStatus(existing.contentId);
+}
+
+/** Removes a post's override: it again needs every requirement before it can publish. */
+export async function removeOverride(id: string) {
+  const s = await db.publishingSchedule.findUnique({ where: { id }, include: { platform: true } });
+  if (!s) throw new ServiceError("Schedule not found.");
+  if (!s.overrideRules) return;
+  const changed = await db.publishingSchedule.updateMany({
+    where: { id, status: { in: EDITABLE } },
+    data: { overrideRules: null, overrideReason: null, overrideAt: null, overrideBy: null },
+  });
+  if (changed.count === 0) throw await conflict(id);
+  await logActivity({
+    contentId: s.contentId,
+    type: ActivityType.SCHEDULE_OVERRIDE,
+    message: `${s.platform.name} override removed: the post needs every requirement before it publishes.`,
+    meta: { scheduleId: id },
+  });
 }
 
 /** Moves a post to a new time, keeping all other settings (used by calendar drag & drop). */

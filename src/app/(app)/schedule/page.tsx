@@ -268,7 +268,14 @@ function StatusCell({ r }: { r: QueueRow }) {
   const showError = (r.status === "FAILED" || r.status === "RETRY_SCHEDULED") && r.lastError;
   return (
     <div className="min-w-[150px]">
-      <StatusBadge def={ScheduleStatus} value={r.status} label={scheduleLabel(r.status, r.simulated)} />
+      <div className="flex flex-wrap items-center gap-1">
+        <StatusBadge def={ScheduleStatus} value={r.status} label={scheduleLabel(r.status, r.simulated)} />
+        {r.override && (
+          <span title={`Scheduled before Ready to Post. Reason: ${r.override}`}>
+            <StatusBadge tone="warn" label="Override" size="sm" />
+          </span>
+        )}
+      </div>
       {r.nextAttempt && <p className="mt-1 text-[11px] whitespace-nowrap text-orange-700">Next attempt {r.nextAttempt}</p>}
       {showError && (
         <p className="mt-0.5 max-w-[190px] truncate text-[11px] text-muted-foreground" title={r.lastError ?? undefined}>

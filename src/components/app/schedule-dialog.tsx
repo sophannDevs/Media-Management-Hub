@@ -6,6 +6,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 import { ContentThumb } from "@/components/app/content-thumb";
 import { PlatformIcon } from "@/components/app/platform-icon";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -137,6 +138,9 @@ function ScheduleFields({ data, opts, onDone, onSwitchContent }: { data: Schedul
   const [visibility, setVisibility] = useState(editing?.visibility ?? meta?.defaultVisibility ?? "");
   const [errors, setErrors] = useState<string[]>([]);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [overrideOn, setOverrideOn] = useState(!!editing?.override);
+  const [reason, setReason] = useState(editing?.override?.reason ?? "");
+  const hardMissing = content?.missing.some((m) => m.hard) ?? false;
   const [token, setToken] = useState(newToken);
   const { run, pending } = useServerAction();
   const { openSchedule } = useScheduleDialog();
@@ -153,7 +157,8 @@ function ScheduleFields({ data, opts, onDone, onSwitchContent }: { data: Schedul
     if (!content) return;
     setErrors([]);
     setNotice(null);
-    const values = { contentId: content.id, platformId, accountId, date, time, timezone, title, caption, hashtags, thumbnailAssetId, visibility, idempotencyKey: token, repost };
+    const override = !content.ready && overrideOn ? { reason } : null;
+    const values = { contentId: content.id, platformId, accountId, date, time, timezone, title, caption, hashtags, thumbnailAssetId, visibility, idempotencyKey: token, repost, override };
     run<unknown>(() => (editing ? updateScheduleAction(editing.id, values) : createScheduleAction(values)), {
       onSuccess: () => {
         // The next "add another platform" is a different post
@@ -210,10 +215,7 @@ function ScheduleFields({ data, opts, onDone, onSwitchContent }: { data: Schedul
         ) : (
           <>
             {!content.ready && (
-              <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-900">
-                <p className="flex items-center gap-2 font-medium"><TriangleAlert className="size-4" />This content isn&apos;t ready to post yet</p>
-                <ul className="mt-2 ml-6 list-disc space-y-0.5">{content.missing.map((m) => <li key={m}>{m}</li>)}</ul>
-              </div>
+              <ReadinessNotice missing={content.missing} overrideOn={overrideOn} onOverrideChange={setOverrideOn} reason={reason} onReasonChange={setReason} />
             )}
 
             <div>
@@ -360,16 +362,80 @@ function ScheduleFields({ data, opts, onDone, onSwitchContent }: { data: Schedul
 
       <DialogFooter className="mx-0 mb-0 flex-col-reverse gap-2 rounded-b-xl border-t border-[#f1eedf] bg-[#fcfbf3] px-6 py-4 sm:flex-row sm:items-center">
         {!editing && content && (
-          <Button variant="ghost" className="sm:mr-auto" disabled={pending} onClick={() => submit(true)}>
+          <Button variant="ghost" className="sm:mr-auto" disabled={pending || hardMissing} onClick={() => submit(true)}>
             <Plus />Save & add another platform
           </Button>
         )}
         <Button variant="outline" onClick={onDone}>Cancel</Button>
-        <Button disabled={pending || !content} onClick={() => submit(false)}>
+        <Button disabled={pending || !content || hardMissing} onClick={() => submit(false)}>
           <CalendarCheck />
           {pending ? "Saving…" : editing ? "Save changes" : "Schedule post"}
         </Button>
       </DialogFooter>
     </>
+  );
+}
+
+/**
+ * Why the content isn't Ready to Post. Missing soft requirements can be waived
+ * for this post with a reason (logged); hard ones can't (WF-01).
+ */
+function ReadinessNotice({
+  missing,
+  overrideOn,
+  onOverrideChange,
+  reason,
+  onReasonChange,
+}: {
+  missing: { label: string; hard: boolean }[];
+  overrideOn: boolean;
+  onOverrideChange: (on: boolean) => void;
+  reason: string;
+  onReasonChange: (reason: string) => void;
+}) {
+  const hard = missing.filter((m) => m.hard);
+  const soft = missing.filter((m) => !m.hard);
+  return (
+    <div className={cn("rounded-xl border p-4 text-sm", hard.length ? "border-rose-200 bg-rose-50 text-rose-900" : "border-orange-200 bg-orange-50 text-orange-950")}>
+      <p className="flex items-center gap-2 font-medium">
+        <TriangleAlert className="size-4" />
+        {hard.length ? "This content can't be scheduled yet" : "This content isn't ready to post yet"}
+      </p>
+      <ul className="mt-2 ml-6 list-disc space-y-0.5">
+        {hard.map((m) => (
+          <li key={m.label}>
+            {m.label} <span className="font-medium">(required, can&apos;t be overridden)</span>
+          </li>
+        ))}
+        {soft.map((m) => (
+          <li key={m.label}>{m.label}</li>
+        ))}
+      </ul>
+      {!hard.length && (
+        <div className="mt-3 space-y-2 border-t border-orange-200 pt-3">
+          <div className="flex items-start gap-2.5">
+            <Checkbox id="sch-override" className="mt-0.5 bg-white" checked={overrideOn} onCheckedChange={(v) => onOverrideChange(v === true)} />
+            <Label htmlFor="sch-override" className="leading-snug font-normal">
+              Schedule anyway: waive these checks for this post only. The reason is saved in the activity log.
+            </Label>
+          </div>
+          {overrideOn && (
+            <div>
+              <Label htmlFor="sch-override-reason" className="mb-1.5">Reason</Label>
+              <Textarea
+                id="sch-override-reason"
+                rows={2}
+                maxLength={500}
+                required
+                className="bg-white"
+                value={reason}
+                placeholder="e.g. Review done by phone with the client; approval to follow"
+                onChange={(e) => onReasonChange(e.target.value)}
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

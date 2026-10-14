@@ -248,6 +248,8 @@ export async function getContentWorkspace(id: string) {
       simulated: s.simulated,
       /** Simulated posts have made-up URLs: never link to them */
       externalUrl: s.simulated ? null : s.externalUrl,
+      /** Scheduled before Ready to Post with a reason (WF-01) */
+      override: s.overrideReason ? { reason: s.overrideReason, atLabel: s.overrideAt ? fmtDateTime(s.overrideAt, tz) : null } : null,
       publishedLabel: s.publishedAt ? fmtDateTime(s.publishedAt, tz) : null,
       jobs: s.jobs.map((j) => ({ id: j.id, attempt: j.attempt, status: j.status, error: j.error, startedLabel: fmtDateTime(j.startedAt, tz) })),
     })),

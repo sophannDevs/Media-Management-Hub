@@ -20,6 +20,7 @@ const scheduleSchema = z.object({
   visibility: z.string().optional(),
   idempotencyKey: z.string().min(8).max(64).optional(),
   repost: z.boolean().optional(),
+  override: z.object({ reason: z.string().trim().max(500) }).nullish(),
 });
 export type ScheduleFormValues = z.input<typeof scheduleSchema>;
 
@@ -38,6 +39,11 @@ export async function rescheduleAction(scheduleId: string, scheduledAtIso: strin
     ({ id, at }) => schedule.reschedule(id, new Date(at)),
     "Rescheduled",
   );
+}
+
+/** Removes a post's override of soft requirements (WF-01). */
+export async function removeOverrideAction(scheduleId: string) {
+  return runAction(id, scheduleId, (id) => schedule.removeOverride(id), "Override removed — the post needs every requirement again");
 }
 
 export async function cancelScheduleAction(scheduleId: string) {

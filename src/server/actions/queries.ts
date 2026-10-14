@@ -62,7 +62,8 @@ export async function getScheduleFormData(input: { contentId?: string | null; sc
           platforms: c.platforms.map((p) => p.platformId),
           durationSec: c.videoAsset?.durationSec ?? null,
           ready: isReadyToPost(state, rules),
-          missing: missingRequirements(state, rules).map((m) => m.label),
+          /** Hard items can't be overridden; soft ones can, with a reason (WF-01) */
+          missing: missingRequirements(state, rules).map((m) => ({ label: m.label, hard: !!m.hard })),
           defaultThumbnailId: c.thumbnailAssetId,
           thumbnails: c.media
             .filter((m) => m.type === "THUMBNAIL" || m.isSelected || m.id === c.thumbnailAssetId)
@@ -86,6 +87,7 @@ export async function getScheduleFormData(input: { contentId?: string | null; sc
           thumbnailAssetId: schedule.thumbnailAssetId,
           visibility: schedule.visibility,
           status: schedule.status,
+          override: schedule.overrideReason ? { reason: schedule.overrideReason } : null,
         }
       : null,
   };

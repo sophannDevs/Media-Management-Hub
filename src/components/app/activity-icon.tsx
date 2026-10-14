@@ -1,4 +1,4 @@
-import { CalendarClock, CalendarX, CircleCheck, Dot, FileText, Film, ImageIcon, Lightbulb, MessageSquareWarning, Pencil, Trash2, TriangleAlert } from "lucide-react";
+import { CalendarClock, CalendarX, CircleCheck, Dot, FileText, Film, ImageIcon, Lightbulb, MessageSquareWarning, Pencil, ShieldAlert, Trash2, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const MAP: Record<string, [typeof Dot, string]> = {
@@ -14,6 +14,7 @@ const MAP: Record<string, [typeof Dot, string]> = {
   "schedule.created": [CalendarClock, "bg-violet-50 text-violet-700"],
   "schedule.changed": [CalendarClock, "bg-violet-50 text-violet-700"],
   "schedule.cancelled": [CalendarX, "bg-stone-100 text-stone-600"],
+  "schedule.override": [ShieldAlert, "bg-orange-50 text-orange-800"],
   "publish.succeeded": [CircleCheck, "bg-olive-100 text-olive-800"],
   "publish.failed": [TriangleAlert, "bg-rose-50 text-rose-700"],
 };

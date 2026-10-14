@@ -11,7 +11,7 @@ import { SettingsCard } from "./settings-card";
 const RULES: { key: keyof WorkflowRules; title: string; description: string }[] = [
   { key: "requireScriptApproved", title: "Require approved script", description: "The script status must be Approved." },
   { key: "requireImagesApproved", title: "Require approved images", description: "Images must be Approved, with at least one final image selected." },
-  { key: "requireFinalVideo", title: "Require final video", description: "A video file must be attached and marked Final." },
+  { key: "requireFinalVideo", title: "Require the video to be marked Final", description: "The attached video must be marked Final. (A video file itself is always required.)" },
   { key: "requireReview", title: "Require review approval", description: "A final review must be Approved before the video is ready." },
   { key: "requireThumbnail", title: "Require thumbnail", description: "A thumbnail must be set before the video can be scheduled." },
 ];
@@ -45,7 +45,8 @@ export function WorkflowRulesSection({ rules }: { rules: WorkflowRules }) {
       </ul>
       <p className="flex gap-2 border-t border-[#f3f1e4] bg-[#fcfbf3] px-5 py-3 text-xs text-muted-foreground rounded-b-2xl">
         <Info className="mt-px size-3.5 shrink-0 text-primary" aria-hidden />
-        Changing a rule recalculates the “Ready to Post” status of every content item. Videos that are already scheduled or published are not affected.
+        Changing a rule recalculates the “Ready to Post” status of every content item. Videos that are already scheduled or published are not affected. A
+        video file is always required. To skip a rule for one post, use “Schedule anyway” in the schedule dialog: it asks for a reason and records it.
       </p>
     </SettingsCard>
   );
