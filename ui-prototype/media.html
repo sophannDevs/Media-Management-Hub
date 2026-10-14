@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Media Library · MediaFlow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="assets/tailwind.config.js"></script>
+  <link rel="stylesheet" href="assets/styles.css">
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+</head>
+<body data-page="media">
+  <aside id="sidebar"></aside>
+  <div class="lg:pl-64 min-h-screen flex flex-col">
+    <header id="topbar"></header>
+
+    <main class="flex-1 px-4 md:px-8 py-6 md:py-8 space-y-5 max-w-[1600px] w-full mx-auto">
+      <div class="flex flex-col md:flex-row md:items-end justify-between gap-3">
+        <div>
+          <h1 class="text-2xl font-semibold tracking-tight">Media Library</h1>
+          <p class="text-sm text-stone-500 mt-0.5">All images, videos, thumbnails, audio and music — linked to the content they belong to.</p>
+        </div>
+        <button class="btn btn-primary" onclick="UI.openModal('upload-dialog')"><i data-lucide="upload"></i>Upload media</button>
+      </div>
+
+      <div id="type-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"></div>
+
+      <div class="card p-3 flex flex-wrap items-center gap-2">
+        <div class="relative flex-1 min-w-[200px]"><i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"></i><input id="m-q" class="input !pl-9" placeholder="Search file name"></div>
+        <select id="m-content" class="select !w-auto max-w-[240px]"><option value="">All content</option></select>
+        <select id="m-usage" class="select !w-auto"><option value="">Any usage</option><option>In use</option><option>Unused</option></select>
+        <select id="m-date" class="select !w-auto"><option value="">Any date</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option></select>
+      </div>
+
+      <div id="grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6 gap-4"></div>
+    </main>
+  </div>
+
+  <!-- Upload dialog -->
+  <div id="upload-dialog" class="overlay">
+    <div class="dialog">
+      <div class="flex items-start justify-between p-6 pb-4 border-b border-[#f1eedf]">
+        <div><h2 class="text-lg font-semibold">Upload media</h2><p class="text-sm text-stone-500 mt-0.5">Attach files to a content item so they show up in its workspace.</p></div>
+        <button class="btn btn-ghost btn-icon" data-close-modal="upload-dialog"><i data-lucide="x"></i></button>
+      </div>
+      <div class="p-6 space-y-4">
+        <label class="block rounded-xl border-2 border-dashed border-stone-300 hover:bg-[#fcfbf3] cursor-pointer p-8 text-center">
+          <i data-lucide="cloud-upload" class="w-8 h-8 mx-auto text-olive-600"></i>
+          <p class="font-medium mt-2">Drop files here or click to browse</p>
+          <p class="text-xs text-stone-500 mt-1">PNG, JPG, WEBP, MP4, MOV, MP3, WAV · up to 2 GB</p>
+          <input type="file" class="hidden" multiple>
+        </label>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div><label class="label">Belongs to content</label><select id="up-content" class="select"></select></div>
+          <div><label class="label">Media type</label><select class="select"><option>Image</option><option>Video</option><option>Thumbnail</option><option>Audio</option><option>Music</option><option>Other asset</option></select></div>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 p-4 px-6 border-t border-[#f1eedf] bg-[#fcfbf3] rounded-b-2xl">
+        <button class="btn btn-outline" data-close-modal="upload-dialog">Cancel</button>
+        <button class="btn btn-primary" onclick="UI.closeModal('upload-dialog'); UI.toast('Upload started (mock)','upload')">Upload</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="assets/data.js"></script>
+  <script src="assets/logic.js"></script>
+  <script src="assets/ui.js"></script>
+  <script src="assets/layout.js"></script>
+  <script>
+    const TYPES = [
+      ['All', 'layers'], ['Image', 'image'], ['Video', 'film'], ['Thumbnail', 'panels-top-left'], ['Audio', 'mic'], ['Music', 'music'],
+    ];
+    // Derive mock MediaAsset rows from content progress
+    const ASSETS = [];
+    DB.contents.forEach((c, ci) => {
+      const slug = c.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 22).replace(/-+$/, '');
+      const day = (n) => { const d = new Date(c.createdAt); d.setDate(d.getDate() + n); return Fmt.key(d); };
+      if (c.image !== 'Not Started') for (let i = 0; i < 3; i++) ASSETS.push({ type: 'Image', name: `${slug}-scene-${i + 1}.png`, contentId: c.id, size: `${(2.1 + i * 0.4).toFixed(1)} MB`, meta: '1920×1080', date: day(2), used: c.image === 'Approved' && i < 2, thumb: (c.thumb + i * 3) % 16 });
+      if (c.duration) ASSETS.push({ type: 'Video', name: `${slug}-final.mp4`, contentId: c.id, size: `${300 + ci * 9} MB`, meta: c.duration, date: day(4), used: true, thumb: c.thumb });
+      if (c.video === 'Final') ASSETS.push({ type: 'Thumbnail', name: `${slug}-thumb.jpg`, contentId: c.id, size: '214 KB', meta: '1280×720', date: day(4), used: true, thumb: (c.thumb + 5) % 16 });
+      if (c.duration) ASSETS.push({ type: 'Audio', name: `${slug}-voiceover.wav`, contentId: c.id, size: `${18 + ci} MB`, meta: c.duration, date: day(3), used: true });
+      if (ci % 3 === 0 && c.duration) ASSETS.push({ type: 'Music', name: `ambient-bed-${ci}.mp3`, contentId: c.id, size: '6.2 MB', meta: '3:30', date: day(3), used: ci % 2 === 0 });
+    });
+
+    const m = { type: 'All', q: '', content: '', usage: '', date: '' };
+
+    function card(a) {
+      const c = Logic.content(a.contentId);
+      const visual = ['Image', 'Thumbnail', 'Video'].includes(a.type);
+      const preview = visual
+        ? UI.thumb({ thumb: a.thumb }, 'w-full aspect-video !rounded-none', { icon: a.type === 'Video' ? 'play' : 'image' })
+        : `<div class="w-full aspect-video bg-[#f7f5e6] flex flex-col items-center justify-center gap-2 text-olive-700">${UI.icon(a.type === 'Music' ? 'music' : 'audio-lines', 'w-7 h-7')}<div class="flex items-end gap-0.5 h-5">${Array.from({ length: 18 }, (_, i) => `<span class="w-1 rounded-full bg-olive-300" style="height:${20 + ((i * 37) % 80)}%"></span>`).join('')}</div></div>`;
+      return `
+        <div class="card overflow-hidden group">
+          <div class="relative">${preview}
+            <span class="absolute top-2 left-2 badge bg-white/90 text-stone-700 border-white">${UI.icon(TYPES.find((t) => t[0] === a.type)[1], 'w-3 h-3')}${a.type}</span>
+            ${a.type === 'Video' || a.type === 'Audio' || a.type === 'Music' ? `<span class="absolute bottom-2 right-2 text-[10px] font-medium bg-black/65 text-white rounded px-1.5">${a.meta}</span>` : ''}
+            <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition flex gap-1">
+              <button class="w-7 h-7 rounded-md bg-white/95 flex items-center justify-center" title="Download" onclick="UI.toast('Downloading ${a.name}','download')">${UI.icon('download', 'w-3.5 h-3.5')}</button>
+              <button class="w-7 h-7 rounded-md bg-white/95 flex items-center justify-center text-rose-700" title="Delete" onclick="UI.confirm({title:'Delete ${a.name}?', text:${a.used ? "'This file is used by its content. Deleting it will mark that step incomplete.'" : "'This file is not used anywhere.'"}, onConfirm:()=>UI.toast('Deleted','trash-2')})">${UI.icon('trash-2', 'w-3.5 h-3.5')}</button>
+            </div>
+          </div>
+          <div class="p-3">
+            <p class="text-xs font-medium truncate" title="${a.name}">${a.name}</p>
+            <a href="content-detail.html?id=${c.id}" class="text-[11px] text-stone-500 hover:text-olive-700 line-clamp-1 mt-0.5">${UI.icon('link-2', 'w-3 h-3 inline -mt-0.5')} ${c.title}</a>
+            <div class="flex items-center justify-between mt-2 text-[11px] text-stone-500"><span>${a.size} · ${Fmt.short(a.date)}</span>${a.used ? '<span class="text-olive-700 font-medium">In use</span>' : '<span>Unused</span>'}</div>
+          </div>
+        </div>`;
+    }
+
+    function render() {
+      document.getElementById('type-stats').innerHTML = TYPES.map(([t, ico]) => {
+        const n = t === 'All' ? ASSETS.length : ASSETS.filter((a) => a.type === t).length;
+        const on = m.type === t;
+        return `<button onclick="m.type='${t}'; render()" class="card p-3 text-left flex items-center gap-3 transition ${on ? '!border-olive-600 ring-2 ring-olive-600/15' : 'hover:border-olive-300'}">
+          <span class="w-9 h-9 rounded-lg flex items-center justify-center ${on ? 'bg-olive-600 text-white' : 'bg-olive-50 text-olive-700'}">${UI.icon(ico)}</span>
+          <div><p class="text-sm font-medium">${t === 'All' ? 'All media' : t + (t === 'Music' || t === 'Audio' ? '' : 's')}</p><p class="text-xs text-stone-500">${n} files</p></div></button>`;
+      }).join('');
+
+      const list = ASSETS.filter((a) => (m.type === 'All' || a.type === m.type)
+        && (!m.q || a.name.includes(m.q.toLowerCase()))
+        && (!m.content || a.contentId === m.content)
+        && (!m.usage || (m.usage === 'In use') === a.used)
+        && (!m.date || (TODAY - new Date(a.date)) / 86400000 <= +m.date));
+      document.getElementById('grid').innerHTML = list.length ? list.map(card).join('') : `<div class="col-span-full card">${UI.empty('folder-open', 'No media found', 'Try another filter or upload new files.')}</div>`;
+      UI.refreshIcons();
+    }
+
+    window.renderPage = function () {
+      const opts = DB.contents.map((c) => `<option value="${c.id}">${c.title}</option>`).join('');
+      document.getElementById('m-content').innerHTML += opts;
+      document.getElementById('up-content').innerHTML = opts;
+      document.getElementById('m-q').addEventListener('input', (e) => { m.q = e.target.value; render(); });
+      ['content', 'usage', 'date'].forEach((k) => document.getElementById('m-' + k).addEventListener('change', (e) => { m[k] = e.target.value; render(); }));
+      render();
+    };
+  </script>
+</body>
+</html>

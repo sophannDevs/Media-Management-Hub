@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard · MediaFlow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="assets/tailwind.config.js"></script>
+  <link rel="stylesheet" href="assets/styles.css">
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+</head>
+<body data-page="dashboard">
+  <aside id="sidebar"></aside>
+  <div class="lg:pl-64 min-h-screen flex flex-col">
+    <header id="topbar"></header>
+
+    <main class="flex-1 px-4 md:px-8 py-6 md:py-8 space-y-6 max-w-[1600px] w-full mx-auto">
+      <!-- Heading -->
+      <div class="flex flex-col md:flex-row md:items-end justify-between gap-3">
+        <div>
+          <p class="text-sm text-stone-500">Tuesday, October 13, 2026</p>
+          <h1 class="text-2xl font-semibold tracking-tight mt-0.5">Good morning, Sophann</h1>
+        </div>
+        <div class="flex gap-2">
+          <a href="calendar.html" class="btn btn-outline">Open calendar</a>
+          <a href="content.html" class="btn btn-outline">View all content</a>
+        </div>
+      </div>
+
+      <!-- Attention banner -->
+      <div id="attention"></div>
+
+      <!-- Summary cards -->
+      <section id="stats" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 md:gap-4"></section>
+
+      <!-- Main 3-column -->
+      <section class="grid lg:grid-cols-12 gap-4 md:gap-6">
+        <div class="card lg:col-span-4">
+          <div class="card-header">
+            <div><p class="card-title">Content pipeline</p><p class="card-desc">Videos in each production stage</p></div>
+            <a href="content.html" class="btn btn-ghost btn-sm">All</a>
+          </div>
+          <div id="pipeline" class="p-3"></div>
+        </div>
+
+        <div class="card lg:col-span-5">
+          <div class="card-header">
+            <div><p class="card-title">Upcoming schedule</p><p class="card-desc">Next posts across all platforms</p></div>
+            <a href="schedule.html" class="btn btn-ghost btn-sm">Queue</a>
+          </div>
+          <div id="upcoming" class="divide-y divide-[#f3f1e4]"></div>
+        </div>
+
+        <div class="card lg:col-span-3">
+          <div class="card-header">
+            <div><p class="card-title">Tasks & missing items</p><p class="card-desc">What each video still needs</p></div>
+          </div>
+          <div id="tasks" class="p-3 space-y-2"></div>
+        </div>
+      </section>
+
+      <!-- Bottom -->
+      <section class="grid lg:grid-cols-12 gap-4 md:gap-6">
+        <div class="card lg:col-span-8">
+          <div class="card-header">
+            <div><p class="card-title">This week</p><p class="card-desc">Oct 12 – Oct 18</p></div>
+            <a href="calendar.html" class="btn btn-ghost btn-sm">Full calendar</a>
+          </div>
+          <div class="overflow-x-auto thin-scroll"><div id="week" class="grid grid-cols-7 min-w-[640px]"></div></div>
+        </div>
+        <div class="card lg:col-span-4">
+          <div class="card-header">
+            <div><p class="card-title">Recent activity</p><p class="card-desc">Across all content</p></div>
+          </div>
+          <div id="activity" class="p-4 space-y-4"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="assets/data.js"></script>
+  <script src="assets/logic.js"></script>
+  <script src="assets/ui.js"></script>
+  <script src="assets/layout.js"></script>
+  <script>
+    window.renderPage = function () {
+      const k = Logic.counts();
+
+      // Attention
+      const failed = DB.jobs.filter((j) => j.status === 'Failed');
+      const expired = DB.accounts.filter((a) => a.status === 'Token Expired');
+      if (failed.length || expired.length) {
+        document.getElementById('attention').innerHTML = `
+          <div class="rounded-2xl border border-rose-200 bg-white p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+            <span class="w-10 h-10 rounded-full bg-rose-50 text-rose-700 flex items-center justify-center shrink-0">${UI.icon('triangle-alert', 'w-5 h-5')}</span>
+            <div class="flex-1 text-sm">
+              <p class="font-medium text-stone-900">${failed.length} post failed to publish · ${expired.length} account needs reconnecting</p>
+              <p class="text-stone-600">“${Logic.content(failed[0].contentId).title}” → ${Logic.account(failed[0].accountId).name}: token expired.</p>
+            </div>
+            <div class="flex gap-2"><a href="accounts.html" class="btn btn-outline btn-sm">Reconnect</a><a href="schedule.html" class="btn btn-primary btn-sm">Review failed</a></div>
+          </div>`;
+      }
+
+      // Stats
+      const stats = [
+        { label: 'Total videos', value: k.total, icon: 'clapperboard', sub: `${k.ideas} new ideas`, href: 'content.html' },
+        { label: 'In production', value: k.inProduction, icon: 'loader', sub: `${k.scriptPending} script · ${k.imagePending} image · ${k.videoPending} video`, href: 'content.html?view=production' },
+        { label: 'Ready to post', value: k.ready, icon: 'rocket', sub: 'Waiting for a schedule', href: 'content.html?status=ready', accent: true },
+        { label: 'Scheduled', value: k.scheduled, icon: 'calendar-clock', sub: `${Logic.upcomingJobs().length} posts queued`, href: 'schedule.html' },
+        { label: 'Published', value: k.published, icon: 'circle-check', sub: '102.6K views this month', href: 'analytics.html' },
+        { label: 'Failed posts', value: k.failed, icon: 'circle-alert', sub: '1 retry scheduled', href: 'schedule.html?status=failed', danger: k.failed > 0 },
+      ];
+      document.getElementById('stats').innerHTML = stats.map((s) => `
+        <a href="${s.href}" class="card p-4 hover:border-olive-300 transition-colors group ${s.accent ? '!bg-olive-600 !border-olive-600 text-white' : ''}">
+          <div class="flex items-center justify-between">
+            <span class="text-sm ${s.accent ? 'text-olive-100' : 'text-stone-600'}">${s.label}</span>
+            <span class="w-8 h-8 rounded-lg flex items-center justify-center ${s.accent ? 'bg-white/15 text-white' : s.danger ? 'bg-rose-50 text-rose-700' : 'bg-olive-50 text-olive-700'}">${UI.icon(s.icon)}</span>
+          </div>
+          <p class="text-3xl font-semibold tracking-tight mt-3">${s.value}</p>
+          <p class="text-xs mt-1 ${s.accent ? 'text-olive-100' : s.danger ? 'text-rose-700' : 'text-stone-500'}">${s.sub}</p>
+        </a>`).join('');
+
+      // Pipeline
+      const stageMeta = [
+        ['Idea', 'lightbulb'], ['Script', 'file-text'], ['Images', 'image'], ['Video', 'film'], ['Review', 'eye'],
+        ['Ready', 'rocket'], ['Scheduled', 'calendar-clock'], ['Published', 'circle-check'],
+      ];
+      const max = Math.max(...stageMeta.map(([s]) => DB.contents.filter((c) => Logic.stage(c) === s).length), 1);
+      document.getElementById('pipeline').innerHTML = stageMeta.map(([s, ico], i) => {
+        const items = DB.contents.filter((c) => Logic.stage(c) === s);
+        return `
+          <a href="content.html?stage=${s}" class="flex items-center gap-3 p-2 rounded-xl hover:bg-[#fcfbf3]">
+            <span class="step-dot ${s === 'Ready' ? 'bg-olive-600 text-white' : 'bg-olive-50 text-olive-700'}">${UI.icon(ico)}</span>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between text-sm"><span class="font-medium text-stone-800">${s === 'Ready' ? 'Ready to post' : s}</span><span class="font-semibold tabular-nums">${items.length}</span></div>
+              <div class="progress mt-1.5 !h-1.5"><span style="width:${(items.length / max) * 100}%; ${s === 'Published' || s === 'Ready' ? '' : 'background:#88A05C'}"></span></div>
+            </div>
+          </a>`;
+      }).join('');
+
+      // Upcoming
+      const up = Logic.upcomingJobs(6);
+      document.getElementById('upcoming').innerHTML = up.map((j) => {
+        const c = Logic.content(j.contentId);
+        const today = Fmt.dayLabel(j.scheduledAt) === 'Today';
+        return `
+          <a href="content-detail.html?id=${c.id}&tab=publishing" class="flex items-center gap-3 px-5 py-3 hover:bg-[#fdfcf4]">
+            ${UI.thumb(c, 'w-20 h-12', { duration: true })}
+            <div class="min-w-0 flex-1">
+              <p class="text-sm font-medium truncate">${c.title}</p>
+              <div class="flex items-center gap-3 mt-1">${UI.platformChip(j.platform)}<span class="text-xs text-stone-500">${Logic.account(j.accountId).name}</span></div>
+            </div>
+            <div class="text-right shrink-0">
+              <p class="text-sm font-medium ${today ? 'text-olive-700' : ''}">${Fmt.dayLabel(j.scheduledAt)}</p>
+              <p class="text-xs text-stone-500">${Fmt.time(j.scheduledAt)}</p>
+              <div class="mt-1">${UI.badge(j.status === 'Waiting' ? 'Scheduled' : j.status)}</div>
+            </div>
+          </a>`;
+      }).join('') || UI.empty('calendar-x', 'Nothing scheduled', 'Schedule a ready video to see it here.');
+
+      // Tasks / missing
+      const incomplete = DB.contents.filter((c) => ['Script', 'Images', 'Video', 'Review', 'Idea'].includes(Logic.stage(c)))
+        .sort((a, b) => ({ High: 0, Medium: 1, Low: 2 }[a.priority] - { High: 0, Medium: 1, Low: 2 }[b.priority]));
+      const ready = DB.contents.filter((c) => Logic.stage(c) === 'Ready');
+      document.getElementById('tasks').innerHTML =
+        ready.map((c) => `
+          <div class="rounded-xl border border-olive-200 bg-olive-50 p-3">
+            <p class="text-xs font-medium text-olive-800 flex items-center gap-1.5">${UI.icon('rocket', 'w-3.5 h-3.5')}Ready — needs a schedule</p>
+            <p class="text-sm font-medium mt-1 line-clamp-2">${c.title}</p>
+            <button class="btn btn-primary btn-sm mt-2 w-full" onclick="UI.openSchedule('${c.id}')">${UI.icon('calendar-plus')}Schedule post</button>
+          </div>`).join('') +
+        incomplete.slice(0, 5).map((c) => {
+          const miss = Logic.readiness(c).missing;
+          return `
+          <a href="content-detail.html?id=${c.id}&tab=${miss[0]?.tab || 'overview'}" class="block rounded-xl border border-[#f1eedf] p-3 hover:border-olive-300">
+            <div class="flex items-center justify-between gap-2">${UI.priority(c.priority)}<span class="text-[11px] text-stone-500">${Logic.completion(c)}%</span></div>
+            <p class="text-sm font-medium mt-1 line-clamp-1">${c.title}</p>
+            <ul class="mt-1.5 space-y-0.5">${miss.slice(0, 2).map((m) => `<li class="text-xs text-stone-600 flex items-center gap-1.5">${UI.icon('circle-dashed', 'w-3 h-3 text-amber-600')}${m.text}</li>`).join('')}${miss.length > 2 ? `<li class="text-xs text-stone-400 pl-[18px]">+${miss.length - 2} more</li>` : ''}</ul>
+          </a>`;
+        }).join('');
+
+      // Week strip
+      const start = new Date('2026-10-12T00:00');
+      document.getElementById('week').innerHTML = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(start); d.setDate(start.getDate() + i);
+        const key = Fmt.key(d);
+        const isToday = d.toDateString() === TODAY.toDateString();
+        const jobs = DB.jobs.filter((j) => j.scheduledAt.slice(0, 10) === key);
+        return `
+          <div class="border-r last:border-r-0 border-[#f1eedf] p-2.5 min-h-[160px] ${isToday ? 'bg-olive-50/60' : ''}">
+            <p class="text-[11px] uppercase tracking-wide text-stone-500">${d.toLocaleDateString('en-US', { weekday: 'short' })}</p>
+            <p class="text-lg font-semibold ${isToday ? 'text-olive-700' : ''}">${d.getDate()}</p>
+            <div class="mt-1 space-y-1.5">${jobs.map((j) => {
+              const c = Logic.content(j.contentId);
+              return `<a href="content-detail.html?id=${c.id}&tab=publishing" class="block rounded-lg border border-[#ece9d6] bg-white p-1.5 hover:border-olive-300">
+                <div class="flex items-center gap-1">${UI.platformLogo(j.platform, 12)}<span class="text-[10px] text-stone-500">${Fmt.time(j.scheduledAt)}</span></div>
+                <p class="text-[11px] font-medium leading-snug line-clamp-2 mt-0.5">${c.title}</p>
+                <div class="mt-1">${UI.badge(j.status === 'Waiting' ? 'Scheduled' : j.status, '!h-[18px] !text-[10px]')}</div>
+              </a>`;
+            }).join('')}</div>
+          </div>`;
+      }).join('');
+
+      // Activity
+      document.getElementById('activity').innerHTML = DB.activity.slice(0, 7).map((a) => {
+        const c = Logic.content(a.contentId);
+        return `<div class="flex gap-3">
+          ${UI.activityIcon(a.type)}
+          <div class="min-w-0 text-sm">
+            <p class="text-stone-800">${a.text}</p>
+            <a href="content-detail.html?id=${c.id}&tab=activity" class="text-xs text-stone-500 hover:text-olive-700 line-clamp-1">${c.title}</a>
+          </div>
+          <span class="ml-auto text-[11px] text-stone-400 whitespace-nowrap">${Fmt.ago(a.at)}</span>
+        </div>`;
+      }).join('');
+    };
+  </script>
+</body>
+</html>

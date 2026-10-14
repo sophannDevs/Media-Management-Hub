@@ -1,0 +1,357 @@
+// MediaFlow — AI content production & social publishing.
+//
+// Statuses and other enumerations are stored as string codes (see
+// src/lib/workflow/statuses.ts) so new platforms / statuses can be added
+// without a migration, and so the schema stays portable between SQLite (local)
+// and PostgreSQL (production).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Single workspace owner for now; authentication is added in a later phase.
+model User {
+  id         String        @id @default(cuid())
+  name       String
+  email      String        @unique
+  createdAt  DateTime      @default(now())
+  activities ActivityLog[]
+}
+
+/// Workspace-wide configuration (single row, id = 1).
+model WorkspaceSettings {
+  id                    Int      @id @default(1)
+  workspaceName         String   @default("MediaFlow")
+  timezone              String   @default("Asia/Phnom_Penh")
+  defaultLanguage       String   @default("English")
+  requireScriptApproved Boolean  @default(true)
+  requireImagesApproved Boolean  @default(true)
+  requireFinalVideo     Boolean  @default(true)
+  requireReview         Boolean  @default(true)
+  requireThumbnail      Boolean  @default(false)
+  autoRetry             Boolean  @default(true)
+  maxRetries            Int      @default(3)
+  retryDelayMinutes     Int      @default(15)
+  /// JSON: { [notificationType]: boolean }
+  notificationPrefs     String   @default("{}")
+  updatedAt             DateTime @updatedAt
+}
+
+/// Publishing destinations. `id` is the provider key, e.g. "youtube".
+model Platform {
+  id        String               @id
+  name      String
+  enabled   Boolean              @default(true)
+  sortOrder Int                  @default(0)
+  accounts  SocialAccount[]
+  contents  ContentPlatform[]
+  schedules PublishingSchedule[]
+  snapshots AnalyticsSnapshot[]
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  sortOrder Int       @default(0)
+  contents  Content[]
+}
+
+model Series {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+  contents  Content[]
+}
+
+model Campaign {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  startDate DateTime?
+  endDate   DateTime?
+  createdAt DateTime  @default(now())
+  contents  Content[]
+}
+
+model Tag {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  contents Content[]
+}
+
+model Content {
+  id                String    @id @default(cuid())
+  title             String
+  idea              String    @default("")
+  description       String    @default("")
+  /// LONG_FORM | SHORT | REEL
+  contentType       String    @default("LONG_FORM")
+  targetAudience    String    @default("")
+  language          String    @default("English")
+  /// HIGH | MEDIUM | LOW
+  priority          String    @default("MEDIUM")
+  targetPublishDate DateTime?
+  /// Default hashtags, space separated ("#ai #tools")
+  hashtags          String    @default("")
+
+  scriptStatus     String @default("NOT_STARTED")
+  imageStatus      String @default("NOT_STARTED")
+  videoStatus      String @default("NOT_STARTED")
+  reviewStatus     String @default("NOT_STARTED")
+  /// Derived from the statuses above + schedules. See syncPublishingStatus().
+  publishingStatus String @default("DRAFT")
+
+  titleFinalized       Boolean   @default(false)
+  descriptionFinalized Boolean   @default(false)
+  archivedAt           DateTime?
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  seriesId   String?
+  series     Series?   @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+  campaignId String?
+  campaign   Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  videoAssetId     String?     @unique
+  videoAsset       MediaAsset? @relation("ContentVideo", fields: [videoAssetId], references: [id], onDelete: SetNull)
+  thumbnailAssetId String?     @unique
+  thumbnailAsset   MediaAsset? @relation("ContentThumbnail", fields: [thumbnailAssetId], references: [id], onDelete: SetNull)
+
+  tags        Tag[]
+  platforms   ContentPlatform[]
+  script      Script?
+  imagePrompt ImagePrompt?
+  media       MediaAsset[]         @relation("ContentMedia")
+  schedules   PublishingSchedule[]
+  activities  ActivityLog[]
+  snapshots   AnalyticsSnapshot[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([publishingStatus])
+  @@index([archivedAt])
+  @@index([createdAt])
+}
+
+model ContentPlatform {
+  contentId  String
+  platformId String
+  content    Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  platform   Platform @relation(fields: [platformId], references: [id], onDelete: Cascade)
+
+  @@id([contentId, platformId])
+}
+
+model Script {
+  id             String          @id @default(cuid())
+  contentId      String          @unique
+  content        Content         @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  body           String          @default("")
+  currentVersion Int             @default(0)
+  versions       ScriptVersion[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model ScriptVersion {
+  id        String   @id @default(cuid())
+  scriptId  String
+  script    Script   @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  version   Int
+  body      String
+  note      String   @default("")
+  wordCount Int      @default(0)
+  /// Script status at the moment the version was saved
+  status    String   @default("GENERATED")
+  /// MANUAL | PASTE | CLAUDE
+  source    String   @default("MANUAL")
+  createdAt DateTime @default(now())
+
+  @@unique([scriptId, version])
+}
+
+model ImagePrompt {
+  id             String   @id @default(cuid())
+  contentId      String   @unique
+  content        Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  prompt         String   @default("")
+  negativePrompt String   @default("")
+  style          String   @default("Cinematic")
+  aspectRatio    String   @default("16:9")
+  /// GOOGLE_AI_STUDIO | GOOGLE_FLOW | OTHER
+  provider       String   @default("GOOGLE_AI_STUDIO")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model MediaAsset {
+  id          String   @id @default(cuid())
+  contentId   String?
+  content     Content? @relation("ContentMedia", fields: [contentId], references: [id], onDelete: SetNull)
+  /// IMAGE | VIDEO | THUMBNAIL | AUDIO | MUSIC | OTHER
+  type        String
+  fileName    String
+  /// Key in the storage provider; null for externally linked files
+  storageKey  String?
+  /// External URL when the file is linked rather than uploaded
+  externalUrl String?
+  mimeType    String   @default("application/octet-stream")
+  size        Int      @default(0)
+  width       Int?
+  height      Int?
+  durationSec Float?
+  /// Images: chosen for the final video
+  isSelected  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  videoFor       Content?             @relation("ContentVideo")
+  thumbnailFor   Content?             @relation("ContentThumbnail")
+  scheduleThumbs PublishingSchedule[]
+
+  @@index([contentId, type])
+  @@index([type])
+}
+
+model SocialAccount {
+  id             String               @id @default(cuid())
+  platformId     String
+  platform       Platform             @relation(fields: [platformId], references: [id])
+  name           String
+  handle         String               @default("")
+  avatarUrl      String?
+  externalId     String?
+  /// CONNECTED | DISCONNECTED | TOKEN_EXPIRED | ERROR
+  status         String               @default("CONNECTED")
+  /// OAuth credentials (encrypt at rest when real OAuth is added)
+  accessToken    String?
+  refreshToken   String?
+  tokenExpiresAt DateTime?
+  followers      Int                  @default(0)
+  isDefault      Boolean              @default(false)
+  lastSyncAt     DateTime?
+  lastError      String?
+  schedules      PublishingSchedule[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([platformId])
+}
+
+/// A planned post of one content item to one platform/account.
+model PublishingSchedule {
+  id               String              @id @default(cuid())
+  contentId        String
+  content          Content             @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  platformId       String
+  platform         Platform            @relation(fields: [platformId], references: [id])
+  accountId        String
+  account          SocialAccount       @relation(fields: [accountId], references: [id])
+  scheduledAt      DateTime
+  timezone         String
+  title            String
+  caption          String              @default("")
+  hashtags         String              @default("")
+  thumbnailAssetId String?
+  thumbnailAsset   MediaAsset?         @relation(fields: [thumbnailAssetId], references: [id], onDelete: SetNull)
+  /// YouTube: PUBLIC | UNLISTED | PRIVATE. Facebook: PUBLISH | DRAFT
+  visibility       String              @default("PUBLIC")
+  /// JSON for platform-specific options
+  options          String              @default("{}")
+  /// WAITING | PROCESSING | PUBLISHED | FAILED | RETRY_SCHEDULED | CANCELLED
+  status           String              @default("WAITING")
+  attempts         Int                 @default(0)
+  nextAttemptAt    DateTime?
+  lastError        String?
+  externalId       String?
+  externalUrl      String?
+  publishedAt      DateTime?
+  jobs             PublishingJob[]
+  snapshots        AnalyticsSnapshot[]
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([status, scheduledAt])
+  @@index([contentId])
+}
+
+/// One execution attempt of a PublishingSchedule.
+model PublishingJob {
+  id         String             @id @default(cuid())
+  scheduleId String
+  schedule   PublishingSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  attempt    Int
+  /// PROCESSING | SUCCEEDED | FAILED
+  status     String
+  error      String?
+  startedAt  DateTime           @default(now())
+  finishedAt DateTime?
+
+  @@index([scheduleId])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  contentId String?
+  content   Content? @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  type      String
+  message   String
+  /// JSON payload with extra details
+  meta      String   @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([contentId, createdAt])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  type      String
+  title     String
+  message   String
+  href      String?
+  /// Prevents duplicate notifications for the same event
+  dedupeKey String?   @unique
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([readAt, createdAt])
+}
+
+/// Daily metrics per content/platform (mock for now; synced from APIs later).
+model AnalyticsSnapshot {
+  id           String              @id @default(cuid())
+  contentId    String
+  content      Content             @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  platformId   String
+  platform     Platform            @relation(fields: [platformId], references: [id])
+  scheduleId   String?
+  schedule     PublishingSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  date         DateTime
+  views        Int                 @default(0)
+  likes        Int                 @default(0)
+  comments     Int                 @default(0)
+  shares       Int                 @default(0)
+  watchMinutes Int                 @default(0)
+
+  @@unique([contentId, platformId, date])
+  @@index([date])
+}
+
+model AiPrompt {
+  id        String   @id @default(cuid())
+  name      String
+  /// VIDEO_IDEA | SCRIPT | IMAGE | THUMBNAIL | TITLE | DESCRIPTION | HASHTAGS
+  category  String
+  /// CLAUDE | GOOGLE_AI_STUDIO | GOOGLE_FLOW | OTHER
+  provider  String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

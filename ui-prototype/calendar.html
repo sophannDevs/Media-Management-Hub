@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Content Calendar · MediaFlow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="assets/tailwind.config.js"></script>
+  <link rel="stylesheet" href="assets/styles.css">
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+</head>
+<body data-page="calendar">
+  <aside id="sidebar"></aside>
+  <div class="lg:pl-64 min-h-screen flex flex-col">
+    <header id="topbar"></header>
+
+    <main class="flex-1 px-4 md:px-8 py-6 md:py-8 space-y-5 max-w-[1600px] w-full mx-auto">
+      <div class="flex flex-col md:flex-row md:items-end justify-between gap-3">
+        <div>
+          <h1 class="text-2xl font-semibold tracking-tight">Content Calendar</h1>
+          <p class="text-sm text-stone-500 mt-0.5">Drag a post to another day to reschedule. Drag ready content from the right to schedule it.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <select id="cal-platform" class="select !w-auto"><option value="">All platforms</option><option value="youtube">YouTube</option><option value="facebook">Facebook</option></select>
+          <div class="tabs" id="cal-view">
+            <button class="tab" data-v="month" aria-selected="true">Month</button>
+            <button class="tab" data-v="week">Week</button>
+            <button class="tab" data-v="day">Day</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid xl:grid-cols-12 gap-6">
+        <div class="xl:col-span-9 card overflow-hidden">
+          <div class="flex items-center gap-2 px-4 py-3 border-b border-[#f1eedf]">
+            <button class="btn btn-outline btn-sm" onclick="go(0)">Today</button>
+            <button class="btn btn-ghost btn-sm btn-icon" onclick="go(-1)" aria-label="Previous"><i data-lucide="chevron-left"></i></button>
+            <button class="btn btn-ghost btn-sm btn-icon" onclick="go(1)" aria-label="Next"><i data-lucide="chevron-right"></i></button>
+            <p id="cal-title" class="font-semibold ml-1"></p>
+            <div class="ml-auto hidden md:flex items-center gap-4 text-xs text-stone-500">
+              <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-[#5641b0]"></span>Scheduled</span>
+              <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-olive-600"></span>Published</span>
+              <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-rose-600"></span>Failed</span>
+            </div>
+          </div>
+          <div id="cal-body" class="overflow-x-auto thin-scroll"></div>
+        </div>
+
+        <aside class="xl:col-span-3 space-y-6">
+          <div class="card">
+            <div class="card-header"><div><p class="card-title">Ready to schedule</p><p class="card-desc">Drag onto a day</p></div></div>
+            <div id="unscheduled" class="p-3 space-y-2"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><p class="card-title">Best posting times</p></div>
+            <div class="card-body space-y-3 text-sm">
+              <div class="flex items-center gap-3"><span class="w-8 h-8 rounded-lg bg-olive-50 text-olive-700 flex items-center justify-center"><i data-lucide="clock" class="w-4 h-4"></i></span><div><p class="font-medium">Sat 18:00</p><p class="text-xs text-stone-500">6.8K avg views · YouTube</p></div></div>
+              <div class="flex items-center gap-3"><span class="w-8 h-8 rounded-lg bg-olive-50 text-olive-700 flex items-center justify-center"><i data-lucide="clock" class="w-4 h-4"></i></span><div><p class="font-medium">Fri 18:00</p><p class="text-xs text-stone-500">6.2K avg views · YouTube</p></div></div>
+              <div class="flex items-center gap-3"><span class="w-8 h-8 rounded-lg bg-olive-50 text-olive-700 flex items-center justify-center"><i data-lucide="clock" class="w-4 h-4"></i></span><div><p class="font-medium">Sun 12:00</p><p class="text-xs text-stone-500">Highest engagement · Facebook</p></div></div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <script src="assets/data.js"></script>
+  <script src="assets/logic.js"></script>
+  <script src="assets/ui.js"></script>
+  <script src="assets/layout.js"></script>
+  <script>
+    const st = { view: 'month', cursor: new Date(TODAY), platform: '' };
+    const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const HOURS = Array.from({ length: 15 }, (_, i) => i + 8); // 08:00–22:00
+
+    const statusColor = (s) => s === 'Published' ? 'border-l-olive-600' : (s === 'Failed' || s === 'Retry Scheduled') ? 'border-l-rose-600' : 'border-l-[#5641b0]';
+    const jobsOn = (key) => DB.jobs.filter((j) => j.scheduledAt.slice(0, 10) === key && (!st.platform || j.platform === st.platform)).sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+    const mondayOf = (d) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
+    const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+
+    function eventChip(j, size = 'sm') {
+      const c = Logic.content(j.contentId);
+      const draggable = j.status !== 'Published';
+      const label = j.status === 'Waiting' ? 'Scheduled' : j.status;
+      if (size === 'sm') {
+        return `<div class="cal-event border-l-[3px] ${statusColor(j.status)}" draggable="${draggable}" data-job="${j.id}" onclick="openEvent('${c.id}')" title="${c.title} — ${label}">
+          ${UI.platformLogo(j.platform, 12)}<span class="text-stone-500 shrink-0">${Fmt.time(j.scheduledAt).replace(':00', '')}</span><span class="truncate font-medium text-stone-800">${c.title}</span></div>`;
+      }
+      return `<div class="cal-event !items-start !p-2 border-l-[3px] ${statusColor(j.status)} !bg-white" draggable="${draggable}" data-job="${j.id}" onclick="openEvent('${c.id}')">
+        ${UI.thumb(c, size === 'lg' ? 'w-24 h-14' : 'w-12 h-8')}
+        <div class="min-w-0 flex-1">
+          <p class="font-medium text-stone-800 ${size === 'lg' ? 'text-sm' : 'text-[11px]'} line-clamp-2 leading-snug">${c.title}</p>
+          <div class="flex items-center gap-1.5 mt-1">${UI.platformLogo(j.platform, 12)}<span class="text-stone-500">${Fmt.time(j.scheduledAt)}</span></div>
+          ${size === 'lg' ? `<div class="mt-1.5 flex items-center gap-2">${UI.badge(label)}<span class="text-xs text-stone-500">${Logic.account(j.accountId).name}</span></div>` : ''}
+        </div></div>`;
+    }
+
+    function renderMonth() {
+      const first = new Date(st.cursor.getFullYear(), st.cursor.getMonth(), 1);
+      const start = mondayOf(first);
+      document.getElementById('cal-title').textContent = first.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      const cells = Array.from({ length: 42 }, (_, i) => addDays(start, i));
+      return `<div class="min-w-[720px]">
+        <div class="cal-grid border-b border-[#f0eddb] bg-[#fcfbf3]">${DAYS.map((d) => `<div class="px-2 py-2 text-xs font-medium text-stone-500">${d}</div>`).join('')}</div>
+        <div class="cal-grid">${cells.map((d) => {
+          const key = Fmt.key(d);
+          const inMonth = d.getMonth() === first.getMonth();
+          const isToday = d.toDateString() === TODAY.toDateString();
+          const jobs = jobsOn(key);
+          return `<div class="cal-cell ${inMonth ? '' : 'bg-[#fcfbf6]'}" data-date="${key}">
+            <div class="flex items-center justify-between"><span class="text-xs ${isToday ? 'w-6 h-6 rounded-full bg-olive-600 text-white flex items-center justify-center font-semibold' : inMonth ? 'text-stone-700 font-medium' : 'text-stone-300'}">${d.getDate()}</span></div>
+            ${jobs.slice(0, 3).map((j) => eventChip(j)).join('')}
+            ${jobs.length > 3 ? `<button class="text-[11px] text-olive-700 font-medium mt-1" onclick="st.cursor=new Date('${key}T12:00'); setView('day')">+${jobs.length - 3} more</button>` : ''}
+          </div>`;
+        }).join('')}</div></div>`;
+    }
+
+    function renderTimeGrid(days) {
+      const cols = days.length;
+      return `<div class="${cols > 1 ? 'min-w-[860px]' : ''}">
+        <div class="grid border-b border-[#f0eddb] bg-[#fcfbf3]" style="grid-template-columns: 64px repeat(${cols}, minmax(0,1fr))">
+          <div></div>${days.map((d) => { const isToday = d.toDateString() === TODAY.toDateString(); return `<div class="px-2 py-2 text-center border-l border-[#f0eddb]"><p class="text-[11px] uppercase text-stone-500">${d.toLocaleDateString('en-US', { weekday: 'short' })}</p><p class="text-lg font-semibold ${isToday ? 'text-olive-700' : ''}">${d.getDate()}</p></div>`; }).join('')}
+        </div>
+        <div class="max-h-[640px] overflow-y-auto thin-scroll">
+          ${HOURS.map((h) => `<div class="grid" style="grid-template-columns: 64px repeat(${cols}, minmax(0,1fr))">
+            <div class="text-[11px] text-stone-400 text-right pr-2 pt-1 border-b border-[#f6f4e8]">${String(h).padStart(2, '0')}:00</div>
+            ${days.map((d) => {
+              const key = Fmt.key(d);
+              const jobs = jobsOn(key).filter((j) => new Date(j.scheduledAt).getHours() === h);
+              return `<div class="cal-cell !min-h-[56px] !p-1 border-l border-[#f0eddb] !border-r-0" data-date="${key}" data-hour="${h}">${jobs.map((j) => eventChip(j, cols === 1 ? 'lg' : 'md')).join('')}</div>`;
+            }).join('')}
+          </div>`).join('')}
+        </div></div>`;
+    }
+
+    function render() {
+      let html;
+      if (st.view === 'month') html = renderMonth();
+      else if (st.view === 'week') {
+        const start = mondayOf(st.cursor);
+        const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
+        document.getElementById('cal-title').textContent = `${Fmt.short(days[0])} – ${Fmt.short(days[6])}, ${days[6].getFullYear()}`;
+        html = renderTimeGrid(days);
+      } else {
+        document.getElementById('cal-title').textContent = st.cursor.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+        html = renderTimeGrid([new Date(st.cursor)]);
+      }
+      document.getElementById('cal-body').innerHTML = html;
+      document.querySelectorAll('#cal-view [data-v]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.v === st.view)));
+      renderUnscheduled();
+      wireDnD();
+      UI.refreshIcons();
+    }
+
+    function renderUnscheduled() {
+      const ready = DB.contents.filter((c) => Logic.stage(c) === 'Ready');
+      document.getElementById('unscheduled').innerHTML = ready.length ? ready.map((c) => `
+        <div class="flex items-center gap-3 p-2 rounded-xl border border-[#ece9d6] bg-white cursor-grab hover:border-olive-300" draggable="true" data-content="${c.id}">
+          <i data-lucide="grip-vertical" class="w-4 h-4 text-stone-300"></i>${UI.thumb(c, 'w-14 h-9')}
+          <div class="min-w-0"><p class="text-xs font-medium line-clamp-2">${c.title}</p><div class="mt-0.5">${UI.platformStack(c.platforms)}</div></div>
+        </div>`).join('') : `<p class="text-sm text-stone-500 p-3">Nothing waiting — all ready content is scheduled.</p>`;
+    }
+
+    function wireDnD() {
+      document.querySelectorAll('[draggable=true]').forEach((el) => {
+        el.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', el.dataset.job ? `job:${el.dataset.job}` : `content:${el.dataset.content}`); el.classList.add('dragging'); });
+        el.addEventListener('dragend', () => el.classList.remove('dragging'));
+      });
+      document.querySelectorAll('.cal-cell[data-date]').forEach((cell) => {
+        cell.addEventListener('dragover', (e) => { e.preventDefault(); cell.classList.add('drop-target'); });
+        cell.addEventListener('dragleave', () => cell.classList.remove('drop-target'));
+        cell.addEventListener('drop', (e) => {
+          e.preventDefault(); cell.classList.remove('drop-target');
+          const [kind, id] = e.dataTransfer.getData('text/plain').split(':');
+          const date = cell.dataset.date;
+          if (new Date(`${date}T23:59`) < TODAY) { UI.toast('Cannot schedule in the past', 'triangle-alert'); return; }
+          if (kind === 'job') {
+            const j = DB.jobs.find((x) => x.id === id);
+            const hour = cell.dataset.hour ? String(cell.dataset.hour).padStart(2, '0') + ':00' : j.scheduledAt.slice(11, 16);
+            j.scheduledAt = `${date}T${hour}`;
+            if (j.status === 'Failed' || j.status === 'Retry Scheduled') j.status = 'Waiting';
+            UI.toast(`Rescheduled to ${Fmt.dayLabel(j.scheduledAt)}, ${Fmt.time(j.scheduledAt)}`, 'calendar-check');
+            render();
+          } else {
+            UI.openSchedule(id);
+            const dateInput = document.getElementById('sch-date'); if (dateInput) dateInput.value = date;
+            if (cell.dataset.hour) document.getElementById('sch-time').value = String(cell.dataset.hour).padStart(2, '0') + ':00';
+          }
+        });
+      });
+    }
+
+    function openEvent(id) { location.href = `content-detail.html?id=${id}&tab=publishing`; }
+    function setView(v) { st.view = v; render(); }
+    function go(dir) {
+      if (dir === 0) st.cursor = new Date(TODAY);
+      else if (st.view === 'month') st.cursor = new Date(st.cursor.getFullYear(), st.cursor.getMonth() + dir, 1);
+      else st.cursor = addDays(st.cursor, dir * (st.view === 'week' ? 7 : 1));
+      render();
+    }
+
+    window.renderPage = function () {
+      document.querySelectorAll('#cal-view [data-v]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.v)));
+      document.getElementById('cal-platform').addEventListener('change', (e) => { st.platform = e.target.value; render(); });
+      render();
+    };
+  </script>
+</body>
+</html>

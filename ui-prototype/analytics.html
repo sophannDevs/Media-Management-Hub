@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Analytics · MediaFlow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="assets/tailwind.config.js"></script>
+  <link rel="stylesheet" href="assets/styles.css">
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <style>
+    .viz { --series-1: #556B2F; --yt: #e34948; --fb: #2a78d6; --grid: #efecd9; --axis: #8a8770; }
+  </style>
+</head>
+<body data-page="analytics">
+  <aside id="sidebar"></aside>
+  <div class="lg:pl-64 min-h-screen flex flex-col">
+    <header id="topbar"></header>
+
+    <main class="viz flex-1 px-4 md:px-8 py-6 md:py-8 space-y-6 max-w-[1600px] w-full mx-auto">
+      <div class="flex flex-col md:flex-row md:items-end justify-between gap-3">
+        <div>
+          <h1 class="text-2xl font-semibold tracking-tight">Analytics</h1>
+          <p class="text-sm text-stone-500 mt-0.5">Mock data for now — will sync from YouTube Analytics and Facebook Insights.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <div class="tabs" id="range"><button class="tab" aria-selected="false">7 days</button><button class="tab" aria-selected="true">30 days</button><button class="tab" aria-selected="false">90 days</button></div>
+          <select class="select !w-auto"><option>All platforms</option><option>YouTube</option><option>Facebook</option></select>
+        </div>
+      </div>
+
+      <section id="kpis" class="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4"></section>
+
+      <section class="grid lg:grid-cols-12 gap-4 md:gap-6">
+        <div class="card lg:col-span-8">
+          <div class="card-header"><div><p class="card-title">Daily views</p><p class="card-desc">Sep 13 – Oct 12 · all platforms</p></div></div>
+          <div class="p-4 relative" id="line-wrap"><div class="chart-tip" id="line-tip"></div><div id="line"></div></div>
+        </div>
+        <div class="card lg:col-span-4">
+          <div class="card-header"><div><p class="card-title">Platform performance</p><p class="card-desc">Views · last 30 days</p></div></div>
+          <div class="p-5 space-y-5" id="platforms"></div>
+        </div>
+      </section>
+
+      <section class="grid lg:grid-cols-12 gap-4 md:gap-6">
+        <div class="card lg:col-span-5">
+          <div class="card-header"><div><p class="card-title">Best posting time</p><p class="card-desc">Average views per post (thousands), first 48 h</p></div></div>
+          <div class="p-5 relative"><div class="chart-tip" id="heat-tip"></div><div id="heat"></div></div>
+        </div>
+        <div class="card lg:col-span-7">
+          <div class="card-header"><div><p class="card-title">Best-performing content</p><p class="card-desc">Ranked by views</p></div></div>
+          <div class="p-5 space-y-4" id="best"></div>
+        </div>
+      </section>
+
+      <div class="card overflow-hidden">
+        <div class="card-header"><div><p class="card-title">Published videos</p><p class="card-desc">Per-video performance</p></div><button class="btn btn-outline btn-sm" onclick="UI.toast('Exported CSV (mock)','download')"><i data-lucide="download"></i>Export</button></div>
+        <div class="overflow-x-auto thin-scroll"><table class="table min-w-[900px]">
+          <thead><tr><th>Video</th><th>Published</th><th class="text-right">Views</th><th class="text-right">Likes</th><th class="text-right">Comments</th><th class="text-right">Shares</th><th class="text-right">Watch time</th><th class="text-right">Engagement</th></tr></thead>
+          <tbody id="pub-table"></tbody>
+        </table></div>
+      </div>
+    </main>
+  </div>
+
+  <script src="assets/data.js"></script>
+  <script src="assets/logic.js"></script>
+  <script src="assets/ui.js"></script>
+  <script src="assets/layout.js"></script>
+  <script>
+    const A = DB.analytics;
+    const days = A.daily.map((v, i) => { const d = new Date('2026-09-13T12:00'); d.setDate(d.getDate() + i); return { d, v }; });
+    const eng = (m) => ((m.likes + m.comments + m.shares) / m.views * 100).toFixed(1);
+
+    function renderKpis() {
+      const total = A.daily.reduce((a, b) => a + b, 0);
+      const watch = Object.values(A.byContent).reduce((a, m) => a + m.watchHours, 0);
+      const k = [
+        ['Total views', Fmt.num(total), '+38% vs previous 30 days', 'eye'],
+        ['Watch time', `${watch.toLocaleString()} h`, '+21% vs previous', 'clock'],
+        ['Engagement rate', '7.6%', '+0.8 pts', 'heart'],
+        ['Published this month', DB.jobs.filter((j) => j.status === 'Published' && j.scheduledAt.startsWith('2026-10')).length, 'posts across 2 platforms', 'send'],
+        ['Followers gained', '+1,850', 'YouTube 1,240 · Facebook 610', 'user-plus'],
+      ];
+      document.getElementById('kpis').innerHTML = k.map(([l, v, s, ico]) => `
+        <div class="card p-4"><div class="flex items-center justify-between"><span class="text-sm text-stone-600">${l}</span><span class="w-8 h-8 rounded-lg bg-olive-50 text-olive-700 flex items-center justify-center">${UI.icon(ico)}</span></div>
+          <p class="text-2xl md:text-3xl font-semibold tracking-tight mt-3">${v}</p><p class="text-xs text-stone-500 mt-1">${s}</p></div>`).join('');
+    }
+
+    // Single-series line chart with crosshair tooltip
+    function renderLine() {
+      const wrap = document.getElementById('line');
+      const W = wrap.clientWidth || 700, H = 260, m = { t: 12, r: 12, b: 26, l: 44 };
+      const max = 16000;
+      const x = (i) => m.l + (i / (days.length - 1)) * (W - m.l - m.r);
+      const y = (v) => m.t + (1 - v / max) * (H - m.t - m.b);
+      const path = days.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join('');
+      const area = `${path}L${x(days.length - 1)},${y(0)}L${x(0)},${y(0)}Z`;
+      const ticks = [0, 4000, 8000, 12000, 16000];
+      const xt = [0, 7, 14, 21, 29];
+      wrap.innerHTML = `<svg width="${W}" height="${H}" role="img" aria-label="Daily views line chart">
+        ${ticks.map((t) => `<line x1="${m.l}" x2="${W - m.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)" stroke-width="1"/><text x="${m.l - 8}" y="${y(t) + 4}" text-anchor="end" font-size="11" fill="var(--axis)">${t ? t / 1000 + 'K' : '0'}</text>`).join('')}
+        ${xt.map((i, n) => `<text x="${x(i)}" y="${H - 6}" text-anchor="${n === 0 ? 'start' : n === xt.length - 1 ? 'end' : 'middle'}" font-size="11" fill="var(--axis)">${Fmt.short(days[i].d)}</text>`).join('')}
+        <path d="${area}" fill="var(--series-1)" opacity="0.08"/>
+        <path d="${path}" fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+        <line id="xh" y1="${m.t}" y2="${H - m.b}" stroke="#1c1b17" stroke-opacity=".25" stroke-width="1" visibility="hidden"/>
+        <circle id="xd" r="5" fill="var(--series-1)" stroke="#fff" stroke-width="2" visibility="hidden"/>
+        <rect x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" fill="transparent" id="hit"/>
+      </svg>`;
+      const tip = document.getElementById('line-tip');
+      const hit = wrap.querySelector('#hit'), xh = wrap.querySelector('#xh'), xd = wrap.querySelector('#xd');
+      hit.addEventListener('mousemove', (e) => {
+        const r = hit.getBoundingClientRect();
+        const i = Math.max(0, Math.min(days.length - 1, Math.round(((e.clientX - r.left) / r.width) * (days.length - 1))));
+        const px = x(i), py = y(days[i].v);
+        xh.setAttribute('x1', px); xh.setAttribute('x2', px); xh.setAttribute('visibility', 'visible');
+        xd.setAttribute('cx', px); xd.setAttribute('cy', py); xd.setAttribute('visibility', 'visible');
+        tip.style.display = 'block'; tip.style.left = `${px + 16}px`; tip.style.top = `${py + 16}px`;
+        tip.innerHTML = `<span class="opacity-70">${Fmt.short(days[i].d)}</span> · <b>${days[i].v.toLocaleString()}</b> views`;
+      });
+      hit.addEventListener('mouseleave', () => { tip.style.display = 'none'; xh.setAttribute('visibility', 'hidden'); xd.setAttribute('visibility', 'hidden'); });
+    }
+
+    function renderPlatforms() {
+      const max = Math.max(...A.platform.map((p) => p.views));
+      document.getElementById('platforms').innerHTML = A.platform.map((p) => `
+        <div>
+          <div class="flex items-center justify-between text-sm"><span class="flex items-center gap-2 font-medium">${UI.platformLogo(p.platform, 16)}${PLATFORM[p.platform].name}</span><span class="font-semibold tabular-nums">${p.views.toLocaleString()}</span></div>
+          <div class="h-3 mt-2 rounded bg-[#f5f3e3] overflow-hidden"><div class="h-full rounded-r" style="width:${(p.views / max) * 100}%; background: var(--${p.platform === 'youtube' ? 'yt' : 'fb'})" title="${p.views.toLocaleString()} views"></div></div>
+          <div class="flex gap-4 mt-2 text-xs text-stone-500"><span>Engagement <b class="text-stone-800">${p.engagement}%</b></span><span>Followers <b class="text-stone-800">+${p.followersGained.toLocaleString()}</b></span></div>
+        </div>`).join('') + `<p class="text-xs text-stone-500 pt-2 border-t border-[#f3f1e4]">Facebook gets fewer views but higher engagement — good for community posts and shorts.</p>`;
+    }
+
+    // Sequential (single-hue olive) heatmap
+    function renderHeat() {
+      const { days: D, slots, values } = A.bestTimes;
+      const flat = values.flat(); const min = Math.min(...flat), max = Math.max(...flat);
+      // 3-stop single-hue ramp: olive-50 → olive-300 → olive-800
+      const lo = [244, 246, 238], mid = [175, 192, 138], hi = [56, 70, 32];
+      const mix = (a, b, t) => a.map((c, i) => Math.round(c + (b[i] - c) * t));
+      const color = (v) => { const t = (v - min) / (max - min); return `rgb(${(t < 0.5 ? mix(lo, mid, t * 2) : mix(mid, hi, (t - 0.5) * 2)).join(',')})`; };
+      let best = { v: 0 };
+      values.forEach((row, r) => row.forEach((v, c) => { if (v > best.v) best = { v, r, c }; }));
+      document.getElementById('heat').innerHTML = `
+        <div class="grid gap-1" style="grid-template-columns: 40px repeat(${slots.length}, minmax(0,1fr))">
+          <div></div>${slots.map((s) => `<div class="text-[11px] text-stone-500 text-center pb-1">${s}</div>`).join('')}
+          ${D.map((d, r) => `<div class="text-[11px] text-stone-500 flex items-center">${d}</div>${values[r].map((v, c) => {
+            const t = (v - min) / (max - min);
+            return `<div class="heat-cell h-9 rounded-md flex items-center justify-center text-[11px] font-medium ${best.r === r && best.c === c ? 'ring-2 ring-offset-1 ring-stone-900' : ''}" style="background:${color(v)}; color:${t > 0.55 ? '#fff' : '#3a3830'}" data-tip="${d} ${slots[c]} · ${v}K avg views">${v}</div>`;
+          }).join('')}`).join('')}
+        </div>
+        <div class="flex items-center justify-between mt-4 text-xs text-stone-500">
+          <span class="flex items-center gap-2">Fewer<span class="w-24 h-2 rounded-full" style="background:linear-gradient(90deg, rgb(${lo}), rgb(${mid}), rgb(${hi}))"></span>More views</span>
+          <span>Best: <b class="text-stone-800">${D[best.r]} ${slots[best.c]}</b></span>
+        </div>`;
+      const tip = document.getElementById('heat-tip');
+      document.querySelectorAll('.heat-cell').forEach((el) => {
+        el.addEventListener('mouseenter', () => { const r = el.getBoundingClientRect(), p = el.closest('.p-5').getBoundingClientRect(); tip.textContent = el.dataset.tip; tip.style.display = 'block'; tip.style.left = `${r.left - p.left + r.width / 2}px`; tip.style.top = `${r.top - p.top - 4}px`; });
+        el.addEventListener('mouseleave', () => tip.style.display = 'none');
+      });
+    }
+
+    function renderBest() {
+      const rows = Object.entries(A.byContent).sort((a, b) => b[1].views - a[1].views);
+      const max = rows[0][1].views;
+      document.getElementById('best').innerHTML = rows.map(([id, m], i) => {
+        const c = Logic.content(id);
+        return `<a href="content-detail.html?id=${id}" class="flex items-center gap-4 group">
+          <span class="w-6 text-sm font-semibold text-stone-400">${i + 1}</span>
+          ${UI.thumb(c, 'w-24 h-14', { duration: true })}
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium truncate group-hover:text-olive-700">${c.title}</p>
+            <div class="flex items-center gap-3 mt-2"><div class="flex-1 h-2 rounded bg-[#f5f3e3] overflow-hidden"><div class="h-full bg-olive-600 rounded-r" style="width:${(m.views / max) * 100}%"></div></div><span class="text-sm font-semibold tabular-nums w-16 text-right">${Fmt.num(m.views)}</span></div>
+            <p class="text-xs text-stone-500 mt-1">${eng(m)}% engagement · ${m.watchHours.toLocaleString()} h watched</p>
+          </div></a>`;
+      }).join('');
+    }
+
+    function renderTable() {
+      document.getElementById('pub-table').innerHTML = Object.entries(A.byContent).map(([id, m]) => {
+        const c = Logic.content(id);
+        return `<tr>
+          <td><a href="content-detail.html?id=${id}" class="flex items-center gap-3 hover:text-olive-700">${UI.thumb(c, 'w-16 h-10')}<div><p class="font-medium line-clamp-1">${c.title}</p><div class="mt-0.5">${UI.platformStack(c.platforms)}</div></div></a></td>
+          <td class="text-stone-600">${Fmt.date(m.publishedAt)}</td>
+          <td class="text-right tabular-nums font-medium">${m.views.toLocaleString()}</td>
+          <td class="text-right tabular-nums">${m.likes.toLocaleString()}</td>
+          <td class="text-right tabular-nums">${m.comments.toLocaleString()}</td>
+          <td class="text-right tabular-nums">${m.shares.toLocaleString()}</td>
+          <td class="text-right tabular-nums">${m.watchHours.toLocaleString()} h</td>
+          <td class="text-right tabular-nums">${eng(m)}%</td>
+        </tr>`;
+      }).join('');
+    }
+
+    window.renderPage = function () {
+      renderKpis(); renderLine(); renderPlatforms(); renderHeat(); renderBest(); renderTable();
+      document.querySelectorAll('#range .tab').forEach((b) => b.addEventListener('click', () => { document.querySelectorAll('#range .tab').forEach((x) => x.setAttribute('aria-selected', String(x === b))); UI.toast('Range changed (mock data)'); }));
+      let t; window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(renderLine, 150); });
+    };
+  </script>
+</body>
+</html>

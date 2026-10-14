@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Settings · MediaFlow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="assets/tailwind.config.js"></script>
+  <link rel="stylesheet" href="assets/styles.css">
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+</head>
+<body data-page="settings">
+  <aside id="sidebar"></aside>
+  <div class="lg:pl-64 min-h-screen flex flex-col">
+    <header id="topbar"></header>
+
+    <main class="flex-1 px-4 md:px-8 py-6 md:py-8 max-w-[1200px] w-full mx-auto">
+      <h1 class="text-2xl font-semibold tracking-tight">Settings</h1>
+      <p class="text-sm text-stone-500 mt-0.5">Workspace preferences, workflow rules and integrations.</p>
+
+      <div class="grid lg:grid-cols-12 gap-6 mt-6">
+        <nav class="lg:col-span-3 lg:sticky lg:top-24 self-start flex lg:flex-col gap-1 overflow-x-auto thin-scroll" id="settings-nav">
+          <a href="#profile" class="nav-link active"><i data-lucide="user"></i>Profile</a>
+          <a href="#workspace" class="nav-link"><i data-lucide="folder-tree"></i>Workspace</a>
+          <a href="#workflow" class="nav-link"><i data-lucide="workflow"></i>Workflow rules</a>
+          <a href="#notifications" class="nav-link"><i data-lucide="bell"></i>Notifications</a>
+          <a href="#integrations" class="nav-link"><i data-lucide="plug"></i>AI integrations</a>
+          <a href="#danger" class="nav-link"><i data-lucide="triangle-alert"></i>Danger zone</a>
+        </nav>
+
+        <div class="lg:col-span-9 space-y-6">
+          <section id="profile" class="card scroll-mt-24">
+            <div class="card-header"><div><p class="card-title">Profile</p><p class="card-desc">Used for activity history and notifications.</p></div></div>
+            <div class="card-body grid sm:grid-cols-2 gap-4">
+              <div class="sm:col-span-2 flex items-center gap-4"><span class="w-14 h-14 rounded-full bg-olive-600 text-white flex items-center justify-center font-semibold">SV</span><button class="btn btn-outline btn-sm"><i data-lucide="upload"></i>Change avatar</button></div>
+              <div><label class="label">Name</label><input class="input" value="Sophann Vun"></div>
+              <div><label class="label">Email</label><input class="input" value="creator@example.com"></div>
+              <div><label class="label">Default timezone</label><select class="select"><option>Asia/Phnom_Penh (GMT+7)</option><option>Asia/Seoul (GMT+9)</option><option>UTC</option></select></div>
+              <div><label class="label">Default language</label><select class="select"><option>English</option><option>Khmer</option><option>Korean</option></select></div>
+            </div>
+            <div class="flex justify-end px-5 py-3 border-t border-[#f3f1e4]"><button class="btn btn-primary" onclick="UI.toast('Profile saved')">Save changes</button></div>
+          </section>
+
+          <section id="workspace" class="card scroll-mt-24">
+            <div class="card-header"><div><p class="card-title">Workspace</p><p class="card-desc">Categories, series and campaigns used to organise content.</p></div></div>
+            <div class="card-body space-y-5" id="taxonomies"></div>
+          </section>
+
+          <section id="workflow" class="card scroll-mt-24">
+            <div class="card-header"><div><p class="card-title">Workflow rules</p><p class="card-desc">Control when content becomes “Ready to Post”.</p></div></div>
+            <div class="divide-y divide-[#f3f1e4]" id="rules"></div>
+          </section>
+
+          <section id="notifications" class="card scroll-mt-24">
+            <div class="card-header"><div><p class="card-title">Notifications</p><p class="card-desc">Choose what you want to hear about.</p></div></div>
+            <div class="overflow-x-auto"><table class="table">
+              <thead><tr><th>Event</th><th class="text-center w-24">In-app</th><th class="text-center w-24">Email</th></tr></thead>
+              <tbody id="notif-rows"></tbody>
+            </table></div>
+          </section>
+
+          <section id="integrations" class="card scroll-mt-24">
+            <div class="card-header"><div><p class="card-title">AI integrations</p><p class="card-desc">Phase 3 — until connected, “Generate” buttons use mock output.</p></div></div>
+            <div class="card-body space-y-4" id="ai"></div>
+          </section>
+
+          <section id="danger" class="card !border-rose-200 scroll-mt-24">
+            <div class="card-header"><p class="card-title text-rose-800">Danger zone</p></div>
+            <div class="card-body space-y-4">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><p class="text-sm font-medium">Archived content</p><p class="text-xs text-stone-500">3 items archived. Restore or delete permanently.</p></div><button class="btn btn-outline"><i data-lucide="archive-restore"></i>Manage archive</button></div>
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3"><div><p class="text-sm font-medium">Delete workspace</p><p class="text-xs text-stone-500">Removes all content, media and schedules. Cannot be undone.</p></div><button class="btn btn-danger" onclick="UI.confirm({title:'Delete workspace?', text:'All content, media, schedules and analytics will be permanently deleted.', confirmLabel:'Delete workspace'})"><i data-lucide="trash-2"></i>Delete workspace</button></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="assets/data.js"></script>
+  <script src="assets/logic.js"></script>
+  <script src="assets/ui.js"></script>
+  <script src="assets/layout.js"></script>
+  <script>
+    const toggle = (on) => `<label class="relative inline-flex items-center cursor-pointer"><input type="checkbox" class="sr-only peer" ${on ? 'checked' : ''}><span class="w-10 h-6 rounded-full bg-stone-200 peer-checked:bg-olive-600 transition after:content-[''] after:absolute after:top-1 after:left-1 after:w-4 after:h-4 after:rounded-full after:bg-white after:shadow after:transition peer-checked:after:translate-x-4"></span></label>`;
+
+    window.renderPage = function () {
+      document.getElementById('taxonomies').innerHTML = [['Categories', DB.categories], ['Series', DB.series], ['Campaigns', DB.campaigns]].map(([label, list]) => `
+        <div><p class="label">${label}</p><div class="flex flex-wrap gap-2">${list.map((x) => `<span class="inline-flex items-center gap-1.5 h-8 pl-3 pr-1.5 rounded-lg border border-[#ece9d6] bg-[#fcfbf3] text-sm">${x}<button class="w-5 h-5 rounded hover:bg-stone-200 flex items-center justify-center text-stone-500" onclick="UI.confirm({title:'Remove “${x}”?', text:'Content using it will keep the value until edited.', confirmLabel:'Remove'})">${UI.icon('x', 'w-3 h-3')}</button></span>`).join('')}
+          <button class="inline-flex items-center gap-1 h-8 px-3 rounded-lg border border-dashed border-stone-300 text-sm text-stone-600 hover:bg-white">${UI.icon('plus', 'w-3.5 h-3.5')}Add</button></div></div>`).join('');
+
+      document.getElementById('rules').innerHTML = [
+        ['Require approved script', 'Script status must be Approved.', true],
+        ['Require approved images', 'At least the selected images must be Approved.', true],
+        ['Require final video', 'Video status must be Final with a file attached.', true],
+        ['Require review approval', 'A final review step before Ready to Post.', true],
+        ['Require thumbnail', 'A thumbnail must be selected before scheduling.', true],
+        ['Auto-retry failed posts', 'Retry up to 3 times, 15 minutes apart, before marking Failed.', true],
+        ['Warn on incomplete assets', 'Notify when target date is within 3 days and items are missing.', false],
+      ].map(([t, d, on]) => `<div class="flex items-center justify-between gap-4 px-5 py-4"><div><p class="text-sm font-medium">${t}</p><p class="text-xs text-stone-500">${d}</p></div>${toggle(on)}</div>`).join('');
+
+      document.getElementById('notif-rows').innerHTML = [
+        ['Video is ready for scheduling', true, false], ['Video is scheduled for tomorrow', true, true], ['Video successfully published', true, false],
+        ['Publishing failed', true, true], ['Social account token expired', true, true], ['Content has incomplete assets', true, false],
+      ].map(([e, a, b]) => `<tr><td>${e}</td><td class="text-center"><input type="checkbox" class="checkbox" ${a ? 'checked' : ''}></td><td class="text-center"><input type="checkbox" class="checkbox" ${b ? 'checked' : ''}></td></tr>`).join('');
+
+      document.getElementById('ai').innerHTML = [
+        ['Claude (Anthropic)', 'Scripts, titles, descriptions, hashtags', 'sk-ant-…', 'file-text'],
+        ['Google AI Studio', 'Image generation', 'AIza…', 'image'],
+        ['Google Flow', 'Video / scene generation', 'Not available yet', 'film'],
+      ].map(([n, d, ph, ico], i) => `
+        <div class="rounded-xl border border-[#ece9d6] p-4 flex flex-col md:flex-row md:items-center gap-4">
+          <span class="w-10 h-10 rounded-lg bg-olive-50 text-olive-700 flex items-center justify-center shrink-0">${UI.icon(ico, 'w-5 h-5')}</span>
+          <div class="flex-1"><p class="text-sm font-medium">${n}</p><p class="text-xs text-stone-500">${d}</p></div>
+          <input class="input md:!w-64" type="password" placeholder="${ph}" ${i === 2 ? 'disabled' : ''}>
+          ${UI.badge('Disconnected')}
+        </div>`).join('');
+
+      // Highlight current section in sub-nav
+      const links = [...document.querySelectorAll('#settings-nav a')];
+      const io = new IntersectionObserver((entries) => entries.forEach((en) => { if (en.isIntersecting) links.forEach((l) => l.classList.toggle('active', l.getAttribute('href') === '#' + en.target.id)); }), { rootMargin: '-40% 0px -55% 0px' });
+      document.querySelectorAll('main section[id]').forEach((s) => io.observe(s));
+      UI.refreshIcons();
+    };
+  </script>
+</body>
+</html>

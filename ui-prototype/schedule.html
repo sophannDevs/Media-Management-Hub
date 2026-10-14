@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Schedule · MediaFlow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="assets/tailwind.config.js"></script>
+  <link rel="stylesheet" href="assets/styles.css">
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+</head>
+<body data-page="schedule">
+  <aside id="sidebar"></aside>
+  <div class="lg:pl-64 min-h-screen flex flex-col">
+    <header id="topbar"></header>
+
+    <main class="flex-1 px-4 md:px-8 py-6 md:py-8 space-y-5 max-w-[1600px] w-full mx-auto">
+      <div class="flex flex-col md:flex-row md:items-end justify-between gap-3">
+        <div>
+          <h1 class="text-2xl font-semibold tracking-tight">Publishing queue</h1>
+          <p class="text-sm text-stone-500 mt-0.5">Every scheduled post, per platform. Failed posts keep their error so you can retry or reschedule.</p>
+        </div>
+        <div class="flex gap-2">
+          <a href="calendar.html" class="btn btn-outline"><i data-lucide="calendar-days"></i>Calendar</a>
+          <button class="btn btn-primary" onclick="UI.openSchedule()"><i data-lucide="calendar-plus"></i>Schedule post</button>
+        </div>
+      </div>
+
+      <!-- Worker status -->
+      <div class="card p-4 flex flex-col md:flex-row md:items-center gap-4">
+        <div class="flex items-center gap-3 flex-1">
+          <span class="relative flex w-2.5 h-2.5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-olive-400 opacity-60"></span><span class="relative inline-flex rounded-full w-2.5 h-2.5 bg-olive-600"></span></span>
+          <div><p class="text-sm font-medium">Publishing worker is running</p><p class="text-xs text-stone-500">Checks the queue every 5 minutes · last run 10:25 · next run 10:30 (mock)</p></div>
+        </div>
+        <div id="queue-stats" class="grid grid-cols-5 gap-2 md:gap-6 text-center"></div>
+      </div>
+
+      <div id="failed"></div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="overflow-x-auto thin-scroll"><div id="q-tabs" class="tabs"></div></div>
+        <select id="q-platform" class="select !w-auto ml-auto"><option value="">All platforms</option><option value="youtube">YouTube</option><option value="facebook">Facebook</option></select>
+        <select id="q-account" class="select !w-auto"><option value="">All accounts</option></select>
+      </div>
+
+      <div class="card overflow-hidden">
+        <div class="overflow-x-auto thin-scroll"><table class="table min-w-[980px]">
+          <thead><tr><th>Scheduled time</th><th>Content</th><th>Platform</th><th>Account</th><th>Visibility</th><th>Status</th><th class="text-right">Actions</th></tr></thead>
+          <tbody id="q-body"></tbody>
+        </table></div>
+      </div>
+    </main>
+  </div>
+
+  <script src="assets/data.js"></script>
+  <script src="assets/logic.js"></script>
+  <script src="assets/ui.js"></script>
+  <script src="assets/layout.js"></script>
+  <script>
+    const q = { status: new URLSearchParams(location.search).get('status') === 'failed' ? 'Failed' : 'Upcoming', platform: '', account: '' };
+    const TABS = [
+      ['Upcoming', (j) => ['Waiting', 'Processing', 'Retry Scheduled'].includes(j.status)],
+      ['Failed', (j) => j.status === 'Failed' || j.status === 'Retry Scheduled'],
+      ['Published', (j) => j.status === 'Published'],
+      ['All', () => true],
+    ];
+
+    function actions(j) {
+      const c = Logic.content(j.contentId);
+      if (j.status === 'Published') return `<a href="analytics.html" class="btn btn-ghost btn-sm"><i data-lucide="chart-column"></i>Stats</a>`;
+      const retry = j.status === 'Failed' || j.status === 'Retry Scheduled';
+      return `<div class="flex justify-end gap-1">
+        ${retry ? `<button class="btn btn-outline btn-sm" onclick="retry('${j.id}')"><i data-lucide="refresh-cw"></i>Retry</button>` : ''}
+        <button class="btn btn-ghost btn-sm btn-icon" title="${retry ? 'Reschedule' : 'Edit schedule'}" onclick="UI.openSchedule('${c.id}','${j.platform}')"><i data-lucide="calendar-clock"></i></button>
+        <button class="btn btn-ghost btn-sm btn-icon" title="Cancel" onclick="UI.confirm({title:'Cancel this post?', text:'It will be removed from the queue. You can schedule it again anytime.', confirmLabel:'Cancel post', onConfirm:()=>UI.toast('Post cancelled')})"><i data-lucide="x"></i></button>
+      </div>`;
+    }
+
+    function retry(id) {
+      const j = DB.jobs.find((x) => x.id === id);
+      const acc = Logic.account(j.accountId);
+      if (acc.status !== 'Connected') { UI.toast(`Reconnect “${acc.name}” before retrying`, 'key-round'); return; }
+      j.status = 'Processing'; render(); UI.toast('Retrying now…', 'refresh-cw');
+      setTimeout(() => { j.status = 'Published'; delete j.error; render(); UI.toast('Published successfully', 'circle-check'); }, 1800);
+    }
+
+    function render() {
+      const all = DB.jobs;
+      document.getElementById('queue-stats').innerHTML = [['Waiting', 'text-stone-900'], ['Processing', 'text-amber-700'], ['Retry Scheduled', 'text-orange-700'], ['Failed', 'text-rose-700'], ['Published', 'text-olive-700']].map(([s, cls]) =>
+        `<div><p class="text-lg font-semibold tabular-nums ${cls}">${all.filter((j) => j.status === s).length}</p><p class="text-[11px] text-stone-500 whitespace-nowrap">${s === 'Retry Scheduled' ? 'Retrying' : s}</p></div>`).join('');
+
+      const failed = all.filter((j) => j.status === 'Failed');
+      document.getElementById('failed').innerHTML = failed.map((j) => {
+        const c = Logic.content(j.contentId); const a = Logic.account(j.accountId);
+        return `<div class="rounded-2xl border border-rose-200 bg-white p-4 flex flex-col lg:flex-row lg:items-center gap-4">
+          <div class="flex items-center gap-3 flex-1 min-w-[280px]">
+            ${UI.thumb(c, 'w-20 h-12')}
+            <div class="min-w-0"><div class="flex items-center gap-2">${UI.badge('Failed')}<span class="text-xs text-stone-500">${Fmt.date(j.scheduledAt)}, ${Fmt.time(j.scheduledAt)}</span></div>
+              <p class="text-sm font-medium truncate mt-1">${c.title}</p>
+              <p class="text-xs text-stone-500 flex flex-wrap items-center gap-1.5 mt-0.5"><span class="flex items-center gap-1.5 whitespace-nowrap">${UI.platformLogo(j.platform, 12)}${a.name}</span>${UI.badge(a.status, '!h-[18px] !text-[10px]')}</p></div>
+          </div>
+          <p class="text-xs font-mono text-rose-800 bg-rose-50 border border-rose-100 rounded-lg p-2.5 lg:max-w-sm">${j.error}</p>
+          <div class="flex gap-2 shrink-0"><a href="accounts.html" class="btn btn-outline btn-sm"><i data-lucide="key-round"></i>Reconnect</a>${actions(j).replace('<div class="flex justify-end gap-1">', '<div class="flex gap-1">')}</div>
+        </div>`;
+      }).join('');
+
+      document.getElementById('q-tabs').innerHTML = TABS.map(([k, fn]) => `<button class="tab" aria-selected="${q.status === k}" onclick="q.status='${k}'; render()">${k}<span class="text-xs text-stone-400">${all.filter(fn).length}</span></button>`).join('');
+
+      const fn = TABS.find((t) => t[0] === q.status)[1];
+      const list = all.filter(fn).filter((j) => (!q.platform || j.platform === q.platform) && (!q.account || j.accountId === q.account))
+        .sort((a, b) => q.status === 'Published' ? b.scheduledAt.localeCompare(a.scheduledAt) : a.scheduledAt.localeCompare(b.scheduledAt));
+
+      let lastDay = '';
+      document.getElementById('q-body').innerHTML = list.length ? list.map((j) => {
+        const c = Logic.content(j.contentId); const a = Logic.account(j.accountId);
+        const day = Fmt.dayLabel(j.scheduledAt);
+        const head = day !== lastDay ? `<tr><td colspan="7" class="!bg-[#fcfbf3] !py-2 text-xs font-semibold text-stone-600">${day}${day === 'Today' || day === 'Tomorrow' ? ` · ${Fmt.date(j.scheduledAt)}` : ''}</td></tr>` : '';
+        lastDay = day;
+        return head + `<tr>
+          <td class="whitespace-nowrap"><p class="font-medium">${Fmt.time(j.scheduledAt)}</p><p class="text-xs text-stone-500">GMT+7</p></td>
+          <td><a href="content-detail.html?id=${c.id}&tab=publishing" class="flex items-center gap-3 hover:text-olive-700">${UI.thumb(c, 'w-16 h-10')}<span class="font-medium line-clamp-2 min-w-[180px] max-w-[260px]">${c.title}</span></a></td>
+          <td>${UI.platformChip(j.platform)}</td>
+          <td><div class="flex items-center gap-2 whitespace-nowrap">${UI.avatar(a.initials, 'w-7 h-7')}<div><p class="text-sm">${a.name}</p>${a.status !== 'Connected' ? UI.badge(a.status, '!h-[18px] !text-[10px]') : ''}</div></div></td>
+          <td class="text-stone-600">${j.visibility}</td>
+          <td>${UI.badge(j.status)}${j.error && j.status !== 'Failed' ? `<p class="text-[11px] text-orange-700 mt-1 max-w-[160px] truncate" title="${j.error}">${j.error}</p>` : ''}</td>
+          <td>${actions(j)}</td>
+        </tr>`;
+      }).join('') : `<tr><td colspan="7">${UI.empty('inbox', 'Queue is empty', 'Nothing matches this view.')}</td></tr>`;
+      UI.refreshIcons();
+    }
+
+    window.renderPage = function () {
+      document.getElementById('q-account').innerHTML += DB.accounts.map((a) => `<option value="${a.id}">${PLATFORM[a.platform].name} · ${a.name}</option>`).join('');
+      document.getElementById('q-platform').addEventListener('change', (e) => { q.platform = e.target.value; render(); });
+      document.getElementById('q-account').addEventListener('change', (e) => { q.account = e.target.value; render(); });
+      render();
+    };
+  </script>
+</body>
+</html>

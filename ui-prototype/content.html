@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Content · MediaFlow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="assets/tailwind.config.js"></script>
+  <link rel="stylesheet" href="assets/styles.css">
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+</head>
+<body data-page="content">
+  <aside id="sidebar"></aside>
+  <div class="lg:pl-64 min-h-screen flex flex-col">
+    <header id="topbar"></header>
+
+    <main class="flex-1 px-4 md:px-8 py-6 md:py-8 space-y-5 max-w-[1600px] w-full mx-auto">
+      <div class="flex flex-col md:flex-row md:items-end justify-between gap-3">
+        <div>
+          <h1 class="text-2xl font-semibold tracking-tight">Content</h1>
+          <p class="text-sm text-stone-500 mt-0.5">Every video from idea to published — see what's missing at a glance.</p>
+        </div>
+        <div class="flex gap-2">
+          <button class="btn btn-outline" onclick="UI.toast('Exported 16 rows to CSV (mock)','download')"><i data-lucide="download"></i>Export</button>
+          <button class="btn btn-primary" data-open-modal="create-content"><i data-lucide="plus"></i>Create Content</button>
+        </div>
+      </div>
+
+      <!-- Quick status tabs -->
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="overflow-x-auto thin-scroll"><div id="quick-tabs" class="tabs"></div></div>
+        <div class="tabs ml-auto" id="view-toggle">
+          <button class="tab" data-view="table" aria-selected="true"><i data-lucide="rows-3"></i>Table</button>
+          <button class="tab" data-view="card" aria-selected="false"><i data-lucide="layout-grid"></i>Cards</button>
+        </div>
+      </div>
+
+      <!-- Filter bar -->
+      <div class="card p-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="relative flex-1 min-w-[200px]">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"></i>
+            <input id="f-q" class="input !pl-9" placeholder="Search title, tag or description">
+          </div>
+          <select id="f-platform" class="select !w-auto"><option value="">All platforms</option><option value="youtube">YouTube</option><option value="facebook">Facebook</option></select>
+          <select id="f-category" class="select !w-auto"><option value="">All categories</option></select>
+          <select id="f-priority" class="select !w-auto"><option value="">Any priority</option><option>High</option><option>Medium</option><option>Low</option></select>
+          <select id="f-created" class="select !w-auto"><option value="">Created: any time</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option></select>
+          <select id="f-scheduled" class="select !w-auto"><option value="">Scheduled: any</option><option value="week">This week</option><option value="next">Next week</option><option value="none">Not scheduled</option></select>
+          <button id="f-clear" class="btn btn-ghost btn-sm hidden"><i data-lucide="x"></i>Clear</button>
+        </div>
+      </div>
+
+      <!-- Bulk action bar -->
+      <div id="bulk" class="hidden sticky top-20 z-20">
+        <div class="rounded-xl bg-stone-900 text-white px-4 py-2.5 flex flex-wrap items-center gap-2 shadow-pop">
+          <span class="text-sm font-medium mr-2"><span id="bulk-count">0</span> selected</span>
+          <div class="relative">
+            <button class="btn btn-sm !text-white hover:!bg-white/10" data-dropdown-toggle="bulk-status"><i data-lucide="circle-dot"></i>Change status<i data-lucide="chevron-down"></i></button>
+            <div id="bulk-status" class="dropdown !left-0 !right-auto w-48 p-1.5 text-stone-800"></div>
+          </div>
+          <div class="relative">
+            <button class="btn btn-sm !text-white hover:!bg-white/10" data-dropdown-toggle="bulk-cat"><i data-lucide="folder"></i>Assign category<i data-lucide="chevron-down"></i></button>
+            <div id="bulk-cat" class="dropdown !left-0 !right-auto w-48 p-1.5 text-stone-800"></div>
+          </div>
+          <button class="btn btn-sm !text-white hover:!bg-white/10" onclick="UI.toast('Tag added to selected content','tag')"><i data-lucide="tag"></i>Add tag</button>
+          <button class="btn btn-sm !text-white hover:!bg-white/10" onclick="bulkSchedule()"><i data-lucide="calendar-plus"></i>Schedule</button>
+          <button class="btn btn-sm !text-white hover:!bg-white/10" onclick="bulkArchive()"><i data-lucide="archive"></i>Archive</button>
+          <button class="btn btn-sm !text-rose-300 hover:!bg-white/10" onclick="bulkDelete()"><i data-lucide="trash-2"></i>Delete</button>
+          <button class="btn btn-sm btn-icon !text-white hover:!bg-white/10 ml-auto" onclick="clearSelection()" aria-label="Clear selection"><i data-lucide="x"></i></button>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div id="results"></div>
+    </main>
+  </div>
+
+  <!-- Floating row menu -->
+  <div id="row-menu" class="dropdown !fixed w-48 p-1.5"></div>
+
+  <script src="assets/data.js"></script>
+  <script src="assets/logic.js"></script>
+  <script src="assets/ui.js"></script>
+  <script src="assets/layout.js"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const state = {
+      view: 'table',
+      quick: params.get('status') === 'ready' ? 'Ready' : params.get('stage') || (params.get('view') === 'production' ? 'Production' : 'All'),
+      q: params.get('q') || '', platform: '', category: '', priority: '', created: '', scheduled: '',
+      selected: new Set(),
+    };
+    // Default to cards on phones; remember the user's choice per browser
+    try { state.view = localStorage.getItem('content-view') || (innerWidth < 768 ? 'card' : 'table'); } catch (e) { state.view = innerWidth < 768 ? 'card' : 'table'; }
+
+    const QUICK = [
+      ['All', 'All', () => true],
+      ['Production', 'In production', (c) => ['Idea', 'Script', 'Images', 'Video', 'Review'].includes(Logic.stage(c))],
+      ['Ready', 'Ready to post', (c) => Logic.stage(c) === 'Ready'],
+      ['Scheduled', 'Scheduled', (c) => Logic.stage(c) === 'Scheduled'],
+      ['Published', 'Published', (c) => Logic.stage(c) === 'Published'],
+      ['Failed', 'Failed', (c) => Logic.stage(c) === 'Failed'],
+      ['Idea', 'Ideas', (c) => Logic.stage(c) === 'Idea'],
+    ];
+    // Stage deep links from the dashboard (Script, Images, Video, Review)
+    if (!QUICK.find((q) => q[0] === state.quick)) QUICK.push([state.quick, state.quick, (c) => Logic.stage(c) === state.quick]);
+
+    function filtered() {
+      const qf = QUICK.find((q) => q[0] === state.quick)[2];
+      const q = state.q.trim().toLowerCase();
+      return DB.contents.filter((c) => {
+        if (!qf(c)) return false;
+        if (q && !(`${c.title} ${c.description} ${c.tags.join(' ')}`.toLowerCase().includes(q))) return false;
+        if (state.platform && !c.platforms.includes(state.platform)) return false;
+        if (state.category && c.category !== state.category) return false;
+        if (state.priority && c.priority !== state.priority) return false;
+        if (state.created && (TODAY - new Date(c.createdAt)) / 86400000 > +state.created) return false;
+        const next = Logic.nextJob(c.id);
+        if (state.scheduled === 'none' && next) return false;
+        if (state.scheduled === 'week' && !(next && next.scheduledAt <= '2026-10-18T23:59')) return false;
+        if (state.scheduled === 'next' && !(next && next.scheduledAt >= '2026-10-19' && next.scheduledAt <= '2026-10-25T23:59')) return false;
+        return true;
+      });
+    }
+
+    function scheduleCell(c) {
+      const next = Logic.nextJob(c.id);
+      if (next) return `<div class="text-sm">${Fmt.dayLabel(next.scheduledAt)}</div><div class="text-xs text-stone-500 flex items-center gap-1">${UI.platformLogo(next.platform, 12)}${Fmt.time(next.scheduledAt)}</div>`;
+      if (Logic.stage(c) === 'Ready') return `<button class="btn btn-outline btn-sm" onclick="event.stopPropagation(); UI.openSchedule('${c.id}')"><i data-lucide="calendar-plus"></i>Schedule</button>`;
+      return `<span class="text-xs text-stone-400">Target ${Fmt.short(c.targetDate)}</span>`;
+    }
+
+    function renderTable(list) {
+      const allSel = list.length && list.every((c) => state.selected.has(c.id));
+      return `
+        <div class="card overflow-hidden">
+          <div class="overflow-x-auto thin-scroll">
+            <table class="table min-w-[1000px]">
+              <thead><tr>
+                <th class="w-10"><input type="checkbox" class="checkbox" ${allSel ? 'checked' : ''} onchange="toggleAll(this.checked)" aria-label="Select all"></th>
+                <th>Content</th><th>Platforms</th><th>Production</th><th>Checklist</th><th>Status</th><th>Priority</th><th>Next post</th><th>Created</th><th class="w-10"></th>
+              </tr></thead>
+              <tbody>
+                ${list.map((c) => `
+                <tr class="cursor-pointer" onclick="location.href='content-detail.html?id=${c.id}'">
+                  <td onclick="event.stopPropagation()"><input type="checkbox" class="checkbox" ${state.selected.has(c.id) ? 'checked' : ''} onchange="toggleOne('${c.id}', this.checked)" aria-label="Select"></td>
+                  <td>
+                    <div class="flex items-center gap-3 max-w-[380px]">
+                      ${UI.thumb(c, 'w-20 h-12', { duration: true })}
+                      <div class="min-w-0">
+                        <p class="font-medium text-stone-900 truncate">${c.title}</p>
+                        <p class="text-xs text-stone-500 truncate">${c.description}</p>
+                        <div class="flex items-center gap-1 mt-1"><span class="text-[11px] text-stone-600 mr-1">${c.category} · ${c.type}</span>${c.tags.slice(0, 2).map((t) => `<span class="text-[10px] px-1.5 py-0.5 rounded bg-[#f5f3e3] text-stone-600">#${t}</span>`).join('')}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>${UI.platformStack(c.platforms)}</td>
+                  <td>${UI.miniSteps(c)}</td>
+                  <td class="w-28"><div class="flex items-center gap-2">${UI.progress(Logic.completion(c))}<span class="text-xs text-stone-500 tabular-nums w-8">${Logic.completion(c)}%</span></div></td>
+                  <td>${UI.badge(Logic.contentStatus(c))}</td>
+                  <td>${UI.priority(c.priority)}</td>
+                  <td>${scheduleCell(c)}</td>
+                  <td class="text-stone-500 whitespace-nowrap">${Fmt.short(c.createdAt)}</td>
+                  <td onclick="event.stopPropagation()"><button class="btn btn-ghost btn-sm btn-icon" onclick="openRowMenu(this, '${c.id}')" aria-label="Actions"><i data-lucide="ellipsis"></i></button></td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+          ${footer(list)}
+        </div>`;
+    }
+
+    function renderCards(list) {
+      return `
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
+          ${list.map((c) => {
+            const miss = Logic.readiness(c).missing;
+            const pct = Logic.completion(c);
+            return `
+            <div class="card overflow-hidden group hover:border-olive-300 transition-colors cursor-pointer" onclick="location.href='content-detail.html?id=${c.id}'">
+              <div class="relative">
+                ${UI.thumb(c, 'w-full aspect-video !rounded-none', { duration: true })}
+                <div class="absolute top-2.5 left-2.5" onclick="event.stopPropagation()"><input type="checkbox" class="checkbox bg-white" ${state.selected.has(c.id) ? 'checked' : ''} onchange="toggleOne('${c.id}', this.checked)" aria-label="Select"></div>
+                <div class="absolute top-2.5 right-2.5">${UI.badge(Logic.contentStatus(c), 'shadow-sm')}</div>
+              </div>
+              <div class="p-4">
+                <div class="flex items-center justify-between text-xs text-stone-500"><span>${c.category} · ${c.type}</span>${UI.platformStack(c.platforms)}</div>
+                <p class="font-medium mt-1.5 line-clamp-2 min-h-[2.5rem]">${c.title}</p>
+                <div class="flex items-center justify-between mt-3">${UI.miniSteps(c)}${UI.priority(c.priority)}</div>
+                <div class="flex items-center gap-2 mt-3">${UI.progress(pct)}<span class="text-xs text-stone-500 tabular-nums">${pct}%</span></div>
+                <div class="mt-3 pt-3 border-t border-[#f3f1e4] text-xs flex items-center justify-between gap-2 min-h-[2.25rem]">
+                  ${miss.length ? `<span class="text-amber-800 flex items-center gap-1.5 truncate">${UI.icon('circle-dashed', 'w-3.5 h-3.5 shrink-0')}${miss[0].text}${miss.length > 1 ? ` +${miss.length - 1}` : ''}</span>`
+                    : `<span class="text-olive-700 flex items-center gap-1.5">${UI.icon('circle-check', 'w-3.5 h-3.5')}All assets ready</span>`}
+                  <span onclick="event.stopPropagation()">${scheduleCell(c)}</span>
+                </div>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>`;
+    }
+
+    function footer(list) {
+      return `<div class="flex items-center justify-between px-4 py-3 border-t border-[#f1eedf] text-sm text-stone-500">
+        <span>Showing ${list.length} of ${DB.contents.length}</span>
+        <div class="flex gap-1"><button class="btn btn-outline btn-sm" disabled>Previous</button><button class="btn btn-outline btn-sm" disabled>Next</button></div>
+      </div>`;
+    }
+
+    function render() {
+      document.getElementById('quick-tabs').innerHTML = QUICK.map(([k, label, fn]) =>
+        `<button class="tab" aria-selected="${state.quick === k}" onclick="state.quick='${k}'; render()">${label}<span class="text-xs text-stone-400 tabular-nums">${DB.contents.filter(fn).length}</span></button>`).join('');
+
+      const list = filtered();
+      const res = document.getElementById('results');
+      if (!list.length) {
+        res.innerHTML = `<div class="card">${UI.empty('search-x', 'No content matches these filters', 'Try a different search or clear the filters.', '<button class="btn btn-outline" onclick="clearFilters()">Clear filters</button>')}</div>`;
+      } else {
+        res.innerHTML = state.view === 'table' ? renderTable(list) : renderCards(list) + `<div class="card mt-4">${footer(list)}</div>`;
+      }
+      document.querySelectorAll('#view-toggle [data-view]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.view === state.view)));
+      const active = state.q || state.platform || state.category || state.priority || state.created || state.scheduled;
+      document.getElementById('f-clear').classList.toggle('hidden', !active);
+      document.getElementById('bulk').classList.toggle('hidden', state.selected.size === 0);
+      document.getElementById('bulk-count').textContent = state.selected.size;
+      UI.refreshIcons();
+    }
+
+    // Selection + bulk actions
+    function toggleOne(id, on) { on ? state.selected.add(id) : state.selected.delete(id); render(); }
+    function toggleAll(on) { filtered().forEach((c) => on ? state.selected.add(c.id) : state.selected.delete(c.id)); render(); }
+    function clearSelection() { state.selected.clear(); render(); }
+    function bulkSchedule() {
+      const notReady = [...state.selected].map(Logic.content).filter((c) => !Logic.readiness(c).ready);
+      if (notReady.length) { UI.toast(`${notReady.length} selected item(s) aren't Ready to Post yet`, 'triangle-alert'); return; }
+      UI.openSchedule([...state.selected][0]);
+    }
+    function bulkArchive() { UI.confirm({ title: `Archive ${state.selected.size} item(s)?`, text: 'Archived content is hidden from lists but can be restored from Settings.', confirmLabel: 'Archive', danger: false, onConfirm: () => { UI.toast('Archived', 'archive'); clearSelection(); } }); }
+    function bulkDelete() { UI.confirm({ title: `Delete ${state.selected.size} item(s)?`, text: 'This permanently removes the content, its scripts, media links and schedules. This cannot be undone.', onConfirm: () => { UI.toast('Deleted', 'trash-2'); clearSelection(); } }); }
+    function clearFilters() { Object.assign(state, { q: '', platform: '', category: '', priority: '', created: '', scheduled: '', quick: 'All' }); ['q', 'platform', 'category', 'priority', 'created', 'scheduled'].forEach((k) => document.getElementById('f-' + k).value = ''); render(); }
+
+    function openRowMenu(btn, id) {
+      const c = Logic.content(id);
+      const m = document.getElementById('row-menu');
+      const ready = Logic.readiness(c).ready;
+      m.innerHTML = `
+        <a class="menu-item" href="content-detail.html?id=${id}"><i data-lucide="square-arrow-out-up-right"></i>Open workspace</a>
+        <button class="menu-item ${ready ? '' : 'opacity-50 cursor-not-allowed'}" ${ready ? `onclick="UI.openSchedule('${id}')"` : `title="Not ready to post"`}><i data-lucide="calendar-plus"></i>Schedule post</button>
+        <button class="menu-item" onclick="UI.toast('Duplicated as draft','copy')"><i data-lucide="copy"></i>Duplicate</button>
+        <button class="menu-item" onclick="UI.toast('Archived','archive')"><i data-lucide="archive"></i>Archive</button>
+        <div class="h-px bg-[#f1eedf] my-1"></div>
+        <button class="menu-item !text-rose-700" onclick="UI.confirm({title:'Delete “${c.title.replace(/'/g, '’')}”?', text:'This removes the content, its script versions and schedules. This cannot be undone.', onConfirm:()=>UI.toast('Deleted','trash-2')})"><i data-lucide="trash-2" class="!text-rose-600"></i>Delete</button>`;
+      const r = btn.getBoundingClientRect();
+      m.style.top = `${Math.min(r.bottom + 4, innerHeight - 230)}px`;
+      m.style.left = `${r.right - 192}px`;
+      m.style.right = 'auto';
+      setTimeout(() => m.classList.add('open'));
+      UI.refreshIcons();
+    }
+    window.addEventListener('scroll', () => document.getElementById('row-menu').classList.remove('open'), true);
+
+    window.renderPage = function () {
+      document.getElementById('f-category').innerHTML += DB.categories.map((c) => `<option>${c}</option>`).join('');
+      document.getElementById('bulk-status').innerHTML = STATUS.publishing.map((s) => `<button class="menu-item" onclick="UI.toast('Status set to ${s}')">${UI.badge(s)}</button>`).join('');
+      document.getElementById('bulk-cat').innerHTML = DB.categories.map((c) => `<button class="menu-item" onclick="UI.toast('Category set to ${c}')">${c}</button>`).join('');
+      const q = document.getElementById('f-q'); q.value = state.q;
+      q.addEventListener('input', (e) => { state.q = e.target.value; render(); });
+      ['platform', 'category', 'priority', 'created', 'scheduled'].forEach((k) => document.getElementById('f-' + k).addEventListener('change', (e) => { state[k] = e.target.value; render(); }));
+      document.getElementById('f-clear').addEventListener('click', clearFilters);
+      document.querySelectorAll('#view-toggle [data-view]').forEach((b) => b.addEventListener('click', () => { state.view = b.dataset.view; try { localStorage.setItem('content-view', state.view); } catch (e) {} render(); }));
+      render();
+    };
+  </script>
+</body>
+</html>

@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Content Workspace · MediaFlow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="assets/tailwind.config.js"></script>
+  <link rel="stylesheet" href="assets/styles.css">
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+</head>
+<body data-page="content-detail">
+  <aside id="sidebar"></aside>
+  <div class="lg:pl-64 min-h-screen flex flex-col">
+    <header id="topbar"></header>
+
+    <main class="flex-1 px-4 md:px-8 py-6 md:py-8 space-y-6 max-w-[1600px] w-full mx-auto">
+      <!-- Breadcrumb + header -->
+      <div>
+        <nav class="text-sm text-stone-500 flex items-center gap-1.5"><a href="content.html" class="hover:text-olive-700">Content</a><i data-lucide="chevron-right" class="w-3.5 h-3.5"></i><span id="crumb" class="text-stone-700 truncate"></span></nav>
+        <div id="header" class="mt-3"></div>
+      </div>
+
+      <!-- Progress stepper -->
+      <div id="stepper" class="card p-4 md:p-5"></div>
+
+      <!-- Readiness -->
+      <div id="readiness"></div>
+
+      <!-- Tabs -->
+      <div class="utabs" id="detail-tabs">
+        <button class="utab" data-tab="overview"><i data-lucide="layout-panel-left"></i>Overview</button>
+        <button class="utab" data-tab="script"><i data-lucide="file-text"></i>Script</button>
+        <button class="utab" data-tab="images"><i data-lucide="image"></i>Images</button>
+        <button class="utab" data-tab="video"><i data-lucide="film"></i>Video</button>
+        <button class="utab" data-tab="publishing"><i data-lucide="send"></i>Publishing</button>
+        <button class="utab" data-tab="activity"><i data-lucide="history"></i>Activity</button>
+      </div>
+      <div id="tab-content"></div>
+    </main>
+  </div>
+
+  <script src="assets/data.js"></script>
+  <script src="assets/logic.js"></script>
+  <script src="assets/ui.js"></script>
+  <script src="assets/layout.js"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const c = Logic.content(params.get('id')) || Logic.content('c-101');
+    let tab = params.get('tab') || 'overview';
+    document.title = `${c.title} · MediaFlow`;
+
+    const SCRIPT = `[COLD OPEN — 0:00]
+What if I told you that ten tools could do 80% of the work you did last year — before lunch?
+
+[INTRO — 0:15]
+I tested over 40 AI tools this month. Most were hype. These ten actually changed how I work. Let's count down.
+
+[#10 — Meeting notes on autopilot — 0:42]
+B-ROLL: calendar invite, then a clean summary appearing in the doc.
+The first tool joins your calls, writes the notes, and sends action items before you've closed the tab…
+
+[#9 — Research assistant — 1:20]
+B-ROLL: split screen, 30 browser tabs vs one answer with sources.
+…
+
+[RECAP — 8:55]
+Ten tools, one theme: let AI take the first draft so you can spend your time on the final one.
+
+[CTA — 9:20]
+Which one are you trying first? Tell me in the comments — and subscribe for the 2027 follow-up.`;
+
+    const sel = (list, value, onchange = '') => `<select class="select" ${onchange}>${list.map((v) => `<option ${v === value ? 'selected' : ''}>${v}</option>`).join('')}</select>`;
+
+    // ---------- Header ----------
+    function renderHeader() {
+      const ready = Logic.readiness(c).ready;
+      document.getElementById('crumb').textContent = c.title;
+      document.getElementById('header').innerHTML = `
+        <div class="flex flex-col lg:flex-row lg:items-center gap-4">
+          ${UI.thumb(c, 'w-full lg:w-44 aspect-video', { duration: true })}
+          <div class="flex-1 min-w-0">
+            <div class="flex flex-wrap items-center gap-2">${UI.badge(Logic.contentStatus(c))}${UI.priority(c.priority)}
+              ${c.series ? `<span class="badge badge-neutral">${UI.icon('library', 'w-3 h-3')}${c.series}</span>` : ''}
+              ${c.campaign ? `<span class="badge badge-neutral">${UI.icon('flag', 'w-3 h-3')}${c.campaign}</span>` : ''}
+            </div>
+            <h1 class="text-xl md:text-2xl font-semibold tracking-tight mt-2">${c.title}</h1>
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-sm text-stone-500">
+              <span>${c.category} · ${c.type}</span><span class="flex items-center gap-1.5">${UI.platformStack(c.platforms)}</span>
+              <span>Created ${Fmt.date(c.createdAt)}</span><span>Target ${Fmt.date(c.targetDate)}</span>
+            </div>
+          </div>
+          <div class="flex gap-2 shrink-0">
+            <button class="btn btn-outline" onclick="UI.toast('Saved')"><i data-lucide="save"></i>Save</button>
+            <span title="${ready ? '' : 'Complete the missing items first'}"><button class="btn btn-primary" ${ready ? '' : 'disabled'} onclick="UI.openSchedule('${c.id}')"><i data-lucide="calendar-plus"></i>Schedule post</button></span>
+            <div class="relative">
+              <button class="btn btn-outline btn-icon" data-dropdown-toggle="detail-menu" aria-label="More"><i data-lucide="ellipsis"></i></button>
+              <div id="detail-menu" class="dropdown w-48 p-1.5">
+                <button class="menu-item" onclick="UI.toast('Duplicated as draft','copy')"><i data-lucide="copy"></i>Duplicate</button>
+                <button class="menu-item" onclick="UI.toast('Archived','archive')"><i data-lucide="archive"></i>Archive</button>
+                <div class="h-px bg-[#f1eedf] my-1"></div>
+                <button class="menu-item !text-rose-700" onclick="UI.confirm({title:'Delete this content?', text:'Scripts, image links, videos and schedules for this item will be removed. This cannot be undone.', onConfirm:()=>{UI.toast('Deleted','trash-2'); setTimeout(()=>location.href='content.html',700)}})"><i data-lucide="trash-2" class="!text-rose-600"></i>Delete</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    // ---------- Stepper ----------
+    function renderStepper() {
+      const s = Logic.stage(c);
+      const jobs = Logic.jobsFor(c.id);
+      const steps = [
+        ['Script', c.script === 'Approved', c.script, 'file-text'],
+        ['Images', c.image === 'Approved', c.image, 'image'],
+        ['Video', c.video === 'Final', c.video, 'film'],
+        ['Review', c.review === 'Approved', c.review, 'eye'],
+        ['Scheduled', jobs.length > 0, jobs.length ? `${jobs.length} post${jobs.length > 1 ? 's' : ''}` : 'Not scheduled', 'calendar-clock'],
+        ['Published', s === 'Published', s === 'Published' ? 'Live' : s === 'Failed' ? 'Failed' : 'Pending', 'circle-check'],
+      ];
+      const current = steps.findIndex((x) => !x[1]);
+      const pct = Logic.completion(c);
+      document.getElementById('stepper').innerHTML = `
+        <div class="flex items-center justify-between mb-4"><p class="text-sm font-medium">Production progress</p><p class="text-sm"><span class="font-semibold text-olive-700">${pct}%</span> <span class="text-stone-500">complete</span></p></div>
+        <div class="overflow-x-auto thin-scroll"><ol class="flex items-start min-w-[560px]">
+          ${steps.map(([label, done, status, ico], i) => {
+            const isCur = i === current;
+            const failed = label === 'Published' && s === 'Failed';
+            const dot = done ? 'bg-olive-600 text-white' : failed ? 'bg-rose-100 text-rose-700' : isCur ? 'bg-white text-olive-700 ring-2 ring-olive-600' : 'bg-stone-100 text-stone-400';
+            return `<li class="flex-1 flex flex-col items-center text-center relative">
+              ${i > 0 ? `<span class="absolute top-[13px] right-1/2 w-full h-0.5 ${steps[i - 1][1] ? 'bg-olive-600' : 'bg-stone-200'}" style="z-index:0"></span>` : ''}
+              <span class="step-dot relative z-10 ${dot}">${UI.icon(done ? 'check' : failed ? 'x' : ico)}</span>
+              <span class="text-xs font-medium mt-2 ${done || isCur ? 'text-stone-900' : 'text-stone-500'}">${label}</span>
+              <span class="text-[11px] ${failed ? 'text-rose-700' : 'text-stone-500'}">${status}</span>
+            </li>`;
+          }).join('')}
+        </ol></div>`;
+    }
+
+    function renderReadiness() {
+      const r = Logic.readiness(c);
+      const el = document.getElementById('readiness');
+      if (r.ready) { el.innerHTML = ''; return; }
+      el.innerHTML = `
+        <div class="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 flex flex-col md:flex-row md:items-center gap-3">
+          <span class="w-9 h-9 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">${UI.icon('list-todo')}</span>
+          <div class="flex-1">
+            <p class="text-sm font-medium text-amber-950">Not ready to post — ${r.missing.length} item${r.missing.length > 1 ? 's' : ''} missing</p>
+            <div class="flex flex-wrap gap-2 mt-1.5">${r.missing.map((m) => `<button class="text-xs px-2 py-1 rounded-md bg-white border border-amber-200 text-amber-900 hover:border-amber-400" onclick="setTab('${m.tab}')">${m.text} →</button>`).join('')}</div>
+          </div>
+        </div>`;
+    }
+
+    // ---------- Tabs ----------
+    const TABS = {
+      overview() {
+        const checklist = Logic.checklist(c);
+        const done = checklist.filter((i) => i.done).length;
+        return `
+        <div class="grid lg:grid-cols-12 gap-6">
+          <div class="lg:col-span-8 space-y-6">
+            <div class="card">
+              <div class="card-header"><p class="card-title">Basic information</p><button class="btn btn-ghost btn-sm"><i data-lucide="pencil"></i>Edit</button></div>
+              <div class="card-body grid sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
+                <div class="sm:col-span-2"><p class="text-stone-500 text-xs mb-1">Description</p><p>${c.description}</p></div>
+                <div class="sm:col-span-2"><p class="text-stone-500 text-xs mb-1">Content idea</p><p>${c.idea}</p></div>
+                <div><p class="text-stone-500 text-xs mb-1">Category</p><p>${c.category}</p></div>
+                <div><p class="text-stone-500 text-xs mb-1">Content type</p><p>${c.type}</p></div>
+                <div><p class="text-stone-500 text-xs mb-1">Target audience</p><p>${c.audience}</p></div>
+                <div><p class="text-stone-500 text-xs mb-1">Language</p><p>${c.language}</p></div>
+                <div><p class="text-stone-500 text-xs mb-1">Target platforms</p><div class="flex gap-3">${c.platforms.map(UI.platformChip).join('')}</div></div>
+                <div><p class="text-stone-500 text-xs mb-1">Tags</p><div class="flex flex-wrap gap-1">${c.tags.map((t) => `<span class="text-xs px-2 py-0.5 rounded-md bg-[#f5f3e3] text-stone-700">#${t}</span>`).join('')}</div></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header"><div><p class="card-title">Production status</p><p class="card-desc">Publishing status is calculated automatically from these.</p></div></div>
+              <div class="card-body grid sm:grid-cols-2 gap-4">
+                ${[['Script', 'script', STATUS.script, 'file-text'], ['Images', 'image', STATUS.image, 'image'], ['Video', 'video', STATUS.video, 'film'], ['Review', 'review', STATUS.review, 'eye']].map(([label, key, list, ico]) => `
+                <div class="rounded-xl border border-[#f1eedf] p-3">
+                  <div class="flex items-center justify-between mb-2"><span class="text-sm font-medium flex items-center gap-2">${UI.icon(ico, 'w-4 h-4 text-stone-500')}${label}</span>${UI.badge(c[key])}</div>
+                  ${sel(list, c[key], `onchange="changeStatus('${key}', this.value)"`)}
+                </div>`).join('')}
+                <div class="sm:col-span-2 rounded-xl bg-[#fcfbf3] border border-[#f1eedf] p-3 flex items-center gap-3">
+                  ${UI.icon('wand-sparkles', 'w-4 h-4 text-olive-700')}
+                  <p class="text-sm flex-1">Publishing status: ${UI.badge(Logic.contentStatus(c))}</p>
+                  <p class="text-xs text-stone-500 hidden md:block">Script = Approved + Images = Approved + Video = Final + Review = Approved → Ready to Post</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="lg:col-span-4 space-y-6">
+            <div class="card">
+              <div class="card-header"><p class="card-title">Checklist</p><span class="text-sm font-semibold text-olive-700">${Logic.completion(c)}%</span></div>
+              <div class="px-5 pt-4">${UI.progress(Logic.completion(c))}<p class="text-xs text-stone-500 mt-1.5">${done} of ${checklist.length} complete</p></div>
+              <ul class="p-3 space-y-0.5">${checklist.map((i) => `
+                <li><label class="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-[#fcfbf3] cursor-pointer">
+                  <input type="checkbox" class="checkbox" ${i.done ? 'checked' : ''}><span class="text-sm ${i.done ? 'text-stone-400 line-through' : 'text-stone-800'}">${i.label}</span></label></li>`).join('')}
+              </ul>
+            </div>
+            <div class="card">
+              <div class="card-header"><p class="card-title">Planning</p></div>
+              <div class="card-body space-y-4">
+                <div><label class="label">Priority</label>${sel(['High', 'Medium', 'Low'], c.priority)}</div>
+                <div><label class="label">Target publish date</label><input type="date" class="input" value="${c.targetDate}"></div>
+                <div><label class="label">Series</label>${sel(['', ...DB.series], c.series)}</div>
+                <div><label class="label">Campaign</label>${sel(['', ...DB.campaigns], c.campaign)}</div>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      },
+
+      script() {
+        return `
+        <div class="grid lg:grid-cols-12 gap-6">
+          <div class="lg:col-span-8 card">
+            <div class="card-header flex-wrap">
+              <div class="flex items-center gap-3"><p class="card-title">Script</p>${UI.badge(c.script)}<span class="text-xs text-stone-500">v3 · updated Oct 3, 14:20</span></div>
+              <div class="flex flex-wrap gap-2">
+                <button class="btn btn-outline btn-sm" id="gen-claude" onclick="generateScript()"><i data-lucide="sparkles"></i>Generate with Claude</button>
+                <button class="btn btn-outline btn-sm" onclick="pasteScript()"><i data-lucide="clipboard-paste"></i>Paste</button>
+                <button class="btn btn-outline btn-sm" onclick="UI.copy(document.getElementById('script-text').value,'Script copied')"><i data-lucide="copy"></i>Copy</button>
+              </div>
+            </div>
+            <div class="p-5">
+              <textarea id="script-text" class="textarea font-mono !text-[13px] min-h-[420px]" oninput="countWords()">${c.script === 'Not Started' ? '' : SCRIPT}</textarea>
+              <div class="flex flex-wrap items-center justify-between gap-3 mt-3">
+                <p class="text-xs text-stone-500" id="word-count"></p>
+                <div class="flex gap-2">
+                  <button class="btn btn-outline" onclick="UI.toast('Saved as version 4','git-commit-horizontal')"><i data-lucide="git-commit-horizontal"></i>Save version</button>
+                  <button class="btn btn-outline" onclick="changeStatus('script','Needs Revision')"><i data-lucide="message-square-warning"></i>Needs revision</button>
+                  <button class="btn btn-primary" onclick="changeStatus('script','Approved')"><i data-lucide="badge-check"></i>Approve script</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="lg:col-span-4 space-y-6">
+            <div class="card">
+              <div class="card-header"><p class="card-title">Versions</p><span class="text-xs text-stone-500">${DB.scriptVersions.length} saved</span></div>
+              <ul class="p-2">${DB.scriptVersions.map((v, i) => `
+                <li class="flex items-start gap-3 p-3 rounded-xl ${i === 0 ? 'bg-olive-50' : 'hover:bg-[#fcfbf3]'}">
+                  <span class="w-8 h-8 rounded-lg bg-white border border-[#ece9d6] text-xs font-semibold flex items-center justify-center">v${v.version}</span>
+                  <div class="flex-1 min-w-0"><div class="flex items-center gap-2">${UI.badge(v.status)}${i === 0 ? '<span class="text-[11px] text-olive-700 font-medium">Current</span>' : ''}</div>
+                    <p class="text-sm mt-1">${v.note}</p><p class="text-xs text-stone-500">${Fmt.short(v.at)}, ${Fmt.time(v.at)} · ${v.words.toLocaleString()} words</p></div>
+                  ${i === 0 ? '' : `<button class="btn btn-ghost btn-sm" onclick="UI.toast('Restored v${v.version} as a new version','history')">Restore</button>`}
+                </li>`).join('')}</ul>
+            </div>
+            <div class="card">
+              <div class="card-header"><p class="card-title">Prompt used</p><a href="prompts.html" class="text-xs text-olive-700 font-medium hover:underline">Library</a></div>
+              <div class="card-body">
+                <div class="flex items-center gap-2 text-sm font-medium">${UI.icon('sparkles', 'w-4 h-4 text-olive-700')}${DB.prompts[1].name}<span class="badge badge-neutral ml-auto">Claude</span></div>
+                <p class="text-xs text-stone-600 mt-2 p-3 rounded-lg bg-[#fcfbf3] border border-[#f1eedf] font-mono leading-relaxed">${DB.prompts[1].content}</p>
+                <button class="btn btn-outline btn-sm w-full mt-3" onclick="UI.copy(DB.prompts[1].content,'Prompt copied')"><i data-lucide="copy"></i>Copy prompt</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      },
+
+      images() {
+        const hasImages = c.image !== 'Not Started';
+        const imgs = hasImages ? Array.from({ length: 6 }, (_, i) => ({ id: i, thumb: (c.thumb + i * 3) % 16, selected: c.image === 'Approved' && i < 3, name: `scene-${String(i + 1).padStart(2, '0')}.png` })) : [];
+        const assetStatus = c.image === 'Approved' ? 'Approved' : c.image === 'Generated' ? 'Generated' : c.image === 'Generating' ? 'Generating' : c.script === 'Approved' ? 'Prompt Ready' : 'Prompt Not Created';
+        return `
+        <div class="grid lg:grid-cols-12 gap-6">
+          <div class="lg:col-span-4 card self-start">
+            <div class="card-header"><p class="card-title">Image prompt</p>${UI.badge(assetStatus)}</div>
+            <div class="card-body space-y-4">
+              <div><label class="label">Prompt for Google AI Studio / Flow</label>
+                <textarea class="textarea font-mono !text-[13px]" rows="7" id="img-prompt">${assetStatus === 'Prompt Not Created' ? '' : 'Cinematic still, a creator at a minimalist desk surrounded by floating holographic app windows, soft golden-hour light, 35mm lens, shallow depth of field, muted olive and cream palette, ultra-detailed, 16:9.'}</textarea></div>
+              <div class="grid grid-cols-2 gap-3">
+                <div><label class="label">Style</label>${sel(['Cinematic', 'Illustration', '3D render', 'Anime', 'Photorealistic'], 'Cinematic')}</div>
+                <div><label class="label">Aspect ratio</label>${sel(['16:9', '9:16', '1:1', '4:5'], c.type === 'Short' ? '9:16' : '16:9')}</div>
+              </div>
+              <div class="flex gap-2">
+                <button class="btn btn-outline flex-1" onclick="UI.copy(document.getElementById('img-prompt').value,'Image prompt copied')"><i data-lucide="copy"></i>Copy prompt</button>
+                <a href="prompts.html" class="btn btn-outline btn-icon" title="Use a template"><i data-lucide="library"></i></a>
+              </div>
+            </div>
+          </div>
+
+          <div class="lg:col-span-8 card">
+            <div class="card-header flex-wrap">
+              <div><p class="card-title">Generated images</p><p class="card-desc">${imgs.length} variations · ${imgs.filter((i) => i.selected).length} selected for the video</p></div>
+              <div class="flex gap-2">
+                <button class="btn btn-outline btn-sm" onclick="UI.toast('Upload dialog (mock)','upload')"><i data-lucide="upload"></i>Upload images</button>
+                <button class="btn btn-primary btn-sm" ${imgs.length ? '' : 'disabled'} onclick="changeStatus('image','Approved')"><i data-lucide="badge-check"></i>Approve images</button>
+              </div>
+            </div>
+            <div class="p-5">
+              ${imgs.length ? `<div class="grid grid-cols-2 md:grid-cols-3 gap-4">${imgs.map((img) => `
+                <div class="group rounded-xl border ${img.selected ? 'border-olive-600 ring-2 ring-olive-600/20' : 'border-[#ece9d6]'} overflow-hidden bg-white">
+                  <div class="relative">${UI.thumb({ thumb: img.thumb }, 'w-full aspect-video !rounded-none', { icon: 'image' })}
+                    ${img.selected ? `<span class="absolute top-2 left-2 badge badge-solid">${UI.icon('check', 'w-3 h-3')}Selected</span>` : ''}
+                    <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
+                      <button class="btn btn-sm bg-white text-stone-800" onclick="UI.toast('${img.selected ? 'Removed from' : 'Added to'} final selection')">${img.selected ? 'Unselect' : 'Select'}</button>
+                    </div>
+                  </div>
+                  <div class="flex items-center justify-between px-3 py-2 text-xs"><span class="text-stone-600 truncate">${img.name}</span>
+                    <span class="flex gap-0.5"><button class="btn btn-ghost btn-sm btn-icon !w-7 !h-7" title="Download" onclick="UI.toast('Downloading ${img.name}','download')"><i data-lucide="download" class="!w-3.5 !h-3.5"></i></button>
+                    <button class="btn btn-ghost btn-sm btn-icon !w-7 !h-7" title="Delete" onclick="UI.confirm({title:'Delete ${img.name}?', text:'The image will be removed from this content and the media library.', onConfirm:()=>UI.toast('Image deleted','trash-2')})"><i data-lucide="trash-2" class="!w-3.5 !h-3.5"></i></button></span>
+                  </div>
+                </div>`).join('')}
+                <label class="rounded-xl border-2 border-dashed border-stone-300 aspect-video md:aspect-auto flex flex-col items-center justify-center text-stone-500 hover:bg-[#fcfbf3] cursor-pointer text-sm gap-1"><i data-lucide="image-plus" class="w-6 h-6"></i>Add variation<input type="file" class="hidden" multiple accept="image/*"></label>
+              </div>`
+              : `<label class="block rounded-xl border-2 border-dashed border-stone-300 hover:bg-[#fcfbf3] cursor-pointer">${UI.empty('image-plus', 'No images yet', 'Copy the prompt into Google AI Studio or Flow, then drop the generated variations here.', '<span class="btn btn-primary"><i data-lucide="upload"></i>Upload images</span>')}<input type="file" class="hidden" multiple accept="image/*"></label>`}
+            </div>
+          </div>
+        </div>`;
+      },
+
+      video() {
+        const has = ['Generated', 'Final', 'Needs Revision', 'Editing'].includes(c.video) && c.duration;
+        return `
+        <div class="grid lg:grid-cols-12 gap-6">
+          <div class="lg:col-span-8 card">
+            <div class="card-header"><div class="flex items-center gap-3"><p class="card-title">Final video</p>${UI.badge(c.video)}</div>
+              <div class="flex gap-2">${has ? `<button class="btn btn-outline btn-sm" onclick="UI.toast('Replace video (mock)','replace')"><i data-lucide="replace"></i>Replace</button><button class="btn btn-outline btn-sm" onclick="UI.toast('Downloading…','download')"><i data-lucide="download"></i>Download</button>` : ''}</div>
+            </div>
+            <div class="p-5">
+              ${has ? `
+              <div class="relative rounded-xl overflow-hidden aspect-video bg-stone-900">
+                ${UI.thumb(c, 'w-full h-full !rounded-none opacity-80')}
+                <button class="absolute inset-0 m-auto w-16 h-16 rounded-full bg-white/90 text-stone-900 flex items-center justify-center shadow-pop hover:scale-105 transition" onclick="UI.toast('Preview (mock)','play')"><i data-lucide="play" class="w-7 h-7 ml-1"></i></button>
+                <div class="absolute bottom-0 inset-x-0 p-3 bg-gradient-to-t from-black/70 to-transparent text-white text-xs flex items-center gap-3">
+                  <i data-lucide="play" class="w-4 h-4"></i><div class="flex-1 h-1 rounded-full bg-white/30"><div class="w-1/3 h-full bg-white rounded-full"></div></div><span>3:12 / ${c.duration}</span><i data-lucide="maximize" class="w-4 h-4"></i>
+                </div>
+              </div>
+              <dl class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5 text-sm">
+                <div><dt class="text-xs text-stone-500">Duration</dt><dd class="font-medium mt-0.5">${c.duration}</dd></div>
+                <div><dt class="text-xs text-stone-500">Resolution</dt><dd class="font-medium mt-0.5">${c.type === 'Short' ? '1080 × 1920' : '1920 × 1080'}</dd></div>
+                <div><dt class="text-xs text-stone-500">File size</dt><dd class="font-medium mt-0.5">412 MB · MP4</dd></div>
+                <div><dt class="text-xs text-stone-500">Uploaded</dt><dd class="font-medium mt-0.5">Oct 10, 11:15</dd></div>
+              </dl>
+              <div class="flex flex-wrap justify-end gap-2 mt-5 pt-5 border-t border-[#f3f1e4]">
+                <button class="btn btn-outline" onclick="changeStatus('video','Needs Revision')"><i data-lucide="message-square-warning"></i>Needs revision</button>
+                <button class="btn btn-primary" onclick="changeStatus('video','Final')"><i data-lucide="badge-check"></i>Mark as Final</button>
+              </div>`
+              : `
+              <label class="block rounded-xl border-2 border-dashed border-stone-300 hover:bg-[#fcfbf3] cursor-pointer">${UI.empty('film', c.video === 'Editing' ? 'Video is being edited' : 'No video uploaded', 'Upload the rendered MP4 or paste a link from Drive / cloud storage.', '<span class="btn btn-primary"><i data-lucide="upload"></i>Upload video</span>')}<input type="file" class="hidden" accept="video/*"></label>
+              <div class="flex gap-2 mt-4"><input class="input" placeholder="…or paste a video URL (Google Drive, Dropbox, S3)"><button class="btn btn-outline" onclick="UI.toast('Video linked','link')"><i data-lucide="link"></i>Link</button></div>`}
+            </div>
+          </div>
+          <div class="lg:col-span-4 card self-start">
+            <div class="card-header"><p class="card-title">Thumbnail</p><button class="btn btn-outline btn-sm" onclick="UI.toast('Upload thumbnail (mock)','upload')"><i data-lucide="upload"></i>Upload</button></div>
+            <div class="p-4 space-y-3">
+              ${[0, 1, 2].map((i) => `
+              <label class="flex items-center gap-3 p-2 rounded-xl border border-[#ece9d6] cursor-pointer has-[:checked]:border-olive-600 has-[:checked]:bg-olive-50">
+                <input type="radio" name="thumb" class="checkbox" ${i === 0 ? 'checked' : ''}>
+                ${UI.thumb({ ...c, thumb: c.thumb + i * 5 }, 'w-28 aspect-video')}
+                <div class="text-xs"><p class="font-medium text-stone-800">thumbnail-v${i + 1}.jpg</p><p class="text-stone-500">1280 × 720 · ${180 + i * 23} KB</p></div>
+              </label>`).join('')}
+              <p class="hint">The selected thumbnail is used as default for every platform; you can override it per schedule.</p>
+            </div>
+          </div>
+        </div>`;
+      },
+
+      publishing() {
+        const jobs = Logic.jobsFor(c.id);
+        const r = Logic.readiness(c);
+        const checks = [
+          ['Video is Ready to Post', r.ready],
+          ['At least one platform selected', c.platforms.length > 0],
+          ['Social account connected', c.platforms.every((p) => DB.accounts.some((a) => a.platform === p && a.status === 'Connected'))],
+          ['Title, description & hashtags set', r.ready],
+        ];
+        return `
+        <div class="grid lg:grid-cols-12 gap-6">
+          <div class="lg:col-span-8 space-y-4">
+            <div class="flex items-center justify-between"><p class="font-semibold">Platform schedules</p>
+              <button class="btn btn-primary btn-sm" ${r.ready ? '' : 'disabled title="Content is not ready"'} onclick="UI.openSchedule('${c.id}')"><i data-lucide="plus"></i>Add schedule</button></div>
+            ${jobs.length ? jobs.map((j) => {
+              const a = Logic.account(j.accountId);
+              const failed = j.status === 'Failed' || j.status === 'Retry Scheduled';
+              return `
+              <div class="card p-4 md:p-5">
+                <div class="flex flex-col md:flex-row md:items-center gap-4">
+                  <span class="w-11 h-11 rounded-xl bg-[#fcfbf3] border border-[#f1eedf] flex items-center justify-center">${UI.platformLogo(j.platform, 24)}</span>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2"><p class="font-medium">${PLATFORM[j.platform].name}</p>${UI.badge(j.status === 'Waiting' ? 'Scheduled' : j.status)}</div>
+                    <p class="text-sm text-stone-500 mt-0.5">${a.name} · ${j.visibility} · ${j.timezone}</p>
+                  </div>
+                  <div class="md:text-right"><p class="font-medium">${Fmt.date(j.scheduledAt)}</p><p class="text-sm text-stone-500">${Fmt.time(j.scheduledAt)}</p></div>
+                  <div class="flex gap-1">
+                    ${j.status === 'Published' ? `<a href="analytics.html" class="btn btn-outline btn-sm"><i data-lucide="chart-column"></i>Stats</a>` : `
+                    <button class="btn btn-outline btn-sm" onclick="UI.openSchedule('${c.id}','${j.platform}')"><i data-lucide="pencil"></i>Edit</button>
+                    <button class="btn btn-ghost btn-sm btn-icon" title="Cancel schedule" onclick="UI.confirm({title:'Cancel this ${PLATFORM[j.platform].name} post?', text:'It will be removed from the publishing queue. The content stays Ready to Post.', confirmLabel:'Cancel post', onConfirm:()=>UI.toast('Schedule cancelled')})"><i data-lucide="calendar-x"></i></button>`}
+                  </div>
+                </div>
+                ${failed ? `<div class="mt-4 rounded-xl bg-rose-50 border border-rose-200 p-3 text-sm text-rose-900 flex flex-col sm:flex-row sm:items-center gap-3">
+                  <i data-lucide="circle-alert" class="w-4 h-4 shrink-0"></i><p class="flex-1 font-mono text-xs">${j.error}</p>
+                  <div class="flex gap-2"><button class="btn btn-outline btn-sm" onclick="UI.openSchedule('${c.id}','${j.platform}')">Reschedule</button><button class="btn btn-primary btn-sm" onclick="UI.toast('Retry queued','refresh-cw')"><i data-lucide="refresh-cw"></i>Retry now</button></div>
+                </div>` : ''}
+              </div>`;
+            }).join('') : `<div class="card">${UI.empty('calendar-plus', 'No schedules yet', r.ready ? 'This video is ready — pick a platform and time.' : 'Finish the missing items, then schedule a post for each platform.', r.ready ? `<button class="btn btn-primary" onclick="UI.openSchedule('${c.id}')"><i data-lucide="calendar-plus"></i>Schedule post</button>` : '')}</div>`}
+          </div>
+          <div class="lg:col-span-4 card self-start">
+            <div class="card-header"><p class="card-title">Scheduling requirements</p></div>
+            <ul class="p-4 space-y-2.5">${checks.map(([label, ok]) => `<li class="flex items-center gap-2.5 text-sm">${ok ? UI.icon('circle-check', 'w-4 h-4 text-olive-600') : UI.icon('circle-x', 'w-4 h-4 text-rose-600')}<span class="${ok ? '' : 'text-rose-800'}">${label}</span></li>`).join('')}</ul>
+          </div>
+        </div>`;
+      },
+
+      activity() {
+        const own = DB.activity.filter((a) => a.contentId === c.id);
+        const generic = [
+          { at: '2026-10-09T13:30', type: 'schedule', text: 'Scheduled for YouTube (Oct 14, 19:00) and Facebook (Oct 15, 11:00)' },
+          { at: '2026-10-08T15:02', type: 'review', text: 'Review approved by Sophann' },
+          { at: '2026-10-07T13:30', type: 'video', text: 'Final video uploaded (1080p, 412 MB)' },
+          { at: '2026-10-06T11:15', type: 'image', text: '4 images uploaded · 3 selected' },
+          { at: '2026-10-05T16:40', type: 'image', text: 'Image prompt created' },
+          { at: '2026-10-03T14:20', type: 'script', text: 'Script v3 marked Approved' },
+          { at: '2026-10-02T10:44', type: 'script', text: 'Script v1 generated with Claude' },
+          { at: c.createdAt + 'T09:00', type: 'idea', text: 'Content created' },
+        ];
+        const items = [...own, ...generic].sort((a, b) => b.at.localeCompare(a.at));
+        const groups = {};
+        items.forEach((a) => { const k = Fmt.date(a.at); (groups[k] ||= []).push(a); });
+        return `<div class="card max-w-3xl"><div class="p-5 space-y-6">${Object.entries(groups).map(([day, list]) => `
+          <div><p class="text-xs font-semibold uppercase tracking-wider text-stone-500 mb-3">${day}</p>
+            <ol class="relative border-l border-[#ece9d6] ml-4 space-y-4">${list.map((a) => `
+              <li class="pl-6 relative"><span class="absolute -left-4 top-0">${UI.activityIcon(a.type)}</span>
+                <p class="text-sm text-stone-800 pt-1.5">${a.text}</p><p class="text-xs text-stone-500">${Fmt.time(a.at)}</p></li>`).join('')}
+            </ol></div>`).join('')}</div></div>`;
+      },
+    };
+
+    // ---------- Interactions ----------
+    function changeStatus(key, value) {
+      c[key] = value;
+      if (Logic.readiness(c).ready && ['Draft', 'Not Ready'].includes(c.publishing)) c.publishing = 'Ready to Post';
+      if (!Logic.readiness(c).ready && c.publishing === 'Ready to Post') c.publishing = 'Not Ready';
+      UI.toast(`${key[0].toUpperCase() + key.slice(1)} marked ${value}`);
+      if (Logic.readiness(c).ready && key !== 'review') setTimeout(() => UI.toast('All checks passed — ready to schedule', 'rocket'), 400);
+      renderAll();
+    }
+    function generateScript() {
+      const btn = document.getElementById('gen-claude');
+      btn.disabled = true; btn.innerHTML = '<i data-lucide="loader-circle" class="animate-spin"></i>Generating…'; UI.refreshIcons();
+      document.getElementById('script-text').classList.add('skeleton');
+      setTimeout(() => { document.getElementById('script-text').classList.remove('skeleton'); document.getElementById('script-text').value = SCRIPT; c.script = 'Generated'; renderAll(); UI.toast('Draft generated with Claude (mock) — saved as new version', 'sparkles'); }, 1600);
+    }
+    function pasteScript() { navigator.clipboard?.readText().then((t) => { if (t) { document.getElementById('script-text').value = t; countWords(); UI.toast('Pasted from clipboard', 'clipboard-paste'); } }).catch(() => UI.toast('Clipboard access blocked — paste with Ctrl+V', 'clipboard-paste')); }
+    function countWords() {
+      const el = document.getElementById('script-text'); if (!el) return;
+      const w = el.value.trim() ? el.value.trim().split(/\s+/).length : 0;
+      document.getElementById('word-count').textContent = `${w} words · ~${Math.max(1, Math.round(w / 150))} min narration`;
+    }
+    function setTab(t) {
+      tab = t;
+      document.querySelectorAll('#detail-tabs [data-tab]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === t)));
+      document.getElementById('tab-content').innerHTML = TABS[t]();
+      history.replaceState(null, '', `?id=${c.id}&tab=${t}`);
+      countWords();
+      UI.refreshIcons();
+    }
+    function renderAll() { renderHeader(); renderStepper(); renderReadiness(); setTab(tab); }
+
+    window.renderPage = function () {
+      document.querySelectorAll('#detail-tabs [data-tab]').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
+      renderAll();
+    };
+  </script>
+</body>
+</html>

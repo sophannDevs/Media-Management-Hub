@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Prompts · MediaFlow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="assets/tailwind.config.js"></script>
+  <link rel="stylesheet" href="assets/styles.css">
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+</head>
+<body data-page="prompts">
+  <aside id="sidebar"></aside>
+  <div class="lg:pl-64 min-h-screen flex flex-col">
+    <header id="topbar"></header>
+
+    <main class="flex-1 px-4 md:px-8 py-6 md:py-8 space-y-5 max-w-[1600px] w-full mx-auto">
+      <div class="flex flex-col md:flex-row md:items-end justify-between gap-3">
+        <div>
+          <h1 class="text-2xl font-semibold tracking-tight">AI Prompt Library</h1>
+          <p class="text-sm text-stone-500 mt-0.5">Reusable prompts for Claude, Google AI Studio and Flow. Use <code class="text-xs bg-white border border-[#ece9d6] rounded px-1">{variables}</code> for the parts that change.</p>
+        </div>
+        <button class="btn btn-primary" onclick="openEditor()"><i data-lucide="plus"></i>New prompt</button>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="overflow-x-auto thin-scroll"><div class="tabs" id="p-cats"></div></div>
+        <div class="relative ml-auto w-full sm:w-64"><i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"></i><input id="p-q" class="input !pl-9" placeholder="Search prompts"></div>
+      </div>
+
+      <div id="p-grid" class="grid md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+    </main>
+  </div>
+
+  <!-- Editor dialog -->
+  <div id="prompt-editor" class="overlay">
+    <form class="dialog" onsubmit="event.preventDefault(); UI.closeModal('prompt-editor'); UI.toast('Prompt saved')">
+      <div class="flex items-start justify-between p-6 pb-4 border-b border-[#f1eedf]">
+        <h2 class="text-lg font-semibold" id="pe-title">New prompt</h2>
+        <button type="button" class="btn btn-ghost btn-icon" data-close-modal="prompt-editor"><i data-lucide="x"></i></button>
+      </div>
+      <div class="p-6 space-y-4">
+        <div><label class="label">Prompt name</label><input id="pe-name" required class="input" placeholder="e.g. Long-form script (8–10 min)"></div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div><label class="label">Category</label><select id="pe-cat" class="select"></select></div>
+          <div><label class="label">AI provider</label><select id="pe-provider" class="select"><option>Claude</option><option>Google AI Studio</option><option>Google Flow</option><option>Other</option></select></div>
+        </div>
+        <div><label class="label">Prompt content</label><textarea id="pe-content" required class="textarea font-mono !text-[13px]" rows="8" oninput="showVars()"></textarea>
+          <div id="pe-vars" class="flex flex-wrap gap-1.5 mt-2"></div></div>
+      </div>
+      <div class="flex justify-end gap-2 p-4 px-6 border-t border-[#f1eedf] bg-[#fcfbf3] rounded-b-2xl">
+        <button type="button" class="btn btn-outline" data-close-modal="prompt-editor">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save prompt</button>
+      </div>
+    </form>
+  </div>
+
+  <script src="assets/data.js"></script>
+  <script src="assets/logic.js"></script>
+  <script src="assets/ui.js"></script>
+  <script src="assets/layout.js"></script>
+  <script>
+    const CATS = ['Video idea', 'Script', 'Image', 'Thumbnail', 'Title', 'Description', 'Hashtags'];
+    const CAT_ICON = { 'Video idea': 'lightbulb', Script: 'file-text', Image: 'image', Thumbnail: 'panels-top-left', Title: 'heading', Description: 'align-left', Hashtags: 'hash' };
+    const ps = { cat: 'All', q: '' };
+    const vars = (t) => [...new Set((t.match(/\{[a-z_]+\}/g) || []))];
+    const hl = (t) => t.replace(/\{[a-z_]+\}/g, (m) => `<span class="text-olive-700 bg-olive-50 rounded px-0.5">${m}</span>`);
+
+    function render() {
+      document.getElementById('p-cats').innerHTML = ['All', ...CATS].map((c) => `<button class="tab" aria-selected="${ps.cat === c}" onclick="ps.cat='${c}'; render()">${c === 'All' ? '' : UI.icon(CAT_ICON[c])}${c}</button>`).join('');
+      const list = DB.prompts.filter((p) => (ps.cat === 'All' || p.category === ps.cat) && (!ps.q || `${p.name} ${p.content}`.toLowerCase().includes(ps.q.toLowerCase())));
+      document.getElementById('p-grid').innerHTML = list.length ? list.map((p) => `
+        <div class="card flex flex-col">
+          <div class="p-5 flex-1">
+            <div class="flex items-start gap-3">
+              <span class="w-9 h-9 rounded-lg bg-olive-50 text-olive-700 flex items-center justify-center shrink-0">${UI.icon(CAT_ICON[p.category])}</span>
+              <div class="min-w-0 flex-1"><p class="font-medium">${p.name}</p>
+                <div class="flex gap-1.5 mt-1"><span class="badge badge-neutral">${p.category}</span><span class="badge ${p.provider === 'Claude' ? 'badge-warn' : 'badge-info'}">${p.provider}</span></div></div>
+            </div>
+            <p class="text-xs font-mono leading-relaxed text-stone-700 mt-4 p-3 rounded-lg bg-[#fcfbf3] border border-[#f1eedf] line-clamp-5">${hl(p.content)}</p>
+          </div>
+          <div class="flex items-center justify-between px-5 py-3 border-t border-[#f3f1e4]">
+            <span class="text-[11px] text-stone-500">Updated ${Fmt.short(p.updatedAt)} · created ${Fmt.short(p.createdAt)}</span>
+            <div class="flex gap-0.5">
+              <button class="btn btn-ghost btn-sm btn-icon" title="Copy" onclick="UI.copy(DB.prompts.find(x=>x.id==='${p.id}').content,'Prompt copied')"><i data-lucide="copy"></i></button>
+              <button class="btn btn-ghost btn-sm btn-icon" title="Edit" onclick="openEditor('${p.id}')"><i data-lucide="pencil"></i></button>
+              <button class="btn btn-ghost btn-sm btn-icon" title="Duplicate" onclick="UI.toast('Duplicated “${p.name}”','copy-plus')"><i data-lucide="copy-plus"></i></button>
+              <button class="btn btn-ghost btn-sm btn-icon !text-rose-700" title="Delete" onclick="UI.confirm({title:'Delete “${p.name}”?', text:'Content that used this prompt keeps its own copy.', onConfirm:()=>UI.toast('Prompt deleted','trash-2')})"><i data-lucide="trash-2"></i></button>
+            </div>
+          </div>
+        </div>`).join('') : `<div class="col-span-full card">${UI.empty('sparkles', 'No prompts here yet', 'Save the prompts you reuse so every video starts from a proven template.', '<button class="btn btn-primary" onclick="openEditor()">New prompt</button>')}</div>`;
+      UI.refreshIcons();
+    }
+
+    function openEditor(id) {
+      const p = DB.prompts.find((x) => x.id === id);
+      document.getElementById('pe-title').textContent = p ? 'Edit prompt' : 'New prompt';
+      document.getElementById('pe-name').value = p?.name || '';
+      document.getElementById('pe-cat').innerHTML = CATS.map((c) => `<option ${p?.category === c ? 'selected' : ''}>${c}</option>`).join('');
+      document.getElementById('pe-provider').value = p?.provider || 'Claude';
+      document.getElementById('pe-content').value = p?.content || '';
+      showVars();
+      UI.openModal('prompt-editor');
+    }
+    function showVars() {
+      const v = vars(document.getElementById('pe-content').value);
+      document.getElementById('pe-vars').innerHTML = v.length ? `<span class="text-xs text-stone-500 mr-1">Variables:</span>${v.map((x) => `<span class="badge badge-success">${x}</span>`).join('')}` : '<span class="hint">Tip: wrap changing parts in {braces}, e.g. {topic}</span>';
+    }
+
+    window.renderPage = function () {
+      document.getElementById('p-q').addEventListener('input', (e) => { ps.q = e.target.value; render(); });
+      render();
+    };
+  </script>
+</body>
+</html>

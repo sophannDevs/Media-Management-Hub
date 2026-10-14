@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Social Accounts · MediaFlow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="assets/tailwind.config.js"></script>
+  <link rel="stylesheet" href="assets/styles.css">
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+</head>
+<body data-page="accounts">
+  <aside id="sidebar"></aside>
+  <div class="lg:pl-64 min-h-screen flex flex-col">
+    <header id="topbar"></header>
+
+    <main class="flex-1 px-4 md:px-8 py-6 md:py-8 space-y-6 max-w-[1300px] w-full mx-auto">
+      <div class="flex flex-col md:flex-row md:items-end justify-between gap-3">
+        <div>
+          <h1 class="text-2xl font-semibold tracking-tight">Social Accounts</h1>
+          <p class="text-sm text-stone-500 mt-0.5">Channels and Pages you can publish to. A post can only be scheduled on a connected account.</p>
+        </div>
+        <button class="btn btn-primary" data-open-modal="connect-dialog"><i data-lucide="plug"></i>Connect account</button>
+      </div>
+
+      <div id="sections" class="space-y-8"></div>
+
+      <div class="card p-5 flex flex-col md:flex-row gap-4">
+        <span class="w-10 h-10 rounded-xl bg-olive-50 text-olive-700 flex items-center justify-center shrink-0"><i data-lucide="shield-check" class="w-5 h-5"></i></span>
+        <div class="text-sm">
+          <p class="font-medium">How connections work</p>
+          <p class="text-stone-600 mt-1">Each platform is a separate provider module (OAuth, token refresh, upload, analytics). Access tokens are stored encrypted and refreshed automatically; you'll be notified before a token expires. New platforms plug in without changing your content.</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Connect dialog -->
+  <div id="connect-dialog" class="overlay">
+    <div class="dialog">
+      <div class="flex items-start justify-between p-6 pb-4 border-b border-[#f1eedf]">
+        <div><h2 class="text-lg font-semibold">Connect an account</h2><p class="text-sm text-stone-500 mt-0.5">You'll be redirected to the platform to grant access.</p></div>
+        <button class="btn btn-ghost btn-icon" data-close-modal="connect-dialog"><i data-lucide="x"></i></button>
+      </div>
+      <div class="p-6 grid sm:grid-cols-2 gap-3" id="connect-options"></div>
+    </div>
+  </div>
+
+  <script src="assets/data.js"></script>
+  <script src="assets/logic.js"></script>
+  <script src="assets/ui.js"></script>
+  <script src="assets/layout.js"></script>
+  <script>
+    const DESC = { youtube: 'Upload videos, set visibility, thumbnails and read analytics.', facebook: 'Publish videos and reels to Facebook Pages you manage.' };
+
+    function accountCard(a) {
+      const scheduled = DB.jobs.filter((j) => j.accountId === a.id && j.status === 'Waiting').length;
+      const bad = a.status !== 'Connected';
+      return `
+        <div class="card p-5 ${bad ? '!border-orange-200' : ''}">
+          <div class="flex items-start gap-4">
+            <div class="relative">${UI.avatar(a.initials, 'w-12 h-12 !text-sm', a.platform === 'youtube' ? 'bg-rose-50 text-rose-800' : 'bg-sky-50 text-sky-800')}<span class="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5">${UI.platformLogo(a.platform, 16)}</span></div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap"><p class="font-semibold">${a.name}</p>${UI.badge(a.status)}</div>
+              <p class="text-sm text-stone-500">${a.handle}</p>
+            </div>
+            <div class="relative">
+              <button class="btn btn-ghost btn-sm btn-icon" data-dropdown-toggle="m-${a.id}"><i data-lucide="ellipsis"></i></button>
+              <div id="m-${a.id}" class="dropdown w-48 p-1.5">
+                <button class="menu-item" onclick="UI.toast('Synced ${a.name}','refresh-cw')"><i data-lucide="refresh-cw"></i>Sync now</button>
+                <button class="menu-item" onclick="UI.toast('Set as default')"><i data-lucide="star"></i>Set as default</button>
+                <div class="h-px bg-[#f1eedf] my-1"></div>
+                <button class="menu-item !text-rose-700" onclick="UI.confirm({title:'Disconnect ${a.name}?', text:'${scheduled} scheduled post(s) on this account will be paused until you reconnect.', confirmLabel:'Disconnect', onConfirm:()=>UI.toast('Disconnected','unplug')})"><i data-lucide="unplug" class="!text-rose-600"></i>Disconnect</button>
+              </div>
+            </div>
+          </div>
+          <dl class="grid grid-cols-3 gap-3 mt-5 text-sm">
+            <div><dt class="text-xs text-stone-500">Audience</dt><dd class="font-medium mt-0.5">${a.followers.split(' ')[0]}</dd></div>
+            <div><dt class="text-xs text-stone-500">Scheduled</dt><dd class="font-medium mt-0.5">${scheduled} posts</dd></div>
+            <div><dt class="text-xs text-stone-500">Last sync</dt><dd class="font-medium mt-0.5">${Fmt.ago(a.lastSync.replace(' ', 'T'))}</dd></div>
+          </dl>
+          ${bad ? `<div class="mt-4 rounded-xl bg-orange-50 border border-orange-200 p-3 flex items-center gap-3 text-sm text-orange-900">
+            <i data-lucide="key-round" class="w-4 h-4 shrink-0"></i><span class="flex-1">Access expired — publishing to this Page is paused.</span>
+            <button class="btn btn-primary btn-sm" onclick="UI.toast('Redirecting to Facebook… (mock)','external-link')">Reconnect</button></div>` : ''}
+        </div>`;
+    }
+
+    window.renderPage = function () {
+      const groups = DB.platforms.map((p) => ({ ...p, accounts: DB.accounts.filter((a) => a.platform === p.id) }));
+      document.getElementById('sections').innerHTML = groups.map((g) => {
+        if (!g.enabled) return '';
+        return `<section>
+          <div class="flex items-center gap-3 mb-3">${UI.platformLogo(g.id, 22)}<h2 class="font-semibold">${g.name}</h2><span class="text-sm text-stone-500">${DESC[g.id] || ''}</span></div>
+          <div class="grid md:grid-cols-2 gap-4">${g.accounts.map(accountCard).join('')}
+            <button class="rounded-2xl border-2 border-dashed border-stone-300 hover:bg-white/60 min-h-[180px] flex flex-col items-center justify-center gap-2 text-stone-500" onclick="UI.toast('Redirecting to ${g.name}… (mock)','external-link')"><i data-lucide="plus" class="w-5 h-5"></i><span class="text-sm font-medium">Add ${g.id === 'youtube' ? 'channel' : 'Page'}</span></button>
+          </div></section>`;
+      }).join('') + `<section>
+          <h2 class="font-semibold mb-3">Coming soon</h2>
+          <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">${groups.filter((g) => !g.enabled).map((g) => `
+            <div class="card p-4 flex items-center gap-3 opacity-80">${UI.platformLogo(g.id, 26)}<div><p class="text-sm font-medium">${g.name}</p><p class="text-xs text-stone-500">${UI.badge('Disconnected')}</p></div></div>`).join('')}</div>
+        </section>`;
+
+      document.getElementById('connect-options').innerHTML = DB.platforms.map((p) => `
+        <button class="flex items-center gap-3 rounded-xl border border-[#e4e1cf] p-4 text-left ${p.enabled ? 'hover:border-olive-600 hover:bg-olive-50' : 'opacity-50 cursor-not-allowed'}" ${p.enabled ? `onclick="UI.closeModal('connect-dialog'); UI.toast('Redirecting to ${p.name} OAuth… (mock)','external-link')"` : 'disabled'}>
+          ${UI.platformLogo(p.id, 28)}<div><p class="text-sm font-medium">${p.name}</p><p class="text-xs text-stone-500">${p.enabled ? 'Connect with OAuth' : 'Coming soon'}</p></div>
+        </button>`).join('');
+      UI.refreshIcons();
+    };
+  </script>
+</body>
+</html>
