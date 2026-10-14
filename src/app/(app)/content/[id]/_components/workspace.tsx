@@ -39,7 +39,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useServerAction } from "@/hooks/use-server-action";
 import type { Requirement } from "@/lib/workflow/rules";
 import { ContentType, Stage, stageLabel } from "@/lib/workflow/statuses";
-import { archiveContentAction, deleteContentAndRedirectAction, duplicateContentAction } from "@/server/actions/content";
+import { archiveContentAction, deleteContentAndRedirectAction, duplicateContentAction, restoreContentAction } from "@/server/actions/content";
 import type { ContentWorkspace } from "@/server/queries/content";
 
 export type TabKey = "overview" | "script" | "images" | "video" | "publishing" | "activity";
@@ -165,7 +165,7 @@ export function WorkspaceHeader({ data }: { data: ContentWorkspace }) {
               <Copy />Duplicate
             </DropdownMenuItem>
             {c.archived ? (
-              <DropdownMenuItem onSelect={() => run(() => archiveContentAction([c.id], false))}><ArchiveRestore />Restore</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => run(() => restoreContentAction([c.id]))}><ArchiveRestore />Restore</DropdownMenuItem>
             ) : (
               <DropdownMenuItem onSelect={() => run(() => archiveContentAction([c.id]))}><Archive />Archive</DropdownMenuItem>
             )}

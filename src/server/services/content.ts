@@ -1,7 +1,7 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { storage } from "@/lib/storage";
-import { deriveContentState, isReadyToPost, missingRequirements, normalizeHashtags, parseTags } from "@/lib/workflow/rules";
+import { deriveContentState, isReadyToPost, missingRequirements, normalizeHashtags, parseTags, scheduleActiveKey } from "@/lib/workflow/rules";
 import { ActivityType, ImageStatus, NotificationType, ReviewStatus, ScriptStatus, VideoStatus } from "@/lib/workflow/statuses";
 import { ServiceError } from "../errors";
 import { logActivity } from "./activity";
@@ -224,19 +224,98 @@ export async function duplicateContent(id: string) {
   return copy;
 }
 
-export async function archiveContents(ids: string[], archived = true) {
-  await db.content.updateMany({ where: { id: { in: ids } }, data: { archivedAt: archived ? new Date() : null } });
-  if (archived) {
-    // Archived content must never publish
-    await db.publishingSchedule.updateMany({
-      where: { contentId: { in: ids }, status: { in: ["WAITING", "RETRY_SCHEDULED"] } },
-      data: { status: "CANCELLED", activeKey: null, nextAttemptAt: null },
-    });
-  }
+/** Statuses of the posts archiving takes out of the queue (and restoring can bring back). */
+const PAUSABLE = ["WAITING", "RETRY_SCHEDULED"] as const;
+
+/**
+ * Archived content must never publish: its waiting posts are cancelled, each
+ * remembering the status it had (archivedStatus), so restoring can bring them
+ * back (WF-07). A post that is publishing right now is left to finish.
+ */
+export async function archiveContents(ids: string[]) {
+  const cancelled = await db.$transaction(async (tx) => {
+    await tx.content.updateMany({ where: { id: { in: ids }, archivedAt: null }, data: { archivedAt: new Date() } });
+    let n = 0;
+    for (const status of PAUSABLE) {
+      n += (await tx.publishingSchedule.updateMany({ where: { contentId: { in: ids }, status }, data: { status: "CANCELLED", activeKey: null, archivedStatus: status } })).count;
+    }
+    return n;
+  });
   for (const id of ids) {
-    await logActivity({ contentId: id, type: ActivityType.CONTENT_UPDATED, message: archived ? "Archived" : "Restored from archive" });
+    await logActivity({ contentId: id, type: ActivityType.CONTENT_UPDATED, message: "Archived" });
     await syncPublishingStatus(id);
   }
+  return { cancelled };
+}
+
+export interface RestoreResult {
+  /** Posts back in the queue */
+  restored: number;
+  /** Posts whose time passed while archived: they stay cancelled */
+  expired: number;
+  /** Posts whose account got another active post in the meantime: they stay cancelled */
+  conflicts: number;
+}
+
+/**
+ * Takes content out of the archive. With `withPosts`, the posts archiving
+ * cancelled return to the queue as they were, unless their time has passed
+ * (they would go out at once) or the account already has another active post
+ * for this content. Without it they stay cancelled.
+ */
+export async function restoreContents(ids: string[], withPosts = true): Promise<RestoreResult> {
+  const now = new Date();
+  await db.content.updateMany({ where: { id: { in: ids } }, data: { archivedAt: null } });
+  const paused = await db.publishingSchedule.findMany({
+    where: { contentId: { in: ids }, status: "CANCELLED", archivedStatus: { not: null } },
+    select: { id: true, contentId: true, accountId: true, archivedStatus: true, scheduledAt: true, nextAttemptAt: true },
+  });
+  const result: RestoreResult = { restored: 0, expired: 0, conflicts: 0 };
+  const perContent = new Map<string, RestoreResult>();
+  for (const p of paused) {
+    const status = p.archivedStatus as (typeof PAUSABLE)[number];
+    const due = status === "RETRY_SCHEDULED" ? (p.nextAttemptAt ?? p.scheduledAt) : p.scheduledAt;
+    const tally = perContent.get(p.contentId) ?? { restored: 0, expired: 0, conflicts: 0 };
+    perContent.set(p.contentId, tally);
+    const forget = () => db.publishingSchedule.updateMany({ where: { id: p.id, status: "CANCELLED" }, data: { archivedStatus: null } });
+    if (!withPosts) {
+      await forget();
+      continue;
+    }
+    if (due <= now) {
+      await forget();
+      tally.expired++;
+      continue;
+    }
+    try {
+      // Only if nobody changed the post since (it is still the one archiving cancelled)
+      const { count } = await db.publishingSchedule.updateMany({
+        where: { id: p.id, status: "CANCELLED", archivedStatus: status },
+        data: { status, activeKey: scheduleActiveKey(status, p.contentId, p.accountId), archivedStatus: null },
+      });
+      tally.restored += count;
+    } catch (e) {
+      if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")) throw e;
+      await forget();
+      tally.conflicts++;
+    }
+  }
+  for (const id of ids) {
+    const t = perContent.get(id);
+    const posts = t
+      ? [t.restored && `${t.restored} post${t.restored === 1 ? "" : "s"} back in the queue`, t.expired && `${t.expired} past their time stay cancelled`, t.conflicts && `${t.conflicts} replaced by newer posts stay cancelled`]
+          .filter(Boolean)
+          .join(", ")
+      : "";
+    await logActivity({ contentId: id, type: ActivityType.CONTENT_UPDATED, message: `Restored from archive${posts ? ` — ${posts}` : ""}` });
+    await syncPublishingStatus(id);
+    if (t) {
+      result.restored += t.restored;
+      result.expired += t.expired;
+      result.conflicts += t.conflicts;
+    }
+  }
+  return result;
 }
 
 /** Deletes content, its media records and the uploaded files. */

@@ -1,14 +1,15 @@
 "use client";
 
-import { Archive, ArchiveRestore, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, CalendarClock, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { EmptyState } from "@/components/app/content-bits";
 import { ContentThumb, thumbIconFor } from "@/components/app/content-thumb";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useServerAction } from "@/hooks/use-server-action";
-import { archiveContentAction, deleteContentAction } from "@/server/actions/content";
+import { deleteContentAction, restoreContentAction } from "@/server/actions/content";
 import type { ArchivedItem } from "@/server/queries/settings";
 import { SettingsCard } from "./settings-card";
 
@@ -16,6 +17,10 @@ export function ArchivedContent({ items }: { items: ArchivedItem[] }) {
   const { run, pending } = useServerAction();
   const [target, setTarget] = useState<ArchivedItem | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Restoring content whose posts archiving cancelled asks whether they go back in the queue (WF-07)
+  const [restoring, setRestoring] = useState<ArchivedItem | null>(null);
+
+  const restore = (c: ArchivedItem, withPosts: boolean) => run(() => restoreContentAction([c.id], withPosts), { onSuccess: () => setRestoring(null) });
 
   return (
     <SettingsCard
@@ -38,11 +43,12 @@ export function ArchivedContent({ items }: { items: ArchivedItem[] }) {
                   <p className="truncate text-xs text-muted-foreground">
                     Archived {c.archivedLabel}
                     {c.category && ` · ${c.category}`}
+                    {c.pausedPosts > 0 && ` · ${c.pausedPosts} post${c.pausedPosts === 1 ? "" : "s"} taken out of the queue`}
                   </p>
                 </div>
               </div>
               <div className="flex gap-2 sm:shrink-0">
-                <Button variant="outline" size="sm" className="bg-white" disabled={pending} onClick={() => run(() => archiveContentAction([c.id], false), { success: `Restored “${c.title}”` })}>
+                <Button variant="outline" size="sm" className="bg-white" disabled={pending} onClick={() => (c.pausedPosts > 0 ? setRestoring(c) : restore(c, true))}>
                   <ArchiveRestore />
                   Restore
                 </Button>
@@ -64,6 +70,26 @@ export function ArchivedContent({ items }: { items: ArchivedItem[] }) {
           ))}
         </ul>
       )}
+      <Dialog open={!!restoring} onOpenChange={(o) => !o && setRestoring(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Restore “{restoring?.title}”?</DialogTitle>
+            <DialogDescription>
+              Archiving took {restoring?.pausedPosts} post{restoring?.pausedPosts === 1 ? "" : "s"} out of the queue. Put them back as they were? Posts whose time has passed
+              stay cancelled.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" disabled={pending} onClick={() => restoring && restore(restoring, false)}>
+              Restore without posts
+            </Button>
+            <Button disabled={pending} onClick={() => restoring && restore(restoring, true)}>
+              <CalendarClock />
+              Restore with posts
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <ConfirmDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}

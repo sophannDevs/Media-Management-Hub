@@ -46,7 +46,9 @@ export async function getSettingsData() {
         contentType: true,
         archivedAt: true,
         category: { select: { name: true } },
-        thumbnailAsset: { select: { storageKey: true, externalUrl: true } },
+        coverAsset: { select: { storageKey: true, externalUrl: true } },
+        // Posts archiving took out of the queue (WF-07)
+        _count: { select: { schedules: { where: { status: "CANCELLED", archivedStatus: { not: null } } } } },
       },
     }),
   ]);
@@ -70,8 +72,9 @@ export async function getSettingsData() {
       title: c.title,
       contentType: c.contentType,
       category: c.category?.name ?? null,
-      thumbUrl: mediaUrl(c.thumbnailAsset),
+      thumbUrl: mediaUrl(c.coverAsset),
       archivedLabel: c.archivedAt ? fmtDate(c.archivedAt, tz) : "",
+      pausedPosts: c._count.schedules,
     })),
     worker: workerInfo(),
     ai: aiInfo(),

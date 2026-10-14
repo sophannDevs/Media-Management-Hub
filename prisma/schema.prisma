@@ -334,6 +334,9 @@ model PublishingSchedule {
   overrideAt       DateTime?
   /// User id once sign-in exists
   overrideBy       String?
+  /// Set when archiving the content cancelled this post: the status it had
+  /// (WAITING | RETRY_SCHEDULED), so restoring can bring it back (WF-07).
+  archivedStatus   String?
   jobs             PublishingJob[]
   snapshots        AnalyticsSnapshot[]
   createdAt        DateTime            @default(now())

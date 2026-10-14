@@ -70,8 +70,28 @@ export async function duplicateContentAction(contentId: string) {
   return runAction(id, contentId, async (id) => (await content.duplicateContent(id)).id, "Duplicated as a new draft");
 }
 
-export async function archiveContentAction(contentIds: string[], archived = true) {
-  return runAction(ids, contentIds, (ids) => content.archiveContents(ids, archived), archived ? "Archived" : "Restored");
+export async function archiveContentAction(contentIds: string[]) {
+  return runAction(ids, contentIds, (ids) => content.archiveContents(ids), (r) => {
+    const what = contentIds.length === 1 ? "Archived" : `Archived ${contentIds.length} items`;
+    return r.cancelled ? `${what} — ${r.cancelled} post${r.cancelled === 1 ? "" : "s"} taken out of the queue` : what;
+  });
+}
+
+/** Restore from the archive; with `withPosts` the posts archiving cancelled go back in the queue (WF-07). */
+export async function restoreContentAction(contentIds: string[], withPosts = true) {
+  return runAction(
+    z.object({ ids, withPosts: z.boolean() }),
+    { ids: contentIds, withPosts },
+    ({ ids, withPosts }) => content.restoreContents(ids, withPosts),
+    (r) => {
+      const notes = [
+        r.restored && `${r.restored} post${r.restored === 1 ? "" : "s"} back in the queue`,
+        r.expired && `${r.expired} past ${r.expired === 1 ? "its" : "their"} time ${r.expired === 1 ? "stays" : "stay"} cancelled`,
+        r.conflicts && `${r.conflicts} replaced by newer posts ${r.conflicts === 1 ? "stays" : "stay"} cancelled`,
+      ].filter(Boolean);
+      return notes.length ? `Restored — ${notes.join(", ")}` : "Restored";
+    },
+  );
 }
 
 export async function deleteContentAction(contentIds: string[]) {

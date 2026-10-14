@@ -29,7 +29,11 @@ beforeAll(async () => {
     updatedAt: new Date(now - ((i * 13) % 97) * 3_600_000),
     next: i % 5 === 0 ? new Date(now + ((i % 11) + 1) * DAY) : null,
   }));
-  await db.content.createMany({ data: rows.map(({ next: _, ...r }) => ({ ...r, description: r.id === "list_0007" ? "100% organic_growth" : "" })) });
+  await db.content.createMany({
+    data: rows.map(({ id, title, priority, stage, completion, createdAt, updatedAt }) => ({
+      id, title, priority, stage, completion, createdAt, updatedAt, description: id === "list_0007" ? "100% organic_growth" : "",
+    })),
+  });
   await db.contentPlatform.createMany({ data: rows.map((r, i) => ({ contentId: r.id, platformId: i % 2 ? "youtube" : "facebook" })) });
   await db.publishingSchedule.createMany({
     data: rows.flatMap((r) => (r.next ? [{ contentId: r.id, accountId: account.id, platformId: "youtube", scheduledAt: r.next, timezone: "UTC", title: r.title }] : [])),

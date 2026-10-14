@@ -375,7 +375,8 @@ export function ContentBrowser({
         onConfirm={() => {
           if (!confirm) return;
           const target = confirm.ids;
-          run(() => (confirm.kind === "delete" ? deleteContentAction(target) : archiveContentAction(target)), { onSuccess: clear });
+          if (confirm.kind === "delete") run(() => deleteContentAction(target), { onSuccess: clear });
+          else run(() => archiveContentAction(target), { onSuccess: clear });
         }}
       />
 

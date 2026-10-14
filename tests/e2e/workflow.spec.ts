@@ -19,6 +19,29 @@ test("a post can be scheduled before Ready to Post with a reason", async ({ page
   await expect(page.getByText("Client approved the cut by phone")).toBeVisible();
 });
 
+// WF-07: archiving takes the waiting posts out of the queue; restoring can put them back.
+test("restoring archived content can put its posts back in the queue", async ({ page }, info) => {
+  test.skip(info.project.name !== "desktop", "mutates the shared e2e database");
+  const title = "AI Tools Every Teacher Should Try";
+
+  await page.goto(`/content?q=${encodeURIComponent(title)}`);
+  const href = await page.locator('a[href^="/content/c"]').first().getAttribute("href");
+  await page.goto(href!);
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "Archive" }).click();
+  await expect(page.getByText("Archived — 2 posts taken out of the queue")).toBeVisible();
+
+  await page.goto("/settings");
+  const item = page.getByRole("listitem").filter({ hasText: title });
+  await expect(item.getByText("2 posts taken out of the queue")).toBeVisible();
+  await page.waitForLoadState("networkidle");
+  await item.getByRole("button", { name: "Restore" }).click();
+  await page.getByRole("button", { name: "Restore with posts" }).click();
+  await expect(page.getByText("Restored — 2 posts back in the queue")).toBeVisible();
+  await expect(item).toHaveCount(0);
+});
+
 // PERF-04: the Create Content options are cached across requests; adding a
 // category must expire that cache at once.
 test("a new category appears in the Create Content dialog right away", async ({ page }, info) => {
