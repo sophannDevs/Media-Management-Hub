@@ -108,22 +108,29 @@ function greeting(hour: number) {
 }
 
 function AttentionBanner({ d }: { d: DashboardData }) {
-  if (!d.failed.length && !d.accountIssues.length) return null;
-  const f = d.failed[0];
+  const failed = d.counts.failedPosts;
+  if (!failed && !d.accountIssues.length) return null;
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-rose-200 bg-white p-4 sm:flex-row sm:items-center">
+    <div className="flex flex-col gap-3 rounded-2xl border border-rose-200 bg-white p-4 sm:flex-row sm:items-start">
       <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-700"><TriangleAlert className="size-5" /></span>
-      <div className="flex-1 text-sm">
+      <div className="min-w-0 flex-1 text-sm">
         <p className="font-medium">
-          {d.failed.length > 0 && `${d.failed.length} post${d.failed.length > 1 ? "s" : ""} failed to publish`}
-          {d.failed.length > 0 && d.accountIssues.length > 0 && " · "}
+          {failed > 0 && `${failed} post${failed > 1 ? "s" : ""} failed to publish`}
+          {failed > 0 && d.accountIssues.length > 0 && " · "}
           {d.accountIssues.length > 0 && `${d.accountIssues.length} account${d.accountIssues.length > 1 ? "s" : ""} need${d.accountIssues.length > 1 ? "" : "s"} reconnecting`}
         </p>
-        {f && <p className="text-muted-foreground">&ldquo;{f.content.title}&rdquo; → {f.accountName}: {f.lastError ?? "publishing failed"}</p>}
+        {/* The latest few; the queue lists them all */}
+        <ul className="mt-1 space-y-0.5">
+          {d.failed.slice(0, 3).map((f) => (
+            <li key={f.id} className="truncate text-muted-foreground">
+              <Link href={`/content/${f.content.id}?tab=publishing`} className="hover:text-foreground hover:underline">&ldquo;{f.content.title}&rdquo;</Link> → {f.accountName}: {f.lastError ?? "publishing failed"}
+            </li>
+          ))}
+        </ul>
       </div>
       <div className="flex gap-2">
         {d.accountIssues.length > 0 && <Button variant="outline" asChild><Link href="/accounts">Reconnect</Link></Button>}
-        {d.failed.length > 0 && <Button asChild><Link href="/schedule?status=failed">Review failed</Link></Button>}
+        {failed > 0 && <Button asChild><Link href="/schedule?status=failed">{failed > 3 ? `See all ${failed}` : "Review failed"}</Link></Button>}
       </div>
     </div>
   );
@@ -247,7 +254,12 @@ function Tasks({ d }: { d: DashboardData }) {
           <ScheduleButton contentId={c.id} size="sm" className="mt-2 w-full"><CalendarPlus />Schedule post</ScheduleButton>
         </div>
       ))}
-      {d.incomplete.slice(0, 6).map((c) => (
+      {d.counts.ready > d.ready.length && (
+        <Button variant="ghost" size="sm" className="w-full" asChild>
+          <Link href="/content?stage=READY&sort=priority">View all {d.counts.ready} ready to post</Link>
+        </Button>
+      )}
+      {d.incomplete.map((c) => (
         <Link key={c.id} href={`/content/${c.id}?tab=${c.missing[0]?.tab ?? "overview"}`} className="block rounded-xl border border-[#f1eedf] p-3 hover:border-olive-300">
           <div className="flex items-center justify-between gap-2">
             <PriorityBadge priority={c.priority} />
@@ -262,9 +274,9 @@ function Tasks({ d }: { d: DashboardData }) {
           </ul>
         </Link>
       ))}
-      {d.incomplete.length > 6 && (
+      {d.counts.inProduction > d.incomplete.length && (
         <Button variant="ghost" size="sm" className="w-full" asChild>
-          <Link href="/content?stage=PRODUCTION">View all {d.incomplete.length} in production</Link>
+          <Link href="/content?stage=PRODUCTION&sort=priority">View all {d.counts.inProduction} in production</Link>
         </Button>
       )}
     </div>
@@ -295,6 +307,11 @@ function WeekStrip({ d }: { d: DashboardData }) {
                     </div>
                   </Link>
                 ))}
+                {items.length > 0 && items[0].dayTotal > items.length && (
+                  <Link href={`/calendar?view=day&date=${key}`} className="block px-1 text-xs font-medium text-primary hover:underline">
+                    +{items[0].dayTotal - items.length} more
+                  </Link>
+                )}
               </div>
             </div>
           );
