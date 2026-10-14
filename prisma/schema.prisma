@@ -196,8 +196,9 @@ model MediaAsset {
   /// IMAGE | VIDEO | THUMBNAIL | AUDIO | MUSIC | OTHER
   type        String
   fileName    String
-  /// Key in the storage provider; null for externally linked files
-  storageKey  String?
+  /// Key in the storage provider; null for externally linked files.
+  /// Unique: every file request looks the asset up by it.
+  storageKey  String?  @unique
   /// External URL when the file is linked rather than uploaded
   externalUrl String?
   mimeType    String   @default("application/octet-stream")
@@ -293,8 +294,13 @@ model PublishingSchedule {
   updatedAt        DateTime            @updatedAt
 
   @@index([status, scheduledAt])
+  /// Retry scan of the worker
+  @@index([status, nextAttemptAt])
   @@index([status, lockedUntil])
   @@index([contentId])
+  @@index([accountId])
+  /// Calendar and queue, per platform and time
+  @@index([platformId, scheduledAt])
 }
 
 /// One execution attempt of a PublishingSchedule.

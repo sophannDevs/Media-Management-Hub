@@ -7,7 +7,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/files/[...ke
   const { key: parts } = await ctx.params;
   const key = parts.map(decodeURIComponent).join("/");
 
-  const asset = await db.mediaAsset.findFirst({ where: { storageKey: key }, select: { mimeType: true, fileName: true } });
+  const asset = await db.mediaAsset.findUnique({ where: { storageKey: key }, select: { mimeType: true, fileName: true } });
   const info = asset ? await storage.stat(key) : null;
   if (!asset || !info) return new Response("Not found", { status: 404 });
 
