@@ -13,6 +13,16 @@ npm run dev            # http://localhost:3000
 
 Copy `.env.example` to `.env` first if you don't have one. Useful scripts: `npm run typecheck`, `npm run lint`, `npm run db:studio`, `npm run db:reset` (wipes the database).
 
+### Tests
+
+```bash
+npm test               # unit + integration tests (Vitest); each test file gets its own throwaway database
+npm run test:e2e       # Playwright: builds the app, seeds prisma/e2e.db and checks every page at 3 widths (smoke + axe)
+npm run audit:prod     # fails on high/critical advisories in production dependencies (allowlist in scripts/audit-check.mjs)
+```
+
+Tests never touch `prisma/dev.db` or `./storage`. The first `test:e2e` run needs Chromium: `npx playwright install chromium`. CI (`.github/workflows/ci.yml`) runs typecheck, lint, tests, the advisory check and the end-to-end suite on every push. Progress on the audit findings is tracked in `docs/audit/progress.md`.
+
 ### Environment
 
 | Variable | Purpose |
