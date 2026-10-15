@@ -9,6 +9,7 @@ import { getSettingsData, type SettingsData } from "@/server/queries/settings";
 import { ArchivedContent } from "./_components/archived-content";
 import { NotificationPrefs } from "./_components/notification-prefs";
 import { PublishingForm } from "./_components/publishing-form";
+import { RecentChanges } from "./_components/recent-changes";
 import { SETTINGS_SECTIONS, SettingsCard } from "./_components/settings-card";
 import { SettingsNav } from "./_components/settings-nav";
 import { TaxonomyManager } from "./_components/taxonomy-manager";
@@ -45,6 +46,7 @@ async function Sections() {
       <PublishingForm initial={d.publishing} worker={d.worker} />
       <NotificationPrefs prefs={d.notifications} />
       <AiIntegrations ai={d.ai} />
+      <RecentChanges items={d.activity} />
       <ArchivedContent items={d.archived} />
     </>
   );

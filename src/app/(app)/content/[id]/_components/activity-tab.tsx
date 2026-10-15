@@ -59,7 +59,9 @@ export function ActivityTab({ contentId, initial }: { contentId: string; initial
                     <ActivityIcon type={a.type} />
                   </span>
                   <p className="pt-1.5 text-sm">{a.message}</p>
-                  <p className="text-xs text-muted-foreground">{a.time}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {a.time} · {a.by}
+                  </p>
                 </li>
               ))}
             </ol>

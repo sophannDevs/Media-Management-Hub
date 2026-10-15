@@ -72,6 +72,7 @@ export async function createMediaAsset(input: NewMediaInput) {
       contentId: content.id,
       type: input.type === "VIDEO" ? ActivityType.VIDEO_UPLOADED : ActivityType.MEDIA_UPLOADED,
       message: `${MediaType.label(input.type)} ${input.externalUrl ? "linked" : "uploaded"}: ${input.fileName}`,
+      meta: { assetId: asset.id },
     });
     await syncPublishingStatus(content.id);
   }
@@ -94,7 +95,7 @@ export async function deleteMediaAsset(id: string) {
       const remaining = await db.mediaAsset.count({ where: { contentId: asset.contentId, type: "IMAGE" } });
       if (remaining === 0) await db.content.update({ where: { id: asset.contentId }, data: { imageStatus: "NOT_STARTED" } });
     }
-    await logActivity({ contentId: asset.contentId, type: ActivityType.MEDIA_DELETED, message: `${MediaType.label(asset.type)} deleted: ${asset.fileName}` });
+    await logActivity({ contentId: asset.contentId, type: ActivityType.MEDIA_DELETED, message: `${MediaType.label(asset.type)} deleted: ${asset.fileName}`, meta: { assetId: asset.id } });
     await syncPublishingStatus(asset.contentId);
   }
 }
@@ -118,7 +119,7 @@ export async function setContentThumbnail(contentId: string, assetId: string | n
     }
   }
   await db.content.update({ where: { id: contentId }, data: { thumbnailAssetId: assetId } });
-  await logActivity({ contentId, type: ActivityType.CONTENT_UPDATED, message: assetId ? "Thumbnail selected" : "Thumbnail removed" });
+  await logActivity({ contentId, type: ActivityType.CONTENT_UPDATED, message: assetId ? "Thumbnail selected" : "Thumbnail removed", meta: assetId ? { assetId } : {} });
   await syncPublishingStatus(contentId);
 }
 
@@ -126,7 +127,7 @@ export async function setFinalVideo(contentId: string, assetId: string) {
   const a = await db.mediaAsset.findUnique({ where: { id: assetId }, select: { type: true, contentId: true } });
   if (!a || a.type !== "VIDEO" || a.contentId !== contentId) throw new ServiceError("Pick a video of this content.");
   await db.content.update({ where: { id: contentId }, data: { videoAssetId: assetId, videoStatus: "GENERATED" } });
-  await logActivity({ contentId, type: ActivityType.VIDEO_UPLOADED, message: "Final video replaced" });
+  await logActivity({ contentId, type: ActivityType.VIDEO_UPLOADED, message: "Final video replaced", meta: { assetId } });
   await syncPublishingStatus(contentId);
 }
 
@@ -166,11 +167,11 @@ export async function assignMediaToContent(id: string, contentId: string | null)
 
   const label = `${MediaType.label(asset.type)} "${asset.fileName}"`;
   if (source) {
-    await logActivity({ contentId: source.id, type: ActivityType.MEDIA_DELETED, message: `${label} moved ${target ? `to "${target.title}"` : "out (unassigned)"}` });
+    await logActivity({ contentId: source.id, type: ActivityType.MEDIA_DELETED, message: `${label} moved ${target ? `to "${target.title}"` : "out (unassigned)"}`, meta: { assetId: asset.id } });
     await syncPublishingStatus(source.id);
   }
   if (target) {
-    await logActivity({ contentId: target.id, type: ActivityType.MEDIA_UPLOADED, message: `${label} moved in${source ? ` from "${source.title}"` : ""}` });
+    await logActivity({ contentId: target.id, type: ActivityType.MEDIA_UPLOADED, message: `${label} moved in${source ? ` from "${source.title}"` : ""}`, meta: { assetId: asset.id } });
     await syncPublishingStatus(target.id);
   }
 }

@@ -11,7 +11,8 @@ const OWNER = "test-owner"; // the signed-in user of integration tests (tests/se
 
 beforeAll(async () => {
   await seedPlatforms();
-  await db.user.create({ data: { id: OWNER, name: "Test Owner", email: "owner@test.local" } });
+  // seedPlatforms already made the owner (DB-05); keep this test's own copy idempotent
+  await db.user.upsert({ where: { id: OWNER }, update: {}, create: { id: OWNER, name: "Test Owner", email: "owner@test.local" } });
   await db.user.create({ data: { id: "someone-else", name: "Other", email: "other@test.local" } });
 });
 

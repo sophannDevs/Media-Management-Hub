@@ -191,6 +191,19 @@ export const ActivityType = {
   SCHEDULE_OVERRIDE: "schedule.override",
   PUBLISHED: "publish.succeeded",
   PUBLISH_FAILED: "publish.failed",
+  // The workspace's own history (DB-05)
+  ACCOUNT_CONNECTED: "account.connected",
+  ACCOUNT_RECONNECTED: "account.reconnected",
+  ACCOUNT_DISCONNECTED: "account.disconnected",
+  ACCOUNT_UPDATED: "account.updated",
+  ACCOUNT_DELETED: "account.deleted",
+  SETTINGS_UPDATED: "settings.updated",
+  PROMPT_CHANGED: "prompt.changed",
+  TAXONOMY_CHANGED: "taxonomy.changed",
+  USER_CREATED: "user.created",
+  USER_SIGNED_IN: "user.signed_in",
+  USER_SIGNIN_FAILED: "user.signin_failed",
+  TOKENS_ROTATED: "tokens.rotated",
 } as const;
 
 export const NotificationType = {

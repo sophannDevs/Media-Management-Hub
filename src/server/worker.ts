@@ -4,6 +4,7 @@ import { syncMockAnalytics } from "./services/analytics-sync";
 import { processDueSchedules, runMaintenance, WORKER_ID } from "./services/publishing";
 import { processPendingDerivatives } from "./services/derivatives";
 import { reconcileStorage } from "./services/storage-reconcile";
+import { runAsWorker } from "./auth/actor";
 
 const log = logger.child({ component: "worker", workerId: WORKER_ID });
 
@@ -63,7 +64,8 @@ async function beat(mode: WorkerMode, tick?: { ms: number; processed: number }) 
 /** One pass: due posts, then any periodic job whose time has come. Overlapping calls share the running pass. */
 export function tick(): Promise<{ processed: number; published: number; failed: number; retry: number } | null> {
   if (g.__mediaflowTick) return g.__mediaflowTick as Promise<null>;
-  const run = (async () => {
+  // Everything the pass writes to the activity log is the worker's doing (DB-05)
+  const run = runAsWorker(async () => {
     const started = Date.now();
     try {
       const summary = await processDueSchedules();
@@ -81,7 +83,7 @@ export function tick(): Promise<{ processed: number; published: number; failed: 
     } finally {
       g.__mediaflowTick = null;
     }
-  })();
+  });
   g.__mediaflowTick = run;
   return run;
 }

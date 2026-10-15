@@ -1,4 +1,4 @@
-import { Archive, Bell, Building, FolderTree, type LucideIcon, Plug, Send, Workflow } from "lucide-react";
+import { Archive, Bell, Building, FolderTree, History, type LucideIcon, Plug, Send, Workflow } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +10,7 @@ export const SETTINGS_SECTIONS: { id: string; label: string; icon: LucideIcon }[
   { id: "publishing", label: "Publishing", icon: Send },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "integrations", label: "AI integrations", icon: Plug },
+  { id: "activity", label: "Recent changes", icon: History },
   { id: "archive", label: "Archived content", icon: Archive },
 ];
 

@@ -10,6 +10,8 @@ export async function seedPlatforms() {
   await db.platform.upsert({ where: { id: "youtube" }, update: {}, create: { id: "youtube", name: "YouTube", sortOrder: 0 } });
   await db.platform.upsert({ where: { id: "facebook" }, update: {}, create: { id: "facebook", name: "Facebook", sortOrder: 1 } });
   await db.workspaceSettings.upsert({ where: { id: 1 }, update: {}, create: { id: 1, timezone: "UTC" } });
+  // The owner the tests act as (tests/setup/signed-in.ts): a real row, so the activity log can point at it (DB-05)
+  await db.user.upsert({ where: { id: "test-owner" }, update: {}, create: { id: "test-owner", name: "Test Owner", email: "owner@test.local" } });
 }
 
 export async function createAccount(platformId = "youtube", data: Partial<Prisma.SocialAccountUncheckedCreateInput> = {}) {

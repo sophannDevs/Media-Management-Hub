@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { addDaysToKey, dayKey, dayRangeUtc, fmtDate, fmtDateTime, fmtShort, fmtTime, relativeDay, timeAgo, weekKeys } from "@/lib/dates";
+import { actorLabel } from "@/lib/activity";
 import { mediaUrl, variantUrl } from "@/lib/media-url";
 import { providerMeta } from "@/lib/platforms/registry";
 import { checklist, completion, deriveStage, imageStage, isReadyToPost, missingRequirements } from "@/lib/workflow/rules";
@@ -11,7 +12,7 @@ import { requireUser } from "../auth/dal";
 import { toContentState } from "../services/content-state";
 import { getSettings } from "../services/settings";
 import { listViews } from "../services/views";
-import { contentSummarySelect, getContentFormOptions, getPageContext, onlySimulatedPosts, toSummary } from "./shared";
+import { contentSummarySelect, getContentFormOptions, getPageContext, onlySimulatedPosts, postChips, toSummary } from "./shared";
 
 // ---------- List ----------
 
@@ -75,6 +76,13 @@ function filterSql(params: ContentListParams, now: Date, tz: string) {
     params.scheduled === "week" ? dayRangeUtc(today, thisWeek[6], tz) : params.scheduled === "next" ? dayRangeUtc(addDaysToKey(thisWeek[6], 1), addDaysToKey(thisWeek[6], 7), tz) : null;
   if (params.scheduled === "none") parts.push(Prisma.sql`n."at" IS NULL`);
   if (range) parts.push(Prisma.sql`n."at" >= (${range.gte} AT TIME ZONE 'UTC') AND n."at" < (${range.lt} AT TIME ZONE 'UTC')`);
+  // Published on any platform / on every platform it was posted to / not yet (WF-02)
+  const published = Prisma.sql`EXISTS (SELECT 1 FROM "PublishingSchedule" s WHERE s."contentId" = c."id" AND s."status" = 'PUBLISHED')`;
+  if (params.published === "any") parts.push(published);
+  if (params.published === "none") parts.push(Prisma.sql`NOT ${published}`);
+  if (params.published === "all") {
+    parts.push(Prisma.sql`${published} AND NOT EXISTS (SELECT 1 FROM "PublishingSchedule" s WHERE s."contentId" = c."id" AND s."status" NOT IN ('PUBLISHED', 'CANCELLED'))`);
+  }
   return Prisma.join(parts, " AND ");
 }
 
@@ -232,8 +240,8 @@ const assetSelect = {
 export const ACTIVITY_PAGE = 50;
 const ACTIVITY_ORDER = [{ createdAt: "desc" }, { id: "desc" }] satisfies Prisma.ActivityLogOrderByWithRelationInput[];
 
-type ActivityRow = { id: string; type: string; message: string; createdAt: Date };
-const toActivity = (a: ActivityRow, tz: string) => ({ id: a.id, type: a.type, message: a.message, day: fmtDate(a.createdAt, tz), time: fmtTime(a.createdAt, tz) });
+type ActivityRow = { id: string; type: string; message: string; createdAt: Date; source: string; actor: { name: string } | null };
+const toActivity = (a: ActivityRow, tz: string) => ({ id: a.id, type: a.type, message: a.message, day: fmtDate(a.createdAt, tz), time: fmtTime(a.createdAt, tz), by: actorLabel(a) });
 
 /** A page of rows plus the cursor (the last row's id) of the next one, from a query that fetched one extra. */
 function pageOf<T extends { id: string }>(rows: T[]) {
@@ -249,7 +257,7 @@ export async function getActivityPage(contentId: string, after: string | null) {
     orderBy: ACTIVITY_ORDER,
     take: ACTIVITY_PAGE + 1,
     ...(after ? { cursor: { id: after }, skip: 1 } : {}),
-    select: { id: true, type: true, message: true, createdAt: true },
+    select: { id: true, type: true, message: true, createdAt: true, source: true, actor: { select: { name: true } } },
   });
   const { items, nextCursor } = pageOf(rows);
   return { items: items.map((a) => toActivity(a, tz)), nextCursor };
@@ -287,7 +295,7 @@ export async function getContentWorkspace(id: string) {
         },
       },
       // One page of the history; the rest loads on demand (PERF-05). One extra row says whether there is more.
-      activities: { orderBy: ACTIVITY_ORDER, take: ACTIVITY_PAGE + 1 },
+      activities: { orderBy: ACTIVITY_ORDER, take: ACTIVITY_PAGE + 1, include: { actor: { select: { name: true } } } },
     },
   });
   if (!c) return null;
@@ -363,6 +371,8 @@ export async function getContentWorkspace(id: string) {
       rules,
       /** Every post that went out was simulated */
       simulated: onlySimulatedPosts(c.schedules),
+      /** Per-platform chips (WF-02) */
+      posts: postChips(c.schedules),
       /** A post is being sent or due within two minutes: the page refreshes itself (PUB-06) */
       inFlight: c.schedules.some(
         (s) =>

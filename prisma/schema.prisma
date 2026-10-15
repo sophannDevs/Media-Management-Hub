@@ -436,20 +436,30 @@ model PublishingJob {
   @@index([scheduleId])
 }
 
+/// Every change, with who made it and what it was about (DB-05)
 model ActivityLog {
-  id        String   @id @default(cuid())
-  contentId String?
-  content   Content? @relation(fields: [contentId], references: [id], onDelete: Cascade)
-  userId    String?
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  type      String
-  message   String
+  id         String   @id @default(cuid())
+  /// The content item the change belongs to, when it has one (its Activity tab)
+  contentId  String?
+  content    Content? @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  /// The signed-in person who did it; null for the worker and the system
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  /// USER (a signed-in person), WORKER (the publishing worker), SYSTEM (setup, maintenance, scripts)
+  source     String   @default("USER")
+  /// What was changed: CONTENT, SCHEDULE, MEDIA, ACCOUNT, SETTINGS, PROMPT, TAXONOMY, USER
+  entityType String   @default("CONTENT")
+  entityId   String?
+  type       String
+  message    String
   /// Extra details
-  meta      Json     @default("{}")
-  createdAt DateTime @default(now())
+  meta       Json     @default("{}")
+  createdAt  DateTime @default(now())
 
   @@index([createdAt])
   @@index([contentId, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@index([actorId, createdAt])
 }
 
 model Notification {

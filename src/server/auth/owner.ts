@@ -1,4 +1,6 @@
 import { db } from "@/lib/db";
+import { ActivityType } from "@/lib/workflow/statuses";
+import { logActivity } from "../services/activity";
 import { ServiceError } from "../errors";
 import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "./password";
 
@@ -30,12 +32,14 @@ export async function setupOwner(input: { name: string; email: string; password:
   const passwordHash = await hashPassword(input.password);
   // Reuse the existing owner row (seeded or imported) so its history stays linked
   const existing = await db.user.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true } });
+  let id: string;
   if (existing) {
     const claimed = await db.user.updateMany({ where: { id: existing.id, passwordHash: null }, data: { name, email, passwordHash } });
     if (claimed.count === 0) throw new ServiceError("The owner account is already set up. Sign in instead.");
-    return { id: existing.id };
-  }
-  return db.user.create({ data: { name, email, passwordHash }, select: { id: true } });
+    id = existing.id;
+  } else id = (await db.user.create({ data: { name, email, passwordHash }, select: { id: true } })).id;
+  await logActivity({ type: ActivityType.USER_CREATED, message: `Owner account set up: ${name}`, entity: { type: "USER", id }, actor: { userId: id, source: "USER" } });
+  return { id };
 }
 
 let dummyHash: Promise<string> | null = null;
@@ -55,12 +59,22 @@ export async function authenticate(emailInput: string, password: string) {
   }
   if (!(await verifyPassword(password, user.passwordHash))) {
     const failed = user.failedLogins + 1;
+    const locked = failed >= MAX_FAILED;
     await db.user.update({
       where: { id: user.id },
-      data: failed >= MAX_FAILED ? { failedLogins: 0, lockedUntil: new Date(Date.now() + LOCK_MINUTES * 60_000) } : { failedLogins: failed },
+      data: locked ? { failedLogins: 0, lockedUntil: new Date(Date.now() + LOCK_MINUTES * 60_000) } : { failedLogins: failed },
+    });
+    // Recorded for the owner's own account only: an unknown email leaves no trace (DB-05)
+    await logActivity({
+      type: ActivityType.USER_SIGNIN_FAILED,
+      message: locked ? `Sign-in failed for ${user.email}: locked for ${LOCK_MINUTES} minutes after ${MAX_FAILED} wrong passwords` : `Sign-in failed for ${user.email}: wrong password`,
+      entity: { type: "USER", id: user.id },
+      actor: { userId: null, source: "SYSTEM" },
+      meta: { locked },
     });
     throw wrong;
   }
   await db.user.update({ where: { id: user.id }, data: { failedLogins: 0, lockedUntil: null, lastLoginAt: new Date() } });
+  await logActivity({ type: ActivityType.USER_SIGNED_IN, message: `${user.name} signed in`, entity: { type: "USER", id: user.id }, actor: { userId: user.id, source: "USER" } });
   return { id: user.id, name: user.name };
 }

@@ -1,3 +1,4 @@
+import { actorLabel } from "@/lib/activity";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { dayKey, dayRangeUtc, weekKeys } from "@/lib/dates";
@@ -115,10 +116,12 @@ export async function getDashboardData() {
       (SELECT 'incomplete', "id", "title", "priority", "completion", "missingMask" FROM "Content"
         WHERE "archivedAt" IS NULL AND "stage" IN (${Prisma.join(PRODUCTION_STAGES)})
         ORDER BY ${priorityRank}, "targetPublishDate" NULLS LAST, "id" LIMIT ${DASHBOARD_LIST})`,
+    // Content work only: the workspace's own changes (accounts, settings) are on the Settings page (DB-05)
     db.activityLog.findMany({
+      where: { contentId: { not: null } },
       orderBy: { createdAt: "desc" },
       take: 8,
-      select: { id: true, type: true, message: true, createdAt: true, content: { select: { id: true, title: true } } },
+      select: { id: true, type: true, message: true, createdAt: true, source: true, actor: { select: { name: true } }, content: { select: { id: true, title: true } } },
     }),
   ]);
 
@@ -173,7 +176,7 @@ export async function getDashboardData() {
     weekSchedules: posts.filter((p) => p.list === "week").map(card),
     failed: posts.filter((p) => p.list === "failed").map(card),
     accountIssues: n.accountIssues ?? [],
-    activity,
+    activity: activity.map((a) => ({ ...a, by: actorLabel(a) })),
   };
 }
 export type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;

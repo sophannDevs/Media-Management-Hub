@@ -57,6 +57,10 @@ test("a new category appears in the Create Content dialog right away", async ({ 
   await page.getByRole("textbox", { name: "New category name" }).fill(name);
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.getByRole("list", { name: "Categories" }).getByText(name)).toBeVisible();
+  // The change is on record with who made it (DB-05)
+  const latest = page.getByRole("list", { name: "Recent changes" }).getByRole("listitem").first();
+  await expect(latest).toContainText(`Category created: ${name}`);
+  await expect(latest).toContainText("Workspace Owner");
 
   await page.goto("/prompts");
   await page.getByRole("button", { name: /Create content/i }).click();

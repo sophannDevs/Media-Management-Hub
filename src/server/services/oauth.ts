@@ -4,7 +4,9 @@ import { type ExternalAccount, pkcePair, randomToken, type TokenSet } from "@/li
 import { getProvider } from "@/lib/platforms/registry";
 import { PublishError } from "@/lib/platforms/types";
 import { decryptSecret, encryptSecret } from "@/lib/secrets";
+import { ActivityType } from "@/lib/workflow/statuses";
 import { ServiceError } from "../errors";
+import { logActivity } from "./activity";
 import { sealTokens } from "./tokens";
 
 // Connecting a real channel or Page (PUB-07): the authorization-code flow.
@@ -100,7 +102,15 @@ export async function completeConnect(platformId: string, params: CallbackParams
   if (!accounts.length) throw new ServiceError(`${provider.name} returned no ${provider.accountNoun.toLowerCase()} you can publish to. Check the Page roles / channel of the account you signed in with.`);
 
   const saved = [];
-  for (const a of accounts) saved.push(await upsertAccount(platformId, a, a.tokens ?? tokens));
+  for (const a of accounts) {
+    const { account, reconnected } = await upsertAccount(platformId, a, a.tokens ?? tokens);
+    saved.push(account);
+    await logActivity({
+      type: reconnected ? ActivityType.ACCOUNT_RECONNECTED : ActivityType.ACCOUNT_CONNECTED,
+      message: `${provider.name} ${provider.accountNoun.toLowerCase()} ${reconnected ? "reconnected" : "connected"}: ${account.name}`,
+      entity: { type: "ACCOUNT", id: account.id },
+    });
+  }
   return { platform: provider.name, accounts: saved.map((a) => ({ id: a.id, name: a.name })) };
 }
 
@@ -118,13 +128,13 @@ async function upsertAccount(platformId: string, a: ExternalAccount, tokens: Tok
     ...sealTokens({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken ?? null }),
   };
   const existing = await db.socialAccount.findFirst({ where: { platformId, externalId: a.externalId }, select: { id: true } });
-  if (existing) return db.socialAccount.update({ where: { id: existing.id }, data });
+  if (existing) return { account: await db.socialAccount.update({ where: { id: existing.id }, data }), reconnected: true };
   const isFirst = (await db.socialAccount.count({ where: { platformId } })) === 0;
   try {
-    return await db.socialAccount.create({ data: { platformId, externalId: a.externalId, isDefault: isFirst, ...data } });
+    return { account: await db.socialAccount.create({ data: { platformId, externalId: a.externalId, isDefault: isFirst, ...data } }), reconnected: false };
   } catch (e) {
     // Two accounts connected at once both saw "none yet": only one can be the default
-    if (isFirst && (e as { code?: string }).code === "P2002") return db.socialAccount.create({ data: { platformId, externalId: a.externalId, isDefault: false, ...data } });
+    if (isFirst && (e as { code?: string }).code === "P2002") return { account: await db.socialAccount.create({ data: { platformId, externalId: a.externalId, isDefault: false, ...data } }), reconnected: false };
     throw e;
   }
 }

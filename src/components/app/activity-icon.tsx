@@ -1,4 +1,4 @@
-import { CalendarClock, CalendarX, CircleCheck, Dot, FileText, Film, ImageIcon, Lightbulb, MessageSquareWarning, Pencil, ShieldAlert, Trash2, TriangleAlert } from "lucide-react";
+import { CalendarClock, CalendarX, CircleCheck, Dot, FileText, Film, FolderTree, ImageIcon, KeyRound, Lightbulb, LogIn, MessageSquareWarning, Pencil, Plug, Settings2, ShieldAlert, Sparkles, Trash2, TriangleAlert, Unplug, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const MAP: Record<string, [typeof Dot, string]> = {
@@ -17,6 +17,18 @@ const MAP: Record<string, [typeof Dot, string]> = {
   "schedule.override": [ShieldAlert, "bg-orange-50 text-orange-800"],
   "publish.succeeded": [CircleCheck, "bg-olive-100 text-olive-800"],
   "publish.failed": [TriangleAlert, "bg-rose-50 text-rose-700"],
+  "account.connected": [Plug, "bg-olive-50 text-olive-700"],
+  "account.reconnected": [Plug, "bg-olive-50 text-olive-700"],
+  "account.disconnected": [Unplug, "bg-stone-100 text-stone-600"],
+  "account.updated": [Pencil, "bg-stone-100 text-stone-600"],
+  "account.deleted": [Trash2, "bg-stone-100 text-stone-600"],
+  "settings.updated": [Settings2, "bg-stone-100 text-stone-600"],
+  "prompt.changed": [Sparkles, "bg-olive-50 text-olive-700"],
+  "taxonomy.changed": [FolderTree, "bg-stone-100 text-stone-600"],
+  "user.created": [UserPlus, "bg-olive-50 text-olive-700"],
+  "user.signed_in": [LogIn, "bg-stone-100 text-stone-600"],
+  "user.signin_failed": [ShieldAlert, "bg-rose-50 text-rose-700"],
+  "tokens.rotated": [KeyRound, "bg-stone-100 text-stone-600"],
 };
 
 export function ActivityIcon({ type, className }: { type: string; className?: string }) {

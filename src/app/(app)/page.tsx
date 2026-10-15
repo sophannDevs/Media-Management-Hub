@@ -93,7 +93,11 @@ async function Dashboard() {
                     </Link>
                   )}
                 </div>
-                <span className="ml-auto text-xs whitespace-nowrap text-muted-foreground">{timeAgo(a.createdAt, d.now)}</span>
+                <span className="ml-auto text-right text-xs whitespace-nowrap text-muted-foreground">
+                  {timeAgo(a.createdAt, d.now)}
+                  <br />
+                  {a.by}
+                </span>
               </div>
             ))}
           </div>

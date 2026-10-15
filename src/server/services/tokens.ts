@@ -2,7 +2,9 @@ import { db } from "@/lib/db";
 import { getProvider } from "@/lib/platforms/registry";
 import { PublishError } from "@/lib/platforms/types";
 import { decryptSecret, encryptSecret, keyIdOf, rotateSecret, SecretsError } from "@/lib/secrets";
+import { ActivityType } from "@/lib/workflow/statuses";
 import { ServiceError } from "../errors";
+import { logActivity } from "./activity";
 
 // The token vault (SEC-04): the only code that reads or writes the
 // accessToken / refreshToken columns. Everything stored there is ciphertext
@@ -78,6 +80,15 @@ export async function rotateAllAccountTokens() {
       await db.socialAccount.update({ where: { id: row.id }, data });
       rotated++;
     } else unchanged++;
+  }
+  if (rotated) {
+    await logActivity({
+      type: ActivityType.TOKENS_ROTATED,
+      message: `${rotated} account token${rotated === 1 ? "" : "s"} re-encrypted under the current key${unreadable ? ` (${unreadable} unreadable, left as is)` : ""}`,
+      entity: { type: "ACCOUNT" },
+      actor: { userId: null, source: "SYSTEM" },
+      meta: { rotated, unchanged, unreadable },
+    });
   }
   return { rotated, unchanged, unreadable, total: rows.length };
 }

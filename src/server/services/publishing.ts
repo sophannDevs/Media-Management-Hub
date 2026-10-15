@@ -357,7 +357,7 @@ async function recordSuccess(
       contentId: s.contentId,
       type: ActivityType.PUBLISHED,
       message: `${simulated ? "Simulated publish to" : "Published to"} ${s.platform.name} (${s.account.name})${reconciled ? ", confirmed after an interrupted attempt" : ""}`,
-      meta: { url: result.url, simulated },
+      meta: { scheduleId: s.id, url: result.url, simulated },
     }),
   );
   await bestEffort("notification", () =>
@@ -416,7 +416,7 @@ async function recordFailure(s: LoadedSchedule, job: AttemptRow, err: PublishErr
       contentId: s.contentId,
       type: ActivityType.PUBLISH_FAILED,
       message: retry ? `${s.platform.name} upload failed — retry scheduled` : `${s.platform.name} publishing failed`,
-      meta: { error: err.message, code: err.code },
+      meta: { scheduleId: s.id, error: err.message, code: err.code },
     }),
   );
   if (!retry) {

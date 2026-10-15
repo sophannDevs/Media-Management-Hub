@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { isClaudeConfigured } from "@/lib/ai/claude";
-import { fmtDate } from "@/lib/dates";
+import { actorLabel } from "@/lib/activity";
+import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { mediaUrl } from "@/lib/media-url";
 import { NOTIFICATION_LABELS, type NotificationTypeCode } from "@/lib/workflow/statuses";
 import { notificationPrefs } from "../services/settings";
@@ -37,7 +38,7 @@ function aiInfo() {
 
 export async function getSettingsData() {
   const { settings, rules, tz, now } = await getPageContext();
-  const [categories, series, campaigns, archived, worker] = await Promise.all([
+  const [categories, series, campaigns, archived, worker, activity] = await Promise.all([
     db.category.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true, ...usage } }),
     db.series.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, ...usage } }),
     db.campaign.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, ...usage } }),
@@ -56,6 +57,13 @@ export async function getSettingsData() {
       },
     }),
     workerInfo(now),
+    // The workspace's own history (DB-05): everything not tied to a content item
+    db.activityLog.findMany({
+      where: { contentId: null },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 20,
+      select: { id: true, type: true, message: true, createdAt: true, source: true, actor: { select: { name: true } } },
+    }),
   ]);
 
   const prefs = notificationPrefs(settings);
@@ -83,6 +91,7 @@ export async function getSettingsData() {
     })),
     worker,
     ai: aiInfo(),
+    activity: activity.map((a) => ({ id: a.id, type: a.type, message: a.message, when: fmtDateTime(a.createdAt, tz), by: actorLabel(a) })),
   };
 }
 
