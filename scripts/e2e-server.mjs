@@ -7,6 +7,7 @@
 //   E2E_PORT=3210        port to listen on
 //   E2E_SKIP_BUILD=1     reuse the existing .next build
 import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { rmSync } from "node:fs";
 import prisma from "@prisma/client";
 
@@ -33,6 +34,8 @@ const env = {
   STORAGE_DIR: "./.e2e-storage",
   PUBLISH_WORKER_ENABLED: "false",
   NEXT_TELEMETRY_DISABLED: "1",
+  // Stored tokens are encrypted (SEC-04); the e2e database gets a key of its own
+  TOKEN_ENCRYPTION_KEYS: process.env.TOKEN_ENCRYPTION_KEYS ?? `e2e:${randomBytes(32).toString("base64url")}`,
   // The seeded owner signs in with this (tests/e2e/auth.setup.ts)
   SEED_OWNER_PASSWORD: process.env.E2E_OWNER_PASSWORD ?? "e2e-owner-password",
 };

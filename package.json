@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "node scripts/db-local.mjs ensure",
+    "predev": "node scripts/db-local.mjs ensure && node scripts/secrets.mjs ensure",
     "dev": "next dev",
     "worker": "tsx scripts/worker.ts",
     "build": "prisma generate && next build",
@@ -25,6 +25,8 @@
     "db:restore": "node scripts/db-restore.mjs",
     "db:backup:verify": "node scripts/db-restore.mjs --verify",
     "db:studio": "prisma studio",
+    "secrets:key": "node scripts/secrets.mjs key",
+    "secrets:rotate": "tsx scripts/rotate-tokens.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

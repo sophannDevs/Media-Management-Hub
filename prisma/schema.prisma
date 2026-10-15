@@ -296,7 +296,7 @@ model SocialAccount {
   externalId     String?
   /// CONNECTED | DISCONNECTED | TOKEN_EXPIRED | ERROR
   status         String               @default("CONNECTED")
-  /// OAuth credentials (encrypt at rest when real OAuth is added)
+  /// OAuth credentials as ciphertext (src/lib/secrets.ts, SEC-04): "enc:v1:<key id>:…". Read and written only by services/tokens.ts.
   accessToken    String?
   refreshToken   String?
   tokenExpiresAt DateTime?

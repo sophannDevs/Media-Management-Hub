@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import os from "node:os";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { SecretsError } from "@/lib/secrets";
 import { dayDiff } from "@/lib/dates";
 import { logger } from "@/lib/log";
 import { getProvider } from "@/lib/platforms/registry";
@@ -11,6 +12,7 @@ import { blockingRequirements, missingRequirements } from "@/lib/workflow/rules"
 import { ActivityType, NotificationType } from "@/lib/workflow/statuses";
 import { purgeExpiredSessions } from "../auth/session";
 import { logActivity } from "./activity";
+import { openToken } from "./tokens";
 import { contentStateSelect, toContentState } from "./content-state";
 import { syncPublishingStatus } from "./content";
 import { notify } from "./notifications";
@@ -55,7 +57,8 @@ function toRequest(s: LoadedSchedule): PublishRequest {
       name: s.account.name,
       status: s.account.status,
       externalId: s.account.externalId,
-      accessToken: s.account.accessToken,
+      // Stored encrypted (SEC-04): the token itself exists only here, on its way to the platform
+      accessToken: openToken(s.account.accessToken),
       tokenExpiresAt: s.account.tokenExpiresAt,
     },
     title: s.title,
@@ -182,7 +185,14 @@ async function attempt(scheduleId: string, heartbeat: Heartbeat): Promise<Proces
   const refusal = preflight(s, settings);
   if (refusal) return recordFailure(s, jobId, refusal, settings);
 
-  const request = toRequest(s);
+  let request: PublishRequest;
+  try {
+    request = toRequest(s);
+  } catch (e) {
+    if (!(e instanceof SecretsError)) throw e;
+    // The stored credentials can't be read (key changed or value damaged): the account needs reconnecting
+    return recordFailure(s, jobId, new PublishError(`The stored credentials for "${s.account.name}" can't be read: ${e.message} Reconnect the account.`, "AUTH", false), settings);
+  }
   const uploadState = asObject(s.uploadState);
   const simulated = provider.isMock;
 

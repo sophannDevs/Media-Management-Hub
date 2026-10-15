@@ -5,6 +5,7 @@ import { ServiceError } from "../errors";
 import { syncAllPublishingStatuses } from "./content";
 import { markNotificationsRead } from "./notifications";
 import { notifyBlockedPosts } from "./publishing";
+import { clearAccountTokens, sealTokens } from "./tokens";
 
 // ---------- Social accounts ----------
 // OAuth is phase 2: "connect" currently registers the account directly and
@@ -13,6 +14,8 @@ import { notifyBlockedPosts } from "./publishing";
 
 const TOKEN_LIFETIME_DAYS = 60;
 const tokenExpiry = () => new Date(Date.now() + TOKEN_LIFETIME_DAYS * 86_400_000);
+// Stored encrypted like a real one would be (SEC-04); the simulated platforms never read it
+const mockToken = () => `mock_${Math.random().toString(36).slice(2)}`;
 
 export async function connectAccount(input: { platformId: string; name: string; handle?: string; followers?: number }) {
   const platform = await db.platform.findUnique({ where: { id: input.platformId } });
@@ -26,7 +29,7 @@ export async function connectAccount(input: { platformId: string; name: string; 
         handle: input.handle?.trim() ?? "",
         followers: input.followers ?? 0,
         status: "CONNECTED",
-        accessToken: `mock_${Math.random().toString(36).slice(2)}`,
+        ...sealTokens({ accessToken: mockToken() }),
         tokenExpiresAt: tokenExpiry(),
         lastSyncAt: new Date(),
         isDefault,
@@ -44,14 +47,15 @@ export async function connectAccount(input: { platformId: string; name: string; 
 export async function reconnectAccount(id: string) {
   const a = await db.socialAccount.update({
     where: { id },
-    data: { status: "CONNECTED", lastError: null, tokenExpiresAt: tokenExpiry(), lastSyncAt: new Date(), accessToken: `mock_${Math.random().toString(36).slice(2)}` },
+    data: { status: "CONNECTED", lastError: null, tokenExpiresAt: tokenExpiry(), lastSyncAt: new Date(), ...sealTokens({ accessToken: mockToken() }) },
   });
   // Failed posts blocked by the expired token can now be retried by the user
   return a;
 }
 
 export async function disconnectAccount(id: string) {
-  await db.socialAccount.update({ where: { id }, data: { status: "DISCONNECTED", accessToken: null, refreshToken: null } });
+  await db.socialAccount.update({ where: { id }, data: { status: "DISCONNECTED" } });
+  await clearAccountTokens(id);
   await notifyBlockedPosts(id);
 }
 

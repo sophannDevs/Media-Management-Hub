@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { syncPublishingStatus } from "@/server/services/content";
+import { sealTokens } from "@/server/services/tokens";
 
 let n = 0;
 const uid = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${(n++).toString(36)}`;
@@ -17,7 +18,8 @@ export async function createAccount(platformId = "youtube", data: Partial<Prisma
       platformId,
       name: data.name ?? `Test ${platformId} account`,
       status: "CONNECTED",
-      accessToken: "test-token",
+      // Stored encrypted, as the app does (SEC-04)
+      ...sealTokens({ accessToken: "test-token" }),
       tokenExpiresAt: new Date(Date.now() + 30 * 86_400_000),
       ...data,
     },

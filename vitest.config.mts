@@ -11,7 +11,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    setupFiles: ["tests/setup/next-cache.ts"],
+    setupFiles: ["tests/setup/next-cache.ts", "tests/setup/secrets-key.ts"],
     projects: [
       {
         extends: true,
@@ -23,7 +23,8 @@ export default defineConfig({
           name: "integration",
           include: ["tests/integration/**/*.test.ts"],
           globalSetup: ["tests/setup/template-db.ts"],
-          setupFiles: ["tests/setup/test-db.ts", "tests/setup/signed-in.ts"],
+          // Its own list replaces the root one, so the key setup is repeated here
+          setupFiles: ["tests/setup/secrets-key.ts", "tests/setup/test-db.ts", "tests/setup/signed-in.ts"],
           testTimeout: 30_000,
           hookTimeout: 60_000,
         },

@@ -3,6 +3,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { formatInTimeZone } from "date-fns-tz";
 import { db } from "../src/lib/db";
+import { encryptSecret, secretsConfigured } from "../src/lib/secrets";
 import { zonedToUtc } from "../src/lib/dates";
 import { scheduleActiveKey, wordCount } from "../src/lib/workflow/rules";
 import { hashPassword } from "../src/server/auth/password";
@@ -100,6 +101,9 @@ const CONTENT: Seed[] = [
   { key: "c123", title: "AI Video Tools Ranked (Summer Edition)", description: "Every major AI video generator, tested and ranked.", idea: "Tier list.", category: "AI & Tech", tags: ["ai video", "ranking"], created: -48, platforms: ["youtube"], script: "APPROVED", image: "APPROVED", video: "FINAL", review: "APPROVED", priority: "HIGH", series: "AI News", target: -38, duration: 744, audience: "AI enthusiasts" },
   { key: "c120", title: "The Science of Sleep, Animated", description: "What actually happens in your brain each night.", idea: "Calm animated explainer.", category: "Education", tags: ["sleep", "science"], created: -30, platforms: ["youtube", "facebook"], script: "APPROVED", image: "APPROVED", video: "FINAL", review: "APPROVED", priority: "LOW", series: "Explained", target: -17, duration: 566, audience: "Students" },
 ];
+
+// Stored encrypted like a real token (SEC-04); without a key the demo accounts have none (the simulation never reads it)
+const mockToken = () => (secretsConfigured() ? encryptSecret("mock") : null);
 
 /** [content, platform, account, dayOffset, time, status, extra] */
 const SCHEDULES: [string, string, string, number, string, string, { error?: string; visibility?: string }?][] = [
@@ -263,10 +267,10 @@ async function main() {
 
   const day = 86_400_000;
   const accounts = {
-    yt1: await db.socialAccount.create({ data: { platformId: "youtube", name: "AI Creator Lab", handle: "@aicreatorlab", followers: 48200, status: "CONNECTED", isDefault: true, accessToken: "mock", tokenExpiresAt: new Date(NOW.getTime() + 45 * day), lastSyncAt: at(0, "09:12") } }),
-    yt2: await db.socialAccount.create({ data: { platformId: "youtube", name: "Khmer Stories Studio", handle: "@khmerstories", followers: 12900, status: "CONNECTED", accessToken: "mock", tokenExpiresAt: new Date(NOW.getTime() + 30 * day), lastSyncAt: at(0, "09:12") } }),
-    fb1: await db.socialAccount.create({ data: { platformId: "facebook", name: "AI Creator Lab", handle: "Page · Education website", followers: 31400, status: "CONNECTED", isDefault: true, accessToken: "mock", tokenExpiresAt: new Date(NOW.getTime() + 50 * day), lastSyncAt: at(0, "08:55") } }),
-    fb2: await db.socialAccount.create({ data: { platformId: "facebook", name: "Smart Living Daily", handle: "Page · Media/News company", followers: 8700, status: "TOKEN_EXPIRED", accessToken: "mock", tokenExpiresAt: new Date(NOW.getTime() - 2 * day), lastSyncAt: at(-2, "22:40"), lastError: "Session has expired." } }),
+    yt1: await db.socialAccount.create({ data: { platformId: "youtube", name: "AI Creator Lab", handle: "@aicreatorlab", followers: 48200, status: "CONNECTED", isDefault: true, accessToken: mockToken(), tokenExpiresAt: new Date(NOW.getTime() + 45 * day), lastSyncAt: at(0, "09:12") } }),
+    yt2: await db.socialAccount.create({ data: { platformId: "youtube", name: "Khmer Stories Studio", handle: "@khmerstories", followers: 12900, status: "CONNECTED", accessToken: mockToken(), tokenExpiresAt: new Date(NOW.getTime() + 30 * day), lastSyncAt: at(0, "09:12") } }),
+    fb1: await db.socialAccount.create({ data: { platformId: "facebook", name: "AI Creator Lab", handle: "Page · Education website", followers: 31400, status: "CONNECTED", isDefault: true, accessToken: mockToken(), tokenExpiresAt: new Date(NOW.getTime() + 50 * day), lastSyncAt: at(0, "08:55") } }),
+    fb2: await db.socialAccount.create({ data: { platformId: "facebook", name: "Smart Living Daily", handle: "Page · Media/News company", followers: 8700, status: "TOKEN_EXPIRED", accessToken: mockToken(), tokenExpiresAt: new Date(NOW.getTime() - 2 * day), lastSyncAt: at(-2, "22:40"), lastError: "Session has expired." } }),
   };
 
   const ids: Record<string, string> = {};

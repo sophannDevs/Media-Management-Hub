@@ -19,10 +19,17 @@ const threshold = () => RANK[(process.env.LOG_LEVEL as Level) in RANK ? (process
 const pretty = () => (process.env.LOG_FORMAT ?? (process.env.NODE_ENV === "production" ? "json" : "pretty")) === "pretty";
 const isSecret = (key: string) => SECRET_KEYS.some((s) => key.toLowerCase().includes(s));
 
-/** Bounds a string and removes the password from any connection URL in it (database errors sometimes echo one). */
+/**
+ * Bounds a string and removes secrets a message can carry: the password of a
+ * connection URL (database errors echo one), a token in a query string or form
+ * body (platform API errors echo the request) and a bearer / OAuth header.
+ */
 function clean(text: string) {
   const bounded = text.length > MAX_STRING ? `${text.slice(0, MAX_STRING)}…` : text;
-  return bounded.replace(/([a-z][a-z0-9+.-]*:\/\/[^:/\s@]+:)[^@/\s]+@/gi, "$1[redacted]@");
+  return bounded
+    .replace(/([a-z][a-z0-9+.-]*:\/\/[^:/\s@]+:)[^@/\s]+@/gi, "$1[redacted]@")
+    .replace(/([?&;,\s]|^)((?:access_|refresh_|id_|fb_exchange_|input_)?token|client_secret|api[_-]?key|code|password)=[^&\s"']+/gi, "$1$2=[redacted]")
+    .replace(/\b(Bearer|OAuth)\s+[A-Za-z0-9._~+/=-]{8,}/g, "$1 [redacted]");
 }
 
 /** A copy that is safe to print: secrets redacted, depth, length and array size bounded, errors serialised. */
