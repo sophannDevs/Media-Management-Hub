@@ -118,7 +118,7 @@ export async function updateSettingsAction(input: ws.SettingsInput) {
     }),
     input,
     (d) => thenExpireOptions(ws.updateSettings(d)),
-    "Settings saved",
+    (r) => (r.recomputed ? `Settings saved — ${r.recomputed.count} items rechecked${r.recomputed.ready ? `, ${r.recomputed.ready} now Ready to Post` : ""}` : "Settings saved"),
   );
 }
 

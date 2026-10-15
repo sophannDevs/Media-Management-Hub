@@ -242,8 +242,8 @@ export async function updateSettings(input: SettingsInput) {
     });
   }
   const rulesChanged = (["requireScriptApproved", "requireImagesApproved", "requireFinalVideo", "requireReview", "requireThumbnail"] as const).some((k) => k in changed);
-  // Readiness depends on the rules, so recompute every content status
-  if (rulesChanged) await syncAllPublishingStatuses();
+  // Readiness depends on the rules, so recompute every content status: one pass, reported back (WF-04)
+  return { recomputed: rulesChanged ? await syncAllPublishingStatuses() : null };
 }
 
 export { markNotificationsRead };

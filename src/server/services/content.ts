@@ -2,8 +2,8 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { storage } from "@/lib/storage";
 import { variantKeysOf } from "./derivatives";
-import { deriveContentState, isReadyToPost, missingRequirements, normalizeHashtags, parseTags, scheduleActiveKey } from "@/lib/workflow/rules";
-import { ActivityType, ImageStatus, NotificationType, ReviewStatus, ScriptStatus, VideoStatus } from "@/lib/workflow/statuses";
+import { type DerivedContentState, deriveContentState, isReadyToPost, missingRequirements, normalizeHashtags, parseTags, scheduleActiveKey, type WorkflowRules } from "@/lib/workflow/rules";
+import { ActivityType, ImageStatus, NotificationType, type PublishingStatusCode, ReviewStatus, ScriptStatus, VideoStatus } from "@/lib/workflow/statuses";
 import { ServiceError } from "../errors";
 import { logActivity } from "./activity";
 import { contentStateSelect, coverAssetId, toContentState } from "./content-state";
@@ -18,49 +18,116 @@ export const STATUS_FIELDS = {
 } as const;
 export type StatusField = keyof typeof STATUS_FIELDS;
 
+/** What one content row needs, to recompute what is derived from it. */
+const SYNC_SELECT = { ...contentStateSelect, id: true, title: true, stage: true, missingMask: true, completion: true, coverAssetId: true } satisfies Prisma.ContentSelect;
+type SyncRow = Prisma.ContentGetPayload<{ select: typeof SYNC_SELECT }>;
+
+const chunk = <T,>(xs: T[], n: number) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, (i + 1) * n));
+
+export interface SyncSummary {
+  /** Rows looked at */
+  count: number;
+  /** Rows whose stored values changed */
+  updated: number;
+  /** Items that just passed every check */
+  ready: { id: string; title: string }[];
+  /** The publishing status of each row after the pass */
+  status: Map<string, PublishingStatusCode>;
+}
+
 /**
  * Recomputes what is derived from the production statuses, assets and
  * schedules (publishing status, stage, missing requirements, completion, cover
- * image) and stores it on the content. Call after anything that can change them.
+ * image) for the given rows — or every row — and stores it (WF-04). One
+ * transaction: the rows are locked (sorted, so two passes can't deadlock), read
+ * in one query, compared, and only the ones that changed are written, 500 per
+ * statement. A change to a schedule or a file that lands meanwhile waits for
+ * the lock and recomputes after us, so the stored values never go stale.
  */
-export async function syncPublishingStatus(contentId: string) {
-  const row = await db.content.findUnique({
-    where: { id: contentId },
-    select: { ...contentStateSelect, title: true, stage: true, missingMask: true, completion: true, coverAssetId: true },
-  });
-  if (!row) return null;
-  const next = deriveContentState(toContentState(row), await getRules());
-  const cover = coverAssetId(row);
-  const unchanged =
-    next.publishingStatus === row.publishingStatus &&
-    next.stage === row.stage &&
-    next.missingMask === row.missingMask &&
-    next.completion === row.completion &&
-    cover === row.coverAssetId;
-  if (!unchanged) {
-    // Raw SQL leaves updatedAt alone: refreshing derived values is not an edit
-    // (a rule change in Settings must not make every item "recently updated").
-    await db.$executeRaw`
-      UPDATE "Content" SET "publishingStatus" = ${next.publishingStatus}, "stage" = ${next.stage},
-        "missingMask" = ${next.missingMask}, "completion" = ${next.completion}, "coverAssetId" = ${cover}
-      WHERE "id" = ${contentId}`;
-  }
-  if (next.publishingStatus === "READY" && ["DRAFT", "NOT_READY"].includes(row.publishingStatus)) {
-    await logActivity({ contentId, type: ActivityType.STATUS_CHANGED, message: "All checks passed — Ready to Post" });
+async function recompute(ids: string[] | null, rules: WorkflowRules): Promise<SyncSummary> {
+  const sorted = ids ? [...new Set(ids)].sort() : null;
+  if (sorted && sorted.length === 0) return { count: 0, updated: 0, ready: [], status: new Map() };
+  return db.$transaction(
+    async (tx) => {
+      if (sorted) await tx.$queryRaw`SELECT "id" FROM "Content" WHERE "id" IN (${Prisma.join(sorted)}) FOR UPDATE`;
+      const rows: SyncRow[] = await tx.content.findMany({ where: sorted ? { id: { in: sorted } } : {}, select: SYNC_SELECT, relationLoadStrategy: "join" });
+      const updates: { id: string; next: DerivedContentState; cover: string | null }[] = [];
+      const ready: SyncSummary["ready"] = [];
+      const status = new Map<string, PublishingStatusCode>();
+      for (const row of rows) {
+        const next = deriveContentState(toContentState(row), rules);
+        const cover = coverAssetId(row);
+        status.set(row.id, next.publishingStatus);
+        if (next.publishingStatus !== row.publishingStatus || next.stage !== row.stage || next.missingMask !== row.missingMask || next.completion !== row.completion || cover !== row.coverAssetId) {
+          updates.push({ id: row.id, next, cover });
+        }
+        if (next.publishingStatus === "READY" && ["DRAFT", "NOT_READY"].includes(row.publishingStatus)) ready.push({ id: row.id, title: row.title });
+      }
+      // Raw SQL leaves updatedAt alone: refreshing derived values is not an edit
+      // (a rule change in Settings must not make every item "recently updated").
+      for (const part of chunk(updates, 500)) {
+        await tx.$executeRaw`
+          UPDATE "Content" AS c SET "publishingStatus" = v.ps, "stage" = v.st, "missingMask" = v.mm, "completion" = v.cp, "coverAssetId" = v.cv
+          FROM (VALUES ${Prisma.join(part.map((u) => Prisma.sql`(${u.id}::text, ${u.next.publishingStatus}::text, ${u.next.stage}::text, ${u.next.missingMask}::int, ${u.next.completion}::int, ${u.cover}::text)`))}) AS v("id", ps, st, mm, cp, cv)
+          WHERE c."id" = v."id"`;
+      }
+      return { count: rows.length, updated: updates.length, ready, status };
+    },
+    { timeout: 60_000 },
+  );
+}
+
+async function announceReady(ready: SyncSummary["ready"]) {
+  for (const { id, title } of ready) {
+    await logActivity({ contentId: id, type: ActivityType.STATUS_CHANGED, message: "All checks passed — Ready to Post" });
     await notify({
       type: NotificationType.READY_FOR_SCHEDULING,
       title: "Ready for scheduling",
-      message: `"${row.title}" passed all checks and can be scheduled.`,
-      href: `/content/${contentId}?tab=publishing`,
-      dedupeKey: `ready:${contentId}:${new Date().toISOString().slice(0, 13)}`,
+      message: `"${title}" passed all checks and can be scheduled.`,
+      href: `/content/${id}?tab=publishing`,
+      dedupeKey: `ready:${id}:${new Date().toISOString().slice(0, 13)}`,
     });
   }
-  return next.publishingStatus;
 }
 
+/** Recomputes one item after a change. Returns its publishing status, or null when it doesn't exist. */
+export async function syncPublishingStatus(contentId: string) {
+  const r = await recompute([contentId], await getRules());
+  await announceReady(r.ready);
+  return r.status.get(contentId) ?? null;
+}
+
+/** Recomputes several items in one pass (bulk actions): one transaction, one read, one write per 500 changed rows. */
+export async function syncPublishingStatuses(contentIds: string[]) {
+  const r = await recompute(contentIds, await getRules());
+  await announceReady(r.ready);
+  return r;
+}
+
+/**
+ * Recomputes every item, after a workflow rule changed. One summary row in the
+ * log and one notification stand in for the per-item ones: a rule change can
+ * make hundreds of items Ready at once, and that is one event, not hundreds.
+ */
 export async function syncAllPublishingStatuses() {
-  const ids = await db.content.findMany({ select: { id: true } });
-  for (const { id } of ids) await syncPublishingStatus(id);
+  const r = await recompute(null, await getRules());
+  const n = r.ready.length;
+  if (n) {
+    await logActivity({
+      type: ActivityType.STATUS_CHANGED,
+      message: `Workflow rules changed: ${n} item${n === 1 ? "" : "s"} now Ready to Post`,
+      entity: { type: "SETTINGS", id: "1" },
+      meta: { recomputed: r.count, updated: r.updated, ready: n },
+    });
+    await notify({
+      type: NotificationType.READY_FOR_SCHEDULING,
+      title: "Ready for scheduling",
+      message: n === 1 ? `"${r.ready[0].title}" passed all checks after the rule change and can be scheduled.` : `${n} items passed all checks after the rule change and can be scheduled.`,
+      href: n === 1 ? `/content/${r.ready[0].id}?tab=publishing` : "/content?stage=READY",
+      dedupeKey: `ready:rules:${new Date().toISOString().slice(0, 13)}`,
+    });
+  }
+  return { count: r.count, updated: r.updated, ready: n };
 }
 
 export interface ContentInput {
@@ -244,8 +311,8 @@ export async function archiveContents(ids: string[]) {
   });
   for (const id of ids) {
     await logActivity({ contentId: id, type: ActivityType.CONTENT_UPDATED, message: "Archived" });
-    await syncPublishingStatus(id);
   }
+  await syncPublishingStatuses(ids);
   return { cancelled };
 }
 
@@ -309,13 +376,13 @@ export async function restoreContents(ids: string[], withPosts = true): Promise<
           .join(", ")
       : "";
     await logActivity({ contentId: id, type: ActivityType.CONTENT_UPDATED, message: `Restored from archive${posts ? ` — ${posts}` : ""}` });
-    await syncPublishingStatus(id);
     if (t) {
       result.restored += t.restored;
       result.expired += t.expired;
       result.conflicts += t.conflicts;
     }
   }
+  await syncPublishingStatuses(ids);
   return result;
 }
 

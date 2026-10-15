@@ -4,7 +4,7 @@ import { ActivityType, MediaType } from "@/lib/workflow/statuses";
 import { ServiceError } from "../errors";
 import { variantKeysOf } from "./derivatives";
 import { logActivity } from "./activity";
-import { syncPublishingStatus } from "./content";
+import { syncPublishingStatus, syncPublishingStatuses } from "./content";
 
 export interface NewMediaInput {
   contentId?: string | null;
@@ -79,7 +79,8 @@ export async function createMediaAsset(input: NewMediaInput) {
   return asset;
 }
 
-export async function deleteMediaAsset(id: string) {
+/** Deletes one file. `sync: false` leaves the content's recompute to the caller (bulk deletes do all of theirs in one pass). */
+export async function deleteMediaAsset(id: string, opts: { sync?: boolean } = {}) {
   const asset = await db.mediaAsset.findUnique({ where: { id }, include: { videoFor: { select: { id: true } }, thumbnailFor: { select: { id: true } } } });
   if (!asset) throw new ServiceError("File not found.");
 
@@ -96,8 +97,9 @@ export async function deleteMediaAsset(id: string) {
       if (remaining === 0) await db.content.update({ where: { id: asset.contentId }, data: { imageStatus: "NOT_STARTED" } });
     }
     await logActivity({ contentId: asset.contentId, type: ActivityType.MEDIA_DELETED, message: `${MediaType.label(asset.type)} deleted: ${asset.fileName}`, meta: { assetId: asset.id } });
-    await syncPublishingStatus(asset.contentId);
+    if (opts.sync !== false) await syncPublishingStatus(asset.contentId);
   }
+  return { contentId: asset.contentId };
 }
 
 export async function setImageSelected(id: string, selected: boolean) {
@@ -136,13 +138,13 @@ export async function setFinalVideo(contentId: string, assetId: string) {
  * from every role it played on the old content (final video, thumbnail,
  * selected image) so neither item points at a file it no longer owns.
  */
-export async function assignMediaToContent(id: string, contentId: string | null) {
+export async function assignMediaToContent(id: string, contentId: string | null, opts: { sync?: boolean } = {}) {
   const asset = await db.mediaAsset.findUnique({
     where: { id },
     include: { videoFor: { select: { id: true } }, thumbnailFor: { select: { id: true } } },
   });
   if (!asset) throw new ServiceError("File not found.");
-  if (asset.contentId === contentId) return;
+  if (asset.contentId === contentId) return { touched: [] as string[] };
   const target = contentId ? await db.content.findUnique({ where: { id: contentId }, select: { id: true, title: true, imageStatus: true } }) : null;
   if (contentId && !target) throw new ServiceError("Content not found.");
   const source = asset.contentId ? await db.content.findUnique({ where: { id: asset.contentId }, select: { id: true, title: true } }) : null;
@@ -168,12 +170,13 @@ export async function assignMediaToContent(id: string, contentId: string | null)
   const label = `${MediaType.label(asset.type)} "${asset.fileName}"`;
   if (source) {
     await logActivity({ contentId: source.id, type: ActivityType.MEDIA_DELETED, message: `${label} moved ${target ? `to "${target.title}"` : "out (unassigned)"}`, meta: { assetId: asset.id } });
-    await syncPublishingStatus(source.id);
+    if (opts.sync !== false) await syncPublishingStatus(source.id);
   }
   if (target) {
     await logActivity({ contentId: target.id, type: ActivityType.MEDIA_UPLOADED, message: `${label} moved in${source ? ` from "${source.title}"` : ""}`, meta: { assetId: asset.id } });
-    await syncPublishingStatus(target.id);
+    if (opts.sync !== false) await syncPublishingStatus(target.id);
   }
+  return { touched: [source?.id, target?.id].filter((x): x is string => !!x) };
 }
 
 // ---------- Several files at once, and the same file twice (MEDIA-02) ----------
@@ -181,28 +184,34 @@ export async function assignMediaToContent(id: string, contentId: string | null)
 /** Deletes several files; each one's workflow side effects apply as for a single delete. Files already gone are skipped. */
 export async function deleteMediaAssets(ids: string[]) {
   let removed = 0;
+  const touched = new Set<string>();
   for (const id of ids) {
     try {
-      await deleteMediaAsset(id);
+      const r = await deleteMediaAsset(id, { sync: false });
+      if (r.contentId) touched.add(r.contentId);
       removed++;
     } catch (e) {
       if (!(e instanceof ServiceError)) throw e;
     }
   }
+  // Every affected content item recomputed once, together (WF-04)
+  await syncPublishingStatuses([...touched]);
   return { removed };
 }
 
 /** Moves several files to a content item (or unassigns them), one by one, with the same care as a single move. */
 export async function assignMediaToContents(ids: string[], contentId: string | null) {
   let moved = 0;
+  const touched = new Set<string>();
   for (const id of ids) {
     try {
-      await assignMediaToContent(id, contentId);
+      for (const c of (await assignMediaToContent(id, contentId, { sync: false })).touched) touched.add(c);
       moved++;
     } catch (e) {
       if (!(e instanceof ServiceError) || e.message !== "File not found.") throw e;
     }
   }
+  await syncPublishingStatuses([...touched]);
   return { moved };
 }
 
