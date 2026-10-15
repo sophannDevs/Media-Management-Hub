@@ -67,3 +67,36 @@ test("a new category appears in the Create Content dialog right away", async ({ 
   await page.getByRole("combobox", { name: "Category" }).click();
   await expect(page.getByRole("option", { name })).toBeVisible();
 });
+
+// WF-05: "Delete" moves content to the trash; Settings brings it back.
+test("deleting content moves it to the trash, where it can be restored", async ({ page }, info) => {
+  test.skip(info.project.name !== "desktop", "mutates the shared e2e database");
+  const title = "Kampot Pepper: From Farm to Table";
+
+  await page.goto(`/content?q=${encodeURIComponent(title)}`);
+  const href = await page.locator('a[href^="/content/c"]').first().getAttribute("href");
+  await page.goto(href!);
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "Delete" }).click();
+  await expect(page.getByText("Content that was published somewhere is never removed without your say-so.")).toBeVisible();
+  await page.getByRole("button", { name: "Move to trash" }).click();
+  await expect(page).toHaveURL(/\/content(\?|$)/);
+
+  // Gone from the list, waiting in the trash
+  await page.goto(`/content?q=${encodeURIComponent(title)}`);
+  await expect(page.getByText("No content matches these filters")).toBeVisible();
+  await page.goto("/settings");
+  const item = page.getByRole("list", { name: "Trash" }).getByRole("listitem").filter({ hasText: title });
+  await expect(item).toBeVisible();
+  await expect(item).toContainText(/removed for good on|kept until you remove it/);
+  await page.waitForLoadState("networkidle");
+  await item.getByRole("button", { name: "Restore" }).click();
+  const withPosts = page.getByRole("button", { name: "Restore with posts" });
+  if (await withPosts.isVisible({ timeout: 1500 }).catch(() => false)) await withPosts.click();
+  await expect(page.getByText(/Restored from the trash/)).toBeVisible();
+  await expect(item).toHaveCount(0);
+
+  await page.goto(`/content?q=${encodeURIComponent(title)}`);
+  await expect(page.locator('a[href^="/content/c"]').first()).toBeVisible();
+});

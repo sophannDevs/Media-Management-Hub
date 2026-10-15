@@ -300,7 +300,7 @@ const PAUSABLE = ["WAITING", "RETRY_SCHEDULED"] as const;
  * remembering the status it had (archivedStatus), so restoring can bring them
  * back (WF-07). A post that is publishing right now is left to finish.
  */
-export async function archiveContents(ids: string[]) {
+export async function archiveContents(ids: string[], opts: { log?: boolean } = {}) {
   const cancelled = await db.$transaction(async (tx) => {
     await tx.content.updateMany({ where: { id: { in: ids }, archivedAt: null }, data: { archivedAt: new Date() } });
     let n = 0;
@@ -309,8 +309,8 @@ export async function archiveContents(ids: string[]) {
     }
     return n;
   });
-  for (const id of ids) {
-    await logActivity({ contentId: id, type: ActivityType.CONTENT_UPDATED, message: "Archived" });
+  if (opts.log !== false) {
+    for (const id of ids) await logActivity({ contentId: id, type: ActivityType.CONTENT_UPDATED, message: "Archived" });
   }
   await syncPublishingStatuses(ids);
   return { cancelled };
@@ -331,7 +331,7 @@ export interface RestoreResult {
  * (they would go out at once) or the account already has another active post
  * for this content. Without it they stay cancelled.
  */
-export async function restoreContents(ids: string[], withPosts = true): Promise<RestoreResult> {
+export async function restoreContents(ids: string[], withPosts = true, opts: { from?: string } = {}): Promise<RestoreResult> {
   const now = new Date();
   await db.content.updateMany({ where: { id: { in: ids } }, data: { archivedAt: null } });
   const paused = await db.publishingSchedule.findMany({
@@ -375,7 +375,7 @@ export async function restoreContents(ids: string[], withPosts = true): Promise<
           .filter(Boolean)
           .join(", ")
       : "";
-    await logActivity({ contentId: id, type: ActivityType.CONTENT_UPDATED, message: `Restored from archive${posts ? ` — ${posts}` : ""}` });
+    await logActivity({ contentId: id, type: ActivityType.CONTENT_UPDATED, message: `Restored from ${opts.from ?? "archive"}${posts ? ` — ${posts}` : ""}` });
     if (t) {
       result.restored += t.restored;
       result.expired += t.expired;
@@ -386,8 +386,59 @@ export async function restoreContents(ids: string[], withPosts = true): Promise<
   return result;
 }
 
-/** Deletes content, its media records and the uploaded files. */
-export async function deleteContents(ids: string[]) {
+/** How long trashed content is kept before the worker removes it for good (days). Content with a post that went live is never removed automatically. */
+export const TRASH_DAYS = Math.max(1, Number(process.env.CONTENT_TRASH_DAYS) || 30);
+
+/**
+ * Moves content to the trash (WF-05). It is archived first — hidden
+ * everywhere, its waiting posts taken out of the queue and remembered — then
+ * marked deleted, so nothing is lost: it can be restored for TRASH_DAYS, after
+ * which the worker removes it for good, unless a post of it went live, which
+ * only a person can remove, by typing the title (purgeContents).
+ */
+export async function trashContents(ids: string[]) {
+  const rows = await db.content.findMany({ where: { id: { in: ids }, deletedAt: null }, select: { id: true, archivedAt: true } });
+  const fresh = rows.filter((r) => !r.archivedAt).map((r) => r.id);
+  const shelved = rows.filter((r) => r.archivedAt).map((r) => r.id);
+  const { cancelled } = fresh.length ? await archiveContents(fresh, { log: false }) : { cancelled: 0 };
+  const now = new Date();
+  if (fresh.length) await db.content.updateMany({ where: { id: { in: fresh } }, data: { deletedAt: now, trashedFromArchive: false } });
+  if (shelved.length) await db.content.updateMany({ where: { id: { in: shelved } }, data: { deletedAt: now, trashedFromArchive: true } });
+  for (const r of rows) await logActivity({ contentId: r.id, type: ActivityType.CONTENT_UPDATED, message: "Moved to the trash" });
+  return { trashed: rows.length, cancelled };
+}
+
+/** Takes content out of the trash, back to where it was: active with its posts as archiving left them, or still archived. */
+export async function restoreFromTrash(ids: string[], withPosts = true) {
+  const rows = await db.content.findMany({ where: { id: { in: ids }, deletedAt: { not: null } }, select: { id: true, trashedFromArchive: true } });
+  await db.content.updateMany({ where: { id: { in: rows.map((r) => r.id) } }, data: { deletedAt: null, trashedFromArchive: false } });
+  const active = rows.filter((r) => !r.trashedFromArchive).map((r) => r.id);
+  const result: RestoreResult = active.length ? await restoreContents(active, withPosts, { from: "the trash" }) : { restored: 0, expired: 0, conflicts: 0 };
+  for (const r of rows) {
+    if (r.trashedFromArchive) await logActivity({ contentId: r.id, type: ActivityType.CONTENT_UPDATED, message: "Restored from the trash (still archived)" });
+  }
+  return { ...result, count: rows.length };
+}
+
+/**
+ * Removes content for good: the rows, the script versions, the files, the
+ * schedules with their history, the analytics. Refused while a post of it is
+ * being published, and — when a post of it went live — unless its title is
+ * typed back, because that history can't be recovered.
+ */
+export async function purgeContents(ids: string[], opts: { confirmTitle?: string } = {}) {
+  const rows = await db.content.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, title: true, schedules: { where: { status: { in: ["PUBLISHED", "PROCESSING"] } }, select: { status: true } } },
+  });
+  const liveCount = (r: (typeof rows)[number]) => r.schedules.filter((s) => s.status === "PUBLISHED").length;
+  for (const r of rows) {
+    if (r.schedules.some((s) => s.status === "PROCESSING")) throw new ServiceError(`A post of “${r.title}” is being published right now. Try again in a minute.`);
+    const live = liveCount(r);
+    if (live && opts.confirmTitle?.trim() !== r.title) {
+      throw new ServiceError(`“${r.title}” has ${live} published post${live === 1 ? "" : "s"}. Type its title to remove it and that history for good.`, undefined, "CONFLICT", { requiresTitle: r.title });
+    }
+  }
   const assets = await db.mediaAsset.findMany({ where: { contentId: { in: ids } }, select: { id: true, storageKey: true, variants: true } });
   await db.$transaction([
     db.content.updateMany({ where: { id: { in: ids } }, data: { videoAssetId: null, thumbnailAssetId: null } }),
@@ -395,6 +446,24 @@ export async function deleteContents(ids: string[]) {
     db.content.deleteMany({ where: { id: { in: ids } } }),
   ]);
   await Promise.all(assets.flatMap((a) => [...(a.storageKey ? [a.storageKey] : []), ...variantKeysOf(a.variants)].map((k) => storage.remove(k).catch(() => {}))));
+  for (const r of rows) {
+    const live = liveCount(r);
+    await logActivity({
+      type: ActivityType.CONTENT_DELETED,
+      message: `Removed for good: “${r.title}”${live ? ` (with ${live} published post${live === 1 ? "" : "s"} of history)` : ""}`,
+      entity: { type: "CONTENT", id: r.id },
+    });
+  }
+  return { removed: rows.length };
+}
+
+/** The worker's daily pass (WF-05): trashed content past its retention goes; what has a post that went live stays for a person to decide. */
+export async function purgeExpiredTrash(now = new Date(), days = TRASH_DAYS) {
+  const before = new Date(now.getTime() - days * 86_400_000);
+  const due = await db.content.findMany({ where: { deletedAt: { lt: before }, schedules: { none: { status: { in: ["PUBLISHED", "PROCESSING"] } } } }, select: { id: true } });
+  const kept = await db.content.count({ where: { deletedAt: { lt: before }, schedules: { some: { status: "PUBLISHED" } } } });
+  if (due.length) await purgeContents(due.map((d) => d.id));
+  return { purged: due.length, kept };
 }
 
 export async function bulkSetCategory(ids: string[], categoryId: string | null) {

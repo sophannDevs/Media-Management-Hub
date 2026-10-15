@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 const MAP: Record<string, [typeof Dot, string]> = {
   "content.created": [Lightbulb, "bg-amber-50 text-amber-700"],
   "content.updated": [Pencil, "bg-stone-100 text-stone-600"],
+  "content.deleted": [Trash2, "bg-rose-50 text-rose-700"],
   "status.changed": [MessageSquareWarning, "bg-olive-50 text-olive-700"],
   "script.saved": [FileText, "bg-olive-50 text-olive-700"],
   "script.generated": [FileText, "bg-olive-50 text-olive-700"],

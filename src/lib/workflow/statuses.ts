@@ -181,6 +181,8 @@ export const PRODUCTION_STAGES: StageCode[] = ["IDEA", "SCRIPT", "IMAGES", "VIDE
 export const ActivityType = {
   CONTENT_CREATED: "content.created",
   CONTENT_UPDATED: "content.updated",
+  /** Removed for good (WF-05); the row is gone, so this one has no contentId */
+  CONTENT_DELETED: "content.deleted",
   STATUS_CHANGED: "status.changed",
   SCRIPT_SAVED: "script.saved",
   SCRIPT_GENERATED: "script.generated",

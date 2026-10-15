@@ -3,20 +3,19 @@
 import { Archive, ArchiveRestore, CalendarClock, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { EmptyState } from "@/components/app/content-bits";
 import { ContentThumb, thumbIconFor } from "@/components/app/content-thumb";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useServerAction } from "@/hooks/use-server-action";
-import { deleteContentAction, restoreContentAction } from "@/server/actions/content";
+import { purgeContentAction, restoreContentAction } from "@/server/actions/content";
 import type { ArchivedItem } from "@/server/queries/settings";
+import { PurgeDialog, type PurgeTarget } from "./purge-dialog";
 import { SettingsCard } from "./settings-card";
 
 export function ArchivedContent({ items }: { items: ArchivedItem[] }) {
   const { run, pending } = useServerAction();
-  const [target, setTarget] = useState<ArchivedItem | null>(null);
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [purging, setPurging] = useState<PurgeTarget | null>(null);
   // Restoring content whose posts archiving cancelled asks whether they go back in the queue (WF-07)
   const [restoring, setRestoring] = useState<ArchivedItem | null>(null);
 
@@ -57,10 +56,7 @@ export function ArchivedContent({ items }: { items: ArchivedItem[] }) {
                   size="sm"
                   className="text-rose-700 hover:bg-rose-50 hover:text-rose-800"
                   disabled={pending}
-                  onClick={() => {
-                    setTarget(c);
-                    setConfirmOpen(true);
-                  }}
+                  onClick={() => setPurging(c)}
                 >
                   <Trash2 />
                   Delete permanently
@@ -90,14 +86,7 @@ export function ArchivedContent({ items }: { items: ArchivedItem[] }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <ConfirmDialog
-        open={confirmOpen}
-        onOpenChange={setConfirmOpen}
-        title={`Delete “${target?.title ?? ""}” permanently?`}
-        description="The script, media files, schedules and analytics of this content are removed too. This can't be undone."
-        confirmLabel="Delete permanently"
-        onConfirm={() => target && run(() => deleteContentAction([target.id]), { success: `Deleted “${target.title}”` })}
-      />
+      <PurgeDialog item={purging} pending={pending} onClose={() => setPurging(null)} onConfirm={(item, typed) => run(() => purgeContentAction([item.id], typed), { success: `Deleted “${item.title}” permanently`, onSuccess: () => setPurging(null) })} />
     </SettingsCard>
   );
 }

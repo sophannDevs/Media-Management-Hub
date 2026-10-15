@@ -96,17 +96,42 @@ export async function restoreContentAction(contentIds: string[], withPosts = tru
   );
 }
 
+const trashedMessage = (r: { trashed: number; cancelled: number }) =>
+  `${r.trashed === 1 ? "Moved to the trash" : `${r.trashed} items moved to the trash`}${r.cancelled ? ` — ${r.cancelled} post${r.cancelled === 1 ? "" : "s"} taken out of the queue` : ""}`;
+
+/** "Delete" moves content to the trash (WF-05): hidden, kept for a while, restorable from Settings. */
 export async function deleteContentAction(contentIds: string[]) {
-  return runAction(ids, contentIds, (ids) => content.deleteContents(ids), `Deleted ${contentIds.length} item(s)`);
+  return runAction(ids, contentIds, (ids) => content.trashContents(ids), trashedMessage);
 }
 
-/** Deletes one content item and navigates back to the list (used from the workspace page). */
+export async function restoreFromTrashAction(contentIds: string[], withPosts = true) {
+  return runAction(z.object({ ids, withPosts: z.boolean() }), { ids: contentIds, withPosts }, (d) => content.restoreFromTrash(d.ids, d.withPosts), (r) => {
+    const notes = [
+      r.restored && `${r.restored} post${r.restored === 1 ? "" : "s"} back in the queue`,
+      r.expired && `${r.expired} past ${r.expired === 1 ? "its" : "their"} time ${r.expired === 1 ? "stays" : "stay"} cancelled`,
+      r.conflicts && `${r.conflicts} replaced by newer posts ${r.conflicts === 1 ? "stays" : "stay"} cancelled`,
+    ].filter(Boolean);
+    return notes.length ? `Restored from the trash — ${notes.join(", ")}` : "Restored from the trash";
+  });
+}
+
+/** Removes content for good; content with a post that went live needs its title typed back. */
+export async function purgeContentAction(contentIds: string[], confirmTitle?: string) {
+  return runAction(
+    z.object({ ids, confirmTitle: z.string().max(300).optional() }),
+    { ids: contentIds, confirmTitle },
+    (d) => content.purgeContents(d.ids, { confirmTitle: d.confirmTitle }),
+    (r) => `Deleted ${r.removed === 1 ? "1 item" : `${r.removed} items`} permanently`,
+  );
+}
+
+/** Moves one content item to the trash and navigates back to the list (used from the workspace page). */
 export async function deleteContentAndRedirectAction(contentId: string): Promise<ActionResult> {
   const parsed = id.safeParse(contentId);
   if (!parsed.success) return { ok: false, error: "Invalid content." };
   try {
     await requireActionUser();
-    await content.deleteContents([parsed.data]);
+    await content.trashContents([parsed.data]);
   } catch (e) {
     if (e instanceof ServiceError) return { ok: false, error: e.message, code: e.code };
     throw e;

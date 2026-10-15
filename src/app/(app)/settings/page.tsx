@@ -13,6 +13,7 @@ import { RecentChanges } from "./_components/recent-changes";
 import { SETTINGS_SECTIONS, SettingsCard } from "./_components/settings-card";
 import { SettingsNav } from "./_components/settings-nav";
 import { TaxonomyManager } from "./_components/taxonomy-manager";
+import { TrashContent } from "./_components/trash-content";
 import { WorkflowRulesSection } from "./_components/workflow-rules";
 import { WorkspaceForm } from "./_components/workspace-form";
 
@@ -48,6 +49,7 @@ async function Sections() {
       <AiIntegrations ai={d.ai} />
       <RecentChanges items={d.activity} />
       <ArchivedContent items={d.archived} />
+      <TrashContent items={d.trash} days={d.trashDays} />
     </>
   );
 }

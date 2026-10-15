@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { logger } from "@/lib/log";
 import { syncMockAnalytics } from "./services/analytics-sync";
 import { processDueSchedules, runMaintenance, WORKER_ID } from "./services/publishing";
+import { purgeExpiredTrash } from "./services/content";
 import { processPendingDerivatives } from "./services/derivatives";
 import { reconcileStorage } from "./services/storage-reconcile";
 import { runAsWorker } from "./auth/actor";
@@ -27,7 +28,7 @@ const g = globalThis as unknown as {
 };
 
 export const queueIntervalSeconds = () => Math.min(300, Math.max(5, Number(process.env.PUBLISH_WORKER_INTERVAL_SECONDS) || 10));
-const PERIODIC = { maintenance: 3_600_000, analytics: 86_400_000, "storage-reconcile": 86_400_000 } as const;
+const PERIODIC = { maintenance: 3_600_000, analytics: 86_400_000, "storage-reconcile": 86_400_000, "trash-purge": 86_400_000 } as const;
 
 /**
  * Runs `fn` if no worker has started this job within `everyMs`. The claim is
@@ -74,6 +75,7 @@ export function tick(): Promise<{ processed: number; published: number; failed: 
       await runPeriodic("maintenance", () => runMaintenance());
       await runPeriodic("analytics", () => syncMockAnalytics());
       await runPeriodic("storage-reconcile", () => reconcileStorage());
+      await runPeriodic("trash-purge", () => purgeExpiredTrash());
       await beat(g.__mediaflowWorker?.mode ?? "CRON", { ms: Date.now() - started, processed: summary.processed });
       if (summary.processed) log.info("queue pass", { ...summary, ms: Date.now() - started });
       return summary;

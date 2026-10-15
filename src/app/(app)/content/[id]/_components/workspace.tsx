@@ -40,7 +40,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useServerAction } from "@/hooks/use-server-action";
 import type { Requirement } from "@/lib/workflow/rules";
 import { ContentType, Stage, stageLabel } from "@/lib/workflow/statuses";
-import { archiveContentAction, deleteContentAndRedirectAction, duplicateContentAction, restoreContentAction } from "@/server/actions/content";
+import { archiveContentAction, deleteContentAndRedirectAction, duplicateContentAction, restoreContentAction, restoreFromTrashAction } from "@/server/actions/content";
 import type { ContentWorkspace } from "@/server/queries/content";
 
 export type TabKey = "overview" | "script" | "images" | "video" | "publishing" | "activity";
@@ -127,7 +127,7 @@ export function WorkspaceHeader({ data }: { data: ContentWorkspace }) {
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge def={Stage} value={data.workflow.stage} label={stageLabel(data.workflow.stage, data.workflow.simulated)} />
           <PostChips posts={data.workflow.posts} size="default" />
-          {c.archived && <StatusBadge tone="neutral" label="Archived" />}
+          {c.trashed ? <StatusBadge tone="danger" label="In the trash" /> : c.archived && <StatusBadge tone="neutral" label="Archived" />}
           <PriorityBadge priority={c.priority} />
           {c.seriesName && (
             <span className="inline-flex h-[22px] items-center gap-1 rounded-full border border-stone-200 bg-stone-100 px-2 text-xs text-stone-600"><Library className="size-3" />{c.seriesName}</span>
@@ -166,15 +166,21 @@ export function WorkspaceHeader({ data }: { data: ContentWorkspace }) {
             <DropdownMenuItem onSelect={() => run(() => duplicateContentAction(c.id), { onSuccess: (id) => router.push(`/content/${id}`) })}>
               <Copy />Duplicate
             </DropdownMenuItem>
-            {c.archived ? (
+            {c.trashed ? (
+              <DropdownMenuItem onSelect={() => run(() => restoreFromTrashAction([c.id]))}><ArchiveRestore />Restore from trash</DropdownMenuItem>
+            ) : c.archived ? (
               <DropdownMenuItem onSelect={() => run(() => restoreContentAction([c.id]))}><ArchiveRestore />Restore</DropdownMenuItem>
             ) : (
               <DropdownMenuItem onSelect={() => run(() => archiveContentAction([c.id]))}><Archive />Archive</DropdownMenuItem>
             )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}>
-              <Trash2 />Delete
-            </DropdownMenuItem>
+            {!c.trashed && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}>
+                  <Trash2 />Delete
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -182,8 +188,9 @@ export function WorkspaceHeader({ data }: { data: ContentWorkspace }) {
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title="Delete this content?"
-        description="The script versions, uploaded images and videos, and every schedule for this item are removed permanently."
-        onConfirm={() => run(() => deleteContentAndRedirectAction(c.id), { success: "Content deleted" })}
+        description="It goes to the trash: hidden from lists, its waiting posts taken out of the queue, and kept for a while in Settings → Trash before it is removed for good. Content that was published somewhere is never removed without your say-so."
+        confirmLabel="Move to trash"
+        onConfirm={() => run(() => deleteContentAndRedirectAction(c.id), { success: "Moved to the trash" })}
       />
     </div>
   );

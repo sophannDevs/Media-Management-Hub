@@ -4,6 +4,7 @@ import { actorLabel } from "@/lib/activity";
 import { fmtDate, fmtDateTime } from "@/lib/dates";
 import { mediaUrl } from "@/lib/media-url";
 import { NOTIFICATION_LABELS, type NotificationTypeCode } from "@/lib/workflow/statuses";
+import { TRASH_DAYS } from "../services/content";
 import { notificationPrefs } from "../services/settings";
 import { workerStatus } from "../worker";
 import { getPageContext } from "./shared";
@@ -38,12 +39,12 @@ function aiInfo() {
 
 export async function getSettingsData() {
   const { settings, rules, tz, now } = await getPageContext();
-  const [categories, series, campaigns, archived, worker, activity] = await Promise.all([
+  const [categories, series, campaigns, archived, trash, worker, activity] = await Promise.all([
     db.category.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true, ...usage } }),
     db.series.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, ...usage } }),
     db.campaign.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, ...usage } }),
     db.content.findMany({
-      where: { archivedAt: { not: null } },
+      where: { archivedAt: { not: null }, deletedAt: null },
       orderBy: { archivedAt: "desc" },
       select: {
         id: true,
@@ -52,8 +53,25 @@ export async function getSettingsData() {
         archivedAt: true,
         category: { select: { name: true } },
         coverAsset: { select: { storageKey: true, externalUrl: true } },
-        // Posts archiving took out of the queue (WF-07)
+        // Posts archiving took out of the queue (WF-07); posts that went live (WF-05: removing them for good needs the title)
         _count: { select: { schedules: { where: { status: "CANCELLED", archivedStatus: { not: null } } } } },
+        schedules: { where: { status: "PUBLISHED" }, select: { id: true } },
+      },
+    }),
+    // The trash (WF-05)
+    db.content.findMany({
+      where: { deletedAt: { not: null } },
+      orderBy: { deletedAt: "desc" },
+      select: {
+        id: true,
+        title: true,
+        contentType: true,
+        deletedAt: true,
+        trashedFromArchive: true,
+        category: { select: { name: true } },
+        coverAsset: { select: { storageKey: true, externalUrl: true } },
+        _count: { select: { schedules: { where: { status: "CANCELLED", archivedStatus: { not: null } } } } },
+        schedules: { where: { status: "PUBLISHED" }, select: { id: true } },
       },
     }),
     workerInfo(now),
@@ -88,7 +106,22 @@ export async function getSettingsData() {
       thumbUrl: mediaUrl(c.coverAsset),
       archivedLabel: c.archivedAt ? fmtDate(c.archivedAt, tz) : "",
       pausedPosts: c._count.schedules,
+      publishedPosts: c.schedules.length,
     })),
+    trash: trash.map((c) => ({
+      id: c.id,
+      title: c.title,
+      contentType: c.contentType,
+      category: c.category?.name ?? null,
+      thumbUrl: mediaUrl(c.coverAsset),
+      deletedLabel: c.deletedAt ? fmtDate(c.deletedAt, tz) : "",
+      /** When the worker removes it, or null when a post of it went live (then only a person can) */
+      purgeLabel: c.schedules.length || !c.deletedAt ? null : fmtDate(new Date(c.deletedAt.getTime() + TRASH_DAYS * 86_400_000), tz),
+      publishedPosts: c.schedules.length,
+      pausedPosts: c._count.schedules,
+      fromArchive: c.trashedFromArchive,
+    })),
+    trashDays: TRASH_DAYS,
     worker,
     ai: aiInfo(),
     activity: activity.map((a) => ({ id: a.id, type: a.type, message: a.message, when: fmtDateTime(a.createdAt, tz), by: actorLabel(a) })),
@@ -98,3 +131,4 @@ export async function getSettingsData() {
 export type SettingsData = Awaited<ReturnType<typeof getSettingsData>>;
 export type TaxonomyItem = SettingsData["taxonomies"]["category"][number];
 export type ArchivedItem = SettingsData["archived"][number];
+export type TrashItem = SettingsData["trash"][number];

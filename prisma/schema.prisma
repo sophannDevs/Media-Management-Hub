@@ -156,6 +156,11 @@ model Content {
   coverAssetId String?
   coverAsset   MediaAsset? @relation("ContentCover", fields: [coverAssetId], references: [id], onDelete: SetNull)
 
+  /// In the trash (WF-05): archived as well, so every list hides it; kept CONTENT_TRASH_DAYS, then removed by the worker — never automatically when a post of it went live
+  deletedAt          DateTime?
+  /// Already archived when it went to the trash: restoring puts it back in the archive, not in the lists
+  trashedFromArchive Boolean   @default(false)
+
   titleFinalized       Boolean   @default(false)
   descriptionFinalized Boolean   @default(false)
   archivedAt           DateTime?
@@ -186,6 +191,7 @@ model Content {
   updatedAt DateTime @updatedAt
 
   @@index([publishingStatus])
+  @@index([deletedAt])
   @@index([createdAt])
   /// Lists: not archived, by stage, newest first (also serves archivedAt alone)
   @@index([archivedAt, stage, updatedAt])

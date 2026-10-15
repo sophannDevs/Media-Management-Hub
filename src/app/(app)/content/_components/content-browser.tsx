@@ -53,15 +53,7 @@ import { useServerAction } from "@/hooks/use-server-action";
 import { buildHref, CONTENT_SORTS, type ContentListParams, type ContentSort, type ContentView, type SortDir } from "@/lib/content-list";
 import { cn } from "@/lib/utils";
 import { ContentType, ImageStatus, ReviewStatus, ScriptStatus, Stage, stageLabel, VideoStatus } from "@/lib/workflow/statuses";
-import {
-  archiveContentAction,
-  restoreContentAction,
-  bulkCategoryAction,
-  bulkStatusAction,
-  bulkTagAction,
-  deleteContentAction,
-  duplicateContentAction,
-} from "@/server/actions/content";
+import { archiveContentAction, bulkCategoryAction, bulkStatusAction, bulkTagAction, deleteContentAction, duplicateContentAction, restoreContentAction, restoreFromTrashAction } from "@/server/actions/content";
 import type { ContentListData, ContentListItem } from "@/server/queries/content";
 import { StatusChips } from "./status-chips";
 
@@ -375,16 +367,24 @@ export function ContentBrowser({
         onOpenChange={(o) => !o && setConfirm(null)}
         title={confirm?.title ?? ""}
         destructive={confirm?.kind === "delete"}
-        confirmLabel={confirm?.kind === "delete" ? "Delete" : "Archive"}
+        confirmLabel={confirm?.kind === "delete" ? "Move to trash" : "Archive"}
         description={
           confirm?.kind === "delete"
-            ? "This permanently removes the content, its script versions, uploaded media and schedules. This cannot be undone."
+            ? "It goes to the trash: hidden from lists, its waiting posts taken out of the queue, and kept for a while in Settings → Trash before it is removed for good. Content that was published somewhere is never removed without your say-so."
             : "Archived content is hidden from lists and its waiting posts are taken out of the queue. You can undo right after, or restore it with its posts from Settings."
         }
         onConfirm={() => {
           if (!confirm) return;
           const target = confirm.ids;
-          if (confirm.kind === "delete") run(() => deleteContentAction(target), { onSuccess: clear });
+          if (confirm.kind === "delete")
+            run(() => deleteContentAction(target), {
+              success: false,
+              onSuccess: (_, message) => {
+                clear();
+                // Nothing is gone yet (WF-05): Undo brings it straight back with its posts
+                toast.success(message ?? "Moved to the trash", { duration: 10_000, action: { label: "Undo", onClick: () => run(() => restoreFromTrashAction(target, true)) } });
+              },
+            });
           else
             run(() => archiveContentAction(target), {
               success: false,

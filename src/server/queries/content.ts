@@ -343,6 +343,8 @@ export async function getContentWorkspace(id: string) {
       createdLabel: fmtDate(c.createdAt, tz),
       updatedLabel: timeAgo(c.updatedAt, now),
       archived: !!c.archivedAt,
+      /** In the trash (WF-05): restorable from Settings until the retention period ends */
+      trashed: !!c.deletedAt,
       categoryId: c.categoryId,
       categoryName: c.category?.name ?? null,
       seriesId: c.seriesId,
