@@ -158,6 +158,8 @@ function StatCards({ d }: { d: DashboardData }) {
         <Link
           key={s.label}
           href={s.href}
+          // The analytics page carries the charting library: fetched on pointing at it, not on every dashboard visit (PERF-10)
+          prefetch={s.href === "/analytics" ? false : undefined}
           className={cn("rounded-2xl border bg-card p-4 shadow-card transition-colors hover:border-olive-300", s.accent && "border-primary bg-primary text-white hover:border-primary")}
         >
           <div className="flex items-center justify-between">

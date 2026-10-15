@@ -2,7 +2,7 @@
 
 import { Clock, Server, ShieldCheck, ShieldAlert } from "lucide-react";
 import { useState } from "react";
-import { Field } from "@/components/app/create-content-dialog";
+import { Field } from "@/components/app/field";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

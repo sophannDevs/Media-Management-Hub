@@ -64,6 +64,9 @@ function NavList({ counts, pathname, onNavigate }: { counts?: NavCounts; pathnam
           <Link
             key={n.href}
             href={n.href}
+            // Analytics carries the charting library (a third of a megabyte): fetched when
+            // someone points at the link rather than on every page (PERF-10)
+            prefetch={n.href === "/analytics" ? false : undefined}
             onClick={onNavigate}
             className={cn(
               "flex h-10 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors",

@@ -254,7 +254,7 @@ export function CalendarBoard({ view, days, events: serverEvents, tz, todayKey, 
       <p id={MOVE_HELP_ID} className="sr-only">
         Press Space to pick this post up, then the arrow keys to choose a new {view === "month" ? "day" : "time slot"}, Enter to drop it and Escape to cancel. Or open its actions menu and choose Reschedule.
       </p>
-      <p role="status" aria-live="polite" className="sr-only">
+      <p id="calendar-move-status" role="status" aria-live="polite" className="sr-only">
         {announcement}
       </p>
 

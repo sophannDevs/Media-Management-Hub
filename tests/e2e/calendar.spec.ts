@@ -15,7 +15,8 @@ const dayOf = (chip: ReturnType<typeof chipFor>) => chip.locator("xpath=ancestor
 test("the keyboard picks a post up, moves it a day and drops it", async ({ page }, info) => {
   test.skip(info.project.name !== "desktop", "mutates the shared e2e database");
   const chip = chipFor(page, "10 AI Tools That Will Replace Your Workflow in 2027", "YouTube");
-  const status = page.locator('p[role="status"]');
+  // The calendar's own live region (the page has others: the header's shortcut hint, dialogs)
+  const status = page.locator("#calendar-move-status");
 
   await page.goto("/calendar");
   await page.waitForLoadState("networkidle");

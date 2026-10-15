@@ -5,7 +5,7 @@ import Link from "next/link";
 import { type ComponentProps, type ReactNode, useState } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { ContentPicker, type PickerChoice } from "@/components/app/content-picker";
-import { Field } from "@/components/app/create-content-dialog";
+import { Field } from "@/components/app/field";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";

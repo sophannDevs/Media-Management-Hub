@@ -2,7 +2,7 @@
 
 import { Check, Info, Plug } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
-import { Field } from "@/components/app/create-content-dialog";
+import { Field } from "@/components/app/field";
 import { PlatformIcon } from "@/components/app/platform-icon";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";

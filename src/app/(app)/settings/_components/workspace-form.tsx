@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Field, LANGUAGES } from "@/components/app/create-content-dialog";
+import { Field } from "@/components/app/field";
+import { LANGUAGES } from "@/lib/languages";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";

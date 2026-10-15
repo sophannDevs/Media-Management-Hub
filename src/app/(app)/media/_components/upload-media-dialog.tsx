@@ -3,7 +3,7 @@
 import { CloudUpload, Info, Link2, Upload } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { ContentPicker, type PickerChoice } from "@/components/app/content-picker";
-import { Field } from "@/components/app/create-content-dialog";
+import { Field } from "@/components/app/field";
 import { UploadDropzone } from "@/components/app/media-upload";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";

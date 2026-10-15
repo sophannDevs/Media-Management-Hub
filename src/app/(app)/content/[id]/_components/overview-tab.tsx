@@ -3,7 +3,8 @@
 import { ArrowRight, Check, Eye, MessageSquareWarning, Pencil, Send, WandSparkles, X } from "lucide-react";
 import { useState } from "react";
 import { Panel } from "@/components/app/content-bits";
-import { Field, LANGUAGES } from "@/components/app/create-content-dialog";
+import { Field } from "@/components/app/field";
+import { LANGUAGES } from "@/lib/languages";
 import { PlatformIcon, PlatformLabel } from "@/components/app/platform-icon";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";

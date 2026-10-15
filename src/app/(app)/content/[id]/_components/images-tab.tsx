@@ -5,7 +5,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Panel } from "@/components/app/content-bits";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
-import { Field } from "@/components/app/create-content-dialog";
+import { Field } from "@/components/app/field";
 import { UploadDropzone } from "@/components/app/media-upload";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
