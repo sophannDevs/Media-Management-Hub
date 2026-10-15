@@ -89,26 +89,26 @@ function BasicInfo({ data }: { data: ContentWorkspace }) {
         <Field label="Title" required className="sm:col-span-2"><Input required value={form.title} onChange={(e) => set("title", e.target.value)} /></Field>
         <Field label="Content idea" className="sm:col-span-2"><Textarea rows={2} value={form.idea} onChange={(e) => set("idea", e.target.value)} /></Field>
         <Field label="Description" className="sm:col-span-2"><Textarea rows={3} value={form.description} onChange={(e) => set("description", e.target.value)} /></Field>
-        <Field label="Category">
+        <Field htmlFor="ov-category" label="Category">
           <Select value={form.categoryId} onValueChange={(v) => set("categoryId", v)}>
-            <SelectTrigger aria-label="Category" className="w-full"><SelectValue /></SelectTrigger>
+            <SelectTrigger id="ov-category" className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value={NONE}>No category</SelectItem>
               {data.options.categories.map((o) => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
             </SelectContent>
           </Select>
         </Field>
-        <Field label="Content type">
+        <Field htmlFor="ov-content-type" label="Content type">
           <Select value={form.contentType} onValueChange={(v) => set("contentType", v)}>
-            <SelectTrigger aria-label="Content type" className="w-full"><SelectValue /></SelectTrigger>
+            <SelectTrigger id="ov-content-type" className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>{ContentType.options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
           </Select>
         </Field>
         <Field label="Tags" hint="Separate with commas"><Input value={form.tags} onChange={(e) => set("tags", e.target.value)} /></Field>
         <Field label="Target audience"><Input value={form.targetAudience} onChange={(e) => set("targetAudience", e.target.value)} /></Field>
-        <Field label="Language">
+        <Field htmlFor="ov-language" label="Language">
           <Select value={form.language} onValueChange={(v) => set("language", v)}>
-            <SelectTrigger aria-label="Language" className="w-full"><SelectValue /></SelectTrigger>
+            <SelectTrigger id="ov-language" className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>{Array.from(new Set([...LANGUAGES, form.language])).map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
           </Select>
         </Field>
@@ -233,10 +233,10 @@ function Planning({ data }: { data: ContentWorkspace }) {
   return (
     <Panel title="Planning">
       <div className="space-y-4 p-5">
-        <Field label="Priority">
+        <Field label="Priority" group>
           <div className="flex gap-1 rounded-xl border border-[#ebe7c6] bg-secondary p-1">
             {Priority.options.map((p) => (
-              <button key={p.value} type="button" disabled={pending} onClick={() => p.value !== c.priority && save({ priority: p.value })} className={cn("h-8 flex-1 rounded-lg text-[13px] font-medium", c.priority === p.value ? "bg-white shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+              <button key={p.value} type="button" aria-pressed={c.priority === p.value} disabled={pending} onClick={() => p.value !== c.priority && save({ priority: p.value })} className={cn("h-8 flex-1 rounded-lg text-[13px] font-medium", c.priority === p.value ? "bg-white shadow-sm" : "text-muted-foreground hover:text-foreground")}>
                 {p.label}
               </button>
             ))}
@@ -245,18 +245,18 @@ function Planning({ data }: { data: ContentWorkspace }) {
         <Field label="Target publish date">
           <Input type="date" aria-label="Target publish date" defaultValue={c.targetPublishDate} disabled={pending} onBlur={(e) => e.target.value !== c.targetPublishDate && save({ targetPublishDate: e.target.value || null })} />
         </Field>
-        <Field label="Series">
+        <Field htmlFor="ov-series" label="Series">
           <Select value={c.seriesId ?? NONE} disabled={pending} onValueChange={(v) => save({ seriesId: v === NONE ? null : v })}>
-            <SelectTrigger aria-label="Series" className="w-full"><SelectValue /></SelectTrigger>
+            <SelectTrigger id="ov-series" className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value={NONE}>None</SelectItem>
               {data.options.series.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
             </SelectContent>
           </Select>
         </Field>
-        <Field label="Campaign">
+        <Field htmlFor="ov-campaign" label="Campaign">
           <Select value={c.campaignId ?? NONE} disabled={pending} onValueChange={(v) => save({ campaignId: v === NONE ? null : v })}>
-            <SelectTrigger aria-label="Campaign" className="w-full"><SelectValue /></SelectTrigger>
+            <SelectTrigger id="ov-campaign" className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value={NONE}>None</SelectItem>
               {data.options.campaigns.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}

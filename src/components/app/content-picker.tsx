@@ -115,6 +115,10 @@ export function ContentPicker({
             }}
             onKeyDown={onKeyDown}
           />
+          {/* Results arrive as you type; say how many (the list itself is in a popup) */}
+          <p role="status" className="sr-only">
+            {!open ? "" : items === null ? "Loading results" : items.length === 0 ? "No content found" : `${items.length} result${items.length === 1 ? "" : "s"}`}
+          </p>
         </div>
       </PopoverAnchor>
       <PopoverContent

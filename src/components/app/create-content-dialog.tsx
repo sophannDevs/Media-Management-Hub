@@ -2,7 +2,7 @@
 
 import { ArrowRight, Lightbulb, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useId, useState } from "react";
 import { PlatformIcon } from "@/components/app/platform-icon";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -83,18 +83,18 @@ export function CreateContentDialog({ options, trigger }: { options: ContentForm
                 <Field label="Description" className="sm:col-span-2" htmlFor="cc-desc">
                   <Textarea id="cc-desc" rows={2} value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="Short summary for the team and later for the post" />
                 </Field>
-                <Field label="Category">
+                <Field htmlFor="cc-category" label="Category">
                   <Select value={form.categoryId} onValueChange={(v) => set("categoryId", v)}>
-                    <SelectTrigger aria-label="Category" className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="cc-category" className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value={NONE}>No category</SelectItem>
                       {options.categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </Field>
-                <Field label="Content type">
+                <Field htmlFor="cc-content-type" label="Content type">
                   <Select value={form.contentType} onValueChange={(v) => set("contentType", v)}>
-                    <SelectTrigger aria-label="Content type" className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="cc-content-type" className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>{ContentType.options.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
                   </Select>
                 </Field>
@@ -104,9 +104,9 @@ export function CreateContentDialog({ options, trigger }: { options: ContentForm
                 <Field label="Target audience" htmlFor="cc-audience">
                   <Input id="cc-audience" value={form.targetAudience} onChange={(e) => set("targetAudience", e.target.value)} placeholder="e.g. YouTube creators" />
                 </Field>
-                <Field label="Language">
+                <Field htmlFor="cc-language" label="Language">
                   <Select value={form.language} onValueChange={(v) => set("language", v)}>
-                    <SelectTrigger aria-label="Language" className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="cc-language" className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>{LANGUAGES.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
                   </Select>
                 </Field>
@@ -144,10 +144,10 @@ export function CreateContentDialog({ options, trigger }: { options: ContentForm
             <section>
               <h3 className="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase">Planning</h3>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Priority">
+                <Field label="Priority" group>
                   <div className="flex gap-1 rounded-xl border border-[#ebe7c6] bg-secondary p-1">
                     {Priority.options.map((p) => (
-                      <button key={p.value} type="button" onClick={() => set("priority", p.value)} className={cn("h-8 flex-1 rounded-lg text-[13px] font-medium", form.priority === p.value ? "bg-white shadow-sm" : "text-muted-foreground")}>
+                      <button key={p.value} type="button" aria-pressed={form.priority === p.value} onClick={() => set("priority", p.value)} className={cn("h-8 flex-1 rounded-lg text-[13px] font-medium", form.priority === p.value ? "bg-white shadow-sm" : "text-muted-foreground")}>
                         {p.label}
                       </button>
                     ))}
@@ -156,18 +156,18 @@ export function CreateContentDialog({ options, trigger }: { options: ContentForm
                 <Field label="Target publish date" htmlFor="cc-target">
                   <Input id="cc-target" type="date" value={form.targetPublishDate} onChange={(e) => set("targetPublishDate", e.target.value)} />
                 </Field>
-                <Field label="Series">
+                <Field htmlFor="cc-series" label="Series">
                   <Select value={form.seriesId} onValueChange={(v) => set("seriesId", v)}>
-                    <SelectTrigger aria-label="Series" className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="cc-series" className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value={NONE}>None</SelectItem>
                       {options.series.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </Field>
-                <Field label="Campaign">
+                <Field htmlFor="cc-campaign" label="Campaign">
                   <Select value={form.campaignId} onValueChange={(v) => set("campaignId", v)}>
-                    <SelectTrigger aria-label="Campaign" className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="cc-campaign" className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value={NONE}>None</SelectItem>
                       {options.campaigns.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
@@ -211,14 +211,26 @@ function initial(options: ContentFormOptions) {
   };
 }
 
-export function Field({ label, hint, required, className, htmlFor, children }: { label: string; hint?: string; required?: boolean; className?: string; htmlFor?: string; children: ReactNode }) {
+/**
+ * A label above a control. Pass `htmlFor` (the control's id) for a single input
+ * or select; pass `group` when the field is a set of buttons, so the label
+ * names the whole set for screen readers instead of pointing at nothing.
+ */
+export function Field({ label, hint, required, className, htmlFor, group, children }: { label: string; hint?: string; required?: boolean; className?: string; htmlFor?: string; group?: boolean; children: ReactNode }) {
+  const labelId = useId();
   return (
     <div className={className}>
-      <Label className="mb-1.5" htmlFor={htmlFor}>
+      <Label id={group ? labelId : undefined} className="mb-1.5" htmlFor={group ? undefined : htmlFor}>
         {label}
         {required && <span className="text-rose-600">*</span>}
       </Label>
-      {children}
+      {group ? (
+        <div role="group" aria-labelledby={labelId}>
+          {children}
+        </div>
+      ) : (
+        children
+      )}
       {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
     </div>
   );

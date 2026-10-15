@@ -86,22 +86,22 @@ function PromptPanel({ data }: { data: ContentWorkspace }) {
           <Textarea rows={2} value={negativePrompt} onChange={(e) => setNegative(e.target.value)} className="font-mono text-[13px]" placeholder="text, watermark, extra fingers" />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Style">
+          <Field htmlFor="img-style" label="Style">
             <Select value={style} onValueChange={setStyle}>
-              <SelectTrigger aria-label="Style" className="w-full"><SelectValue /></SelectTrigger>
+              <SelectTrigger id="img-style" className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>{Array.from(new Set([...STYLES, style])).map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
-          <Field label="Aspect ratio">
+          <Field htmlFor="img-aspect-ratio" label="Aspect ratio">
             <Select value={aspectRatio} onValueChange={setRatio}>
-              <SelectTrigger aria-label="Aspect ratio" className="w-full"><SelectValue /></SelectTrigger>
+              <SelectTrigger id="img-aspect-ratio" className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>{RATIOS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
         </div>
-        <Field label="Tool">
+        <Field htmlFor="img-tool" label="Tool">
           <Select value={provider} onValueChange={setProvider}>
-            <SelectTrigger aria-label="Tool" className="w-full"><SelectValue /></SelectTrigger>
+            <SelectTrigger id="img-tool" className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>{PROVIDERS.map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}</SelectContent>
           </Select>
         </Field>

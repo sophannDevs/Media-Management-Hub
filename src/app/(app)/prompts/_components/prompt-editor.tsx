@@ -73,12 +73,12 @@ function PromptForm({ prompt, defaultCategory, onDone }: { prompt?: PromptItem; 
           <Input required maxLength={120} value={values.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Long-form script (8–10 min)" aria-label="Prompt name" autoFocus={!prompt} />
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Category">
+          <Field htmlFor="pe-category" label="Category">
             <Select
               value={values.category}
               onValueChange={(v) => setValues((cur) => ({ ...cur, category: v, provider: providerTouched ? cur.provider : defaultProviderFor(v) }))}
             >
-              <SelectTrigger className="w-full" aria-label="Category">
+              <SelectTrigger id="pe-category" className="w-full">
                 <SelectValue>{PromptCategory.label(values.category)}</SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -90,7 +90,7 @@ function PromptForm({ prompt, defaultCategory, onDone }: { prompt?: PromptItem; 
               </SelectContent>
             </Select>
           </Field>
-          <Field label="AI provider">
+          <Field htmlFor="pe-ai-provider" label="AI provider">
             <Select
               value={values.provider}
               onValueChange={(v) => {
@@ -98,7 +98,7 @@ function PromptForm({ prompt, defaultCategory, onDone }: { prompt?: PromptItem; 
                 set("provider", v);
               }}
             >
-              <SelectTrigger className="w-full" aria-label="AI provider">
+              <SelectTrigger id="pe-ai-provider" className="w-full">
                 <SelectValue>{AiProvider.label(values.provider)}</SelectValue>
               </SelectTrigger>
               <SelectContent>

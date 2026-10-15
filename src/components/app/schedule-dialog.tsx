@@ -223,8 +223,8 @@ function ScheduleFields({ data, opts, onDone, onSwitchContent }: { data: Schedul
             )}
 
             <div>
-              <Label className="mb-2">Platform</Label>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <Label id="sch-platform-label" className="mb-2">Platform</Label>
+              <div role="group" aria-labelledby="sch-platform-label" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {data.platforms.slice(0, 4).map((p) => {
                   const on = p.id === platformId;
                   const usable = p.enabled && !!p.meta;
@@ -232,6 +232,7 @@ function ScheduleFields({ data, opts, onDone, onSwitchContent }: { data: Schedul
                     <button
                       key={p.id}
                       type="button"
+                      aria-pressed={on}
                       disabled={!usable}
                       onClick={() => changePlatform(p.id)}
                       className={cn(
@@ -251,9 +252,9 @@ function ScheduleFields({ data, opts, onDone, onSwitchContent }: { data: Schedul
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
-                <Label className="mb-1.5">{meta?.id === "facebook" ? "Facebook Page" : `${meta?.name ?? ""} ${accountNoun}`}</Label>
+                <Label className="mb-1.5" htmlFor="sch-account">{meta?.id === "facebook" ? "Facebook Page" : `${meta?.name ?? ""} ${accountNoun}`}</Label>
                 <Select value={accountId} onValueChange={setAccountId}>
-                  <SelectTrigger aria-label={meta?.id === "facebook" ? "Facebook Page" : `${meta?.name ?? ""} ${accountNoun}`.trim()} className="w-full">
+                  <SelectTrigger id="sch-account" className="w-full">
                     <SelectValue placeholder={`Choose a ${accountNoun.toLowerCase()}`} />
                   </SelectTrigger>
                   <SelectContent>
@@ -277,9 +278,9 @@ function ScheduleFields({ data, opts, onDone, onSwitchContent }: { data: Schedul
                 <Input id="sch-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
               </div>
               <div className="sm:col-span-2">
-                <Label className="mb-1.5">Timezone</Label>
+                <Label className="mb-1.5" htmlFor="sch-timezone">Timezone</Label>
                 <Select value={timezone} onValueChange={setTimezone}>
-                  <SelectTrigger aria-label="Timezone" className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="sch-timezone" className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>{TIMEZONES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
@@ -302,11 +303,11 @@ function ScheduleFields({ data, opts, onDone, onSwitchContent }: { data: Schedul
 
             {meta?.supportsThumbnail && (
               <div>
-                <Label className="mb-2">Thumbnail</Label>
+                <Label id="sch-thumb-label" className="mb-2">Thumbnail</Label>
                 {content.thumbnails.length ? (
-                  <div className="flex flex-wrap gap-2.5">
+                  <div role="group" aria-labelledby="sch-thumb-label" className="flex flex-wrap gap-2.5">
                     {content.thumbnails.map((t) => (
-                      <button key={t.id} type="button" title={t.fileName} onClick={() => setThumbnailAssetId(t.id)} className={cn("rounded-lg ring-offset-2", thumbnailAssetId === t.id && "ring-2 ring-primary")}>
+                      <button key={t.id} type="button" title={t.fileName} aria-label={t.fileName} aria-pressed={thumbnailAssetId === t.id} onClick={() => setThumbnailAssetId(t.id)} className={cn("rounded-lg ring-offset-2", thumbnailAssetId === t.id && "ring-2 ring-primary")}>
                         <ContentThumb src={t.url} seed={t.id} icon="image" className="h-14 w-24" />
                       </button>
                     ))}
@@ -319,12 +320,12 @@ function ScheduleFields({ data, opts, onDone, onSwitchContent }: { data: Schedul
 
             {meta && (
               <div>
-                <Label className="mb-2">{meta.id === "youtube" ? "Visibility" : "Publish as"}</Label>
-                <div className="inline-flex flex-wrap gap-1 rounded-xl border border-[#ebe7c6] bg-secondary p-1">
+                <Label id="sch-visibility-label" className="mb-2">{meta.id === "youtube" ? "Visibility" : "Publish as"}</Label>
+                <div role="group" aria-labelledby="sch-visibility-label" className="inline-flex flex-wrap gap-1 rounded-xl border border-[#ebe7c6] bg-secondary p-1">
                   {meta.visibilityOptions.map((v) => {
                     const Icon = VIS_ICONS[v.value];
                     return (
-                      <button key={v.value} type="button" title={v.description} onClick={() => setVisibility(v.value)} className={cn("flex h-8 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium", visibility === v.value ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                      <button key={v.value} type="button" title={v.description} aria-pressed={visibility === v.value} onClick={() => setVisibility(v.value)} className={cn("flex h-8 items-center gap-1.5 rounded-lg px-3 text-[13px] font-medium", visibility === v.value ? "bg-white text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
                         {Icon && <Icon className="size-3.5" />}
                         {v.label}
                       </button>
@@ -334,12 +335,15 @@ function ScheduleFields({ data, opts, onDone, onSwitchContent }: { data: Schedul
               </div>
             )}
 
-            {errors.length > 0 && (
-              <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
-                <p className="flex items-center gap-2 font-medium"><CircleX className="size-4" />Can&apos;t schedule yet</p>
-                <ul className="mt-2 ml-6 list-disc space-y-0.5">{errors.map((e) => <li key={e}>{e}</li>)}</ul>
-              </div>
-            )}
+            {/* The live region is always mounted, so changes inside it are announced */}
+            <div aria-live="polite">
+              {errors.length > 0 && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+                  <p className="flex items-center gap-2 font-medium"><CircleX className="size-4" />Can&apos;t schedule yet</p>
+                  <ul className="mt-2 ml-6 list-disc space-y-0.5">{errors.map((e) => <li key={e}>{e}</li>)}</ul>
+                </div>
+              )}
+            </div>
 
             {notice && (
               <div role="status" className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-900">

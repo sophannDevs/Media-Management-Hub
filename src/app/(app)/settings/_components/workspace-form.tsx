@@ -39,9 +39,9 @@ export function WorkspaceForm({ initial }: { initial: Workspace }) {
           <Field label="Workspace name" required className="sm:col-span-2">
             <Input required maxLength={80} value={form.workspaceName} onChange={(e) => set("workspaceName", e.target.value)} aria-label="Workspace name" className="sm:max-w-md" />
           </Field>
-          <Field label="Default timezone" hint="Schedules, the calendar and analytics days use this timezone.">
+          <Field htmlFor="ws-default-timezone" label="Default timezone" hint="Schedules, the calendar and analytics days use this timezone.">
             <Select value={form.timezone} onValueChange={(v) => set("timezone", v)}>
-              <SelectTrigger className="w-full" aria-label="Default timezone">
+              <SelectTrigger id="ws-default-timezone" className="w-full">
                 <SelectValue>{timezones.find((t) => t.value === form.timezone)?.label ?? form.timezone}</SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -53,9 +53,9 @@ export function WorkspaceForm({ initial }: { initial: Workspace }) {
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Default language" hint="Pre-selected when you create new content.">
+          <Field htmlFor="ws-default-language" label="Default language" hint="Pre-selected when you create new content.">
             <Select value={form.defaultLanguage} onValueChange={(v) => set("defaultLanguage", v)}>
-              <SelectTrigger className="w-full" aria-label="Default language">
+              <SelectTrigger id="ws-default-language" className="w-full">
                 <SelectValue>{form.defaultLanguage}</SelectValue>
               </SelectTrigger>
               <SelectContent>

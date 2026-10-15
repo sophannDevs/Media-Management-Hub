@@ -114,9 +114,9 @@ function UploadForm({ defaultType, defaultContent, onDone }: { defaultType: stri
 
       <div className="space-y-5 p-6">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Media type">
+          <Field htmlFor="um-media-type" label="Media type">
             <Select value={type} onValueChange={setType}>
-              <SelectTrigger className="w-full" aria-label="Media type">
+              <SelectTrigger id="um-media-type" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

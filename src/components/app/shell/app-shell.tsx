@@ -54,6 +54,13 @@ export function CreateContentButtonFallback() {
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <ScheduleDialogProvider>
+      {/* First tab stop: jumps past the sidebar and header (A11Y-05) */}
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground focus:shadow-lg"
+      >
+        Skip to main content
+      </a>
       <PlatformIconSprite />
       <Suspense fallback={<Sidebar footer={<UserFooter />} />}>
         <SidebarWithCounts />
@@ -84,7 +91,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
         <SimulationBanner />
-        <main className="mx-auto w-full max-w-[1600px] flex-1 space-y-6 px-4 py-6 md:px-8 md:py-8">{children}</main>
+        <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[1600px] flex-1 space-y-6 px-4 py-6 outline-none md:px-8 md:py-8">{children}</main>
       </div>
     </ScheduleDialogProvider>
   );

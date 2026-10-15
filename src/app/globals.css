@@ -124,3 +124,17 @@
   .thin-scroll::-webkit-scrollbar-thumb { background: rgb(85 107 47 / 0.25); border-radius: 999px; }
   .thin-scroll::-webkit-scrollbar-track { background: transparent; }
 }
+
+/* People who ask their system for less motion get none: transitions and
+   animations finish at once. Spinners keep turning, since they show that work
+   is in progress. */
+@media (prefers-reduced-motion: reduce) {
+  *:not(.animate-spin),
+  *:not(.animate-spin)::before,
+  *:not(.animate-spin)::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
