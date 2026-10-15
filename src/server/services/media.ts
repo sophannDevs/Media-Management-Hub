@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { storage } from "@/lib/storage";
 import { ActivityType, MediaType } from "@/lib/workflow/statuses";
 import { ServiceError } from "../errors";
+import { variantKeysOf } from "./derivatives";
 import { logActivity } from "./activity";
 import { syncPublishingStatus } from "./content";
 
@@ -85,6 +86,8 @@ export async function deleteMediaAsset(id: string) {
   if (asset.thumbnailFor) await db.content.update({ where: { id: asset.thumbnailFor.id }, data: { thumbnailAssetId: null } });
   await db.mediaAsset.delete({ where: { id } });
   if (asset.storageKey) await storage.remove(asset.storageKey);
+  // Its smaller copies go with it (PERF-08)
+  for (const k of variantKeysOf(asset.variants)) await storage.remove(k).catch(() => {});
 
   if (asset.contentId) {
     if (asset.type === "IMAGE") {

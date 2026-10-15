@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { addDaysToKey, dayKey, dayRangeUtc, fmtDate, fmtDateTime, fmtShort, fmtTime, relativeDay, timeAgo, weekKeys } from "@/lib/dates";
-import { mediaUrl } from "@/lib/media-url";
+import { mediaUrl, variantUrl } from "@/lib/media-url";
 import { providerMeta } from "@/lib/platforms/registry";
 import { checklist, completion, deriveStage, imageStage, isReadyToPost, missingRequirements } from "@/lib/workflow/rules";
 import { Priority, PRODUCTION_STAGES, Stage } from "@/lib/workflow/statuses";
@@ -223,6 +223,7 @@ const assetSelect = {
   height: true,
   durationSec: true,
   isSelected: true,
+  variants: true,
   createdAt: true,
 } satisfies Prisma.MediaAssetSelect;
 
@@ -299,7 +300,11 @@ export async function getContentWorkspace(id: string) {
 
   const state = toContentState({ ...c, media: c.media.filter((m) => m.type === "IMAGE"), script: c.script ? { body: c.script.body } : null, imagePrompt: c.imagePrompt ? { prompt: c.imagePrompt.prompt } : null });
   const ready = isReadyToPost(state, rules);
-  const asset = (a: (typeof c.media)[number]) => ({ ...a, url: mediaUrl(a), createdLabel: fmtShort(a.createdAt, tz) });
+  const asset = (a: (typeof c.media)[number]) => {
+    const url = mediaUrl(a);
+    // A video's own poster frame (PERF-08); the player shows it in place of loading any of the file
+    return { ...a, url, posterUrl: a.type === "VIDEO" ? variantUrl(url, a.variants, "poster") : null, createdLabel: fmtShort(a.createdAt, tz) };
+  };
   const images = c.media.filter((m) => m.type === "IMAGE").map(asset);
   const thumbnails = c.media.filter((m) => m.type === "THUMBNAIL").map(asset);
   const videos = c.media.filter((m) => m.type === "VIDEO").map(asset);

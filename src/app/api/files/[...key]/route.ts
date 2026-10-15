@@ -1,7 +1,9 @@
 import type { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { fileEtag, isNotModified, parseRange, rangeApplies } from "@/lib/http-cache";
+import { variantMime } from "@/lib/media/derivatives";
 import { storage } from "@/lib/storage";
+import { variantKeysOf } from "@/server/services/derivatives";
 import { apiError, route } from "@/server/api";
 import { unauthorizedResponse } from "@/server/auth/dal";
 
@@ -15,9 +17,14 @@ export const GET = route(async (req: NextRequest, ctx: RouteContext<"/api/files/
   const unauthorized = await unauthorizedResponse();
   if (unauthorized) return unauthorized;
   const { key: parts } = await ctx.params;
-  const key = parts.map(decodeURIComponent).join("/");
 
-  const asset = await db.mediaAsset.findUnique({ where: { storageKey: key }, select: { mimeType: true, fileName: true } });
+  const asset = await db.mediaAsset.findUnique({ where: { storageKey: parts.map(decodeURIComponent).join("/") }, select: { mimeType: true, fileName: true, variants: true } });
+  // A smaller copy when asked for one that exists (PERF-08); the original otherwise, so a page never breaks on a missing variant
+  const wanted = req.nextUrl.searchParams.get("v");
+  const variants = asset ? ((asset.variants as Record<string, string> | null) ?? {}) : {};
+  const servedVariant = wanted && variantKeysOf(variants).includes(variants[wanted] ?? "") ? wanted : null;
+  const key = servedVariant ? variants[servedVariant] : parts.map(decodeURIComponent).join("/");
+  const mimeType = servedVariant ? variantMime(servedVariant) : (asset?.mimeType ?? "application/octet-stream");
   const info = asset ? await storage.stat(key) : null;
   if (!asset || !info) return apiError(404, "NOT_FOUND", "File not found.");
 
@@ -27,18 +34,19 @@ export const GET = route(async (req: NextRequest, ctx: RouteContext<"/api/files/
   // keep an uploaded file from running scripts (nosniff, a sandboxing CSP).
   if (process.env.STORAGE_DIRECT_GET === "true" && storage.signedGetUrl) {
     const download = req.nextUrl.searchParams.has("download");
-    const location = await storage.signedGetUrl(key, { fileName: asset.fileName, contentType: asset.mimeType, download });
+    const location = await storage.signedGetUrl(key, { fileName: asset.fileName, contentType: mimeType, download });
     return new Response(null, { status: 302, headers: { Location: location, "Cache-Control": "private, no-store" } });
   }
 
   const etag = fileEtag(info.size, info.modifiedAt);
-  const validators = { ETag: etag, "Last-Modified": info.modifiedAt.toUTCString(), "Cache-Control": "private, max-age=86400, immutable" };
+  // A copy that doesn't exist yet is answered with the original, revalidated next time so the copy takes over once made
+  const validators = { ETag: etag, "Last-Modified": info.modifiedAt.toUTCString(), "Cache-Control": wanted && !servedVariant ? "private, no-cache" : "private, max-age=86400, immutable" };
   if (isNotModified(req.headers, etag, info.modifiedAt)) return new Response(null, { status: 304, headers: validators });
 
   const download = req.nextUrl.searchParams.has("download");
   const headers = new Headers({
     ...validators,
-    "Content-Type": asset.mimeType,
+    "Content-Type": mimeType,
     "Accept-Ranges": "bytes",
     "Content-Disposition": `${download ? "attachment" : "inline"}; filename="${encodeURIComponent(asset.fileName)}"`,
     // Uploaded files are untrusted: never let them run scripts when opened directly (e.g. SVG)

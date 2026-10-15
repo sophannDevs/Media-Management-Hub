@@ -3,7 +3,7 @@ import { io } from "next/cache";
 import { cache } from "react";
 import { db } from "@/lib/db";
 import { fmt, fmtDateTime, formatBytes } from "@/lib/dates";
-import { mediaUrl } from "@/lib/media-url";
+import { blurOf, mediaUrl, variantUrl } from "@/lib/media-url";
 import { MediaType, type MediaTypeCode } from "@/lib/workflow/statuses";
 import { getPageContext } from "./shared";
 
@@ -83,6 +83,7 @@ const assetSelect = {
   height: true,
   durationSec: true,
   isSelected: true,
+  variants: true,
   createdAt: true,
   content: {
     select: {
@@ -169,7 +170,11 @@ function toItem(a: AssetRow, now: Date, tz: string) {
     /** Uploaded files download through the files route; external links open in a new tab. */
     downloadUrl: a.externalUrl ?? (url ? `${url}?download=1` : null),
     external: !!a.externalUrl,
-    posterUrl: a.type === "VIDEO" && a.content ? mediaUrl(a.content.thumbnailAsset ?? a.content.media[0]) : null,
+    // A video's own poster frame (PERF-08) when it has one; the content's thumbnail otherwise
+    posterUrl: a.type === "VIDEO" ? (variantUrl(url, a.variants, "poster") ?? (a.content ? mediaUrl(a.content.thumbnailAsset ?? a.content.media[0]) : null)) : null,
+    /** The short silent preview of a video, when made */
+    previewUrl: a.type === "VIDEO" ? variantUrl(url, a.variants, "preview") : null,
+    blur: blurOf(a.variants),
     mimeType: a.mimeType,
     size: a.size ? formatBytes(a.size) : a.externalUrl ? "Linked" : "—",
     dimensions: a.width && a.height ? `${a.width}×${a.height}` : null,

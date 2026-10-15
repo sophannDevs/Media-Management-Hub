@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { logger } from "@/lib/log";
 import { syncMockAnalytics } from "./services/analytics-sync";
 import { processDueSchedules, runMaintenance, WORKER_ID } from "./services/publishing";
+import { processPendingDerivatives } from "./services/derivatives";
 import { reconcileStorage } from "./services/storage-reconcile";
 
 const log = logger.child({ component: "worker", workerId: WORKER_ID });
@@ -66,6 +67,8 @@ export function tick(): Promise<{ processed: number; published: number; failed: 
     const started = Date.now();
     try {
       const summary = await processDueSchedules();
+      // Smaller copies for uploads that missed theirs (PERF-08): a few per pass
+      await processPendingDerivatives().catch((e) => log.warn("derivatives pass failed", { err: e }));
       await runPeriodic("maintenance", () => runMaintenance());
       await runPeriodic("analytics", () => syncMockAnalytics());
       await runPeriodic("storage-reconcile", () => reconcileStorage());

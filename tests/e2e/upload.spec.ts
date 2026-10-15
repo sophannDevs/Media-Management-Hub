@@ -53,3 +53,35 @@ test("uploading a file the library already has warns first, and can go ahead any
   await expect(dialog).toBeHidden();
   await expect(page.getByRole("article").filter({ hasText: "tiny.mp4" })).toHaveCount(2);
 });
+
+test("an uploaded image is shown as a small WebP copy, not the original (PERF-08)", async ({ page }, info) => {
+  test.skip(info.project.name !== "desktop", "mutates the shared e2e database");
+
+  await page.goto("/media");
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "Upload media" }).click();
+  const dialog = page.getByRole("dialog", { name: "Upload media" });
+  await dialog.getByRole("combobox", { name: "Media type" }).click();
+  await page.getByRole("option", { name: "Image" }).click();
+  await dialog.locator('input[type="file"]').setInputFiles("tests/fixtures/wide.png");
+  await expect(page.getByText("1 file uploaded")).toBeVisible();
+  await expect(dialog).toBeHidden();
+
+  // The card asks for the copies by width; the browser picks one that fits
+  const img = page.getByRole("article").filter({ hasText: "wide.png" }).first().locator("img").first();
+  const src = (await img.getAttribute("src"))!;
+  expect(src).toMatch(/^\/api\/files\//);
+  await expect(img).toHaveAttribute("srcset", /\?v=w320 320w, .*\?v=w640 640w, .*\?v=w1280 1280w/);
+  await expect(img).toHaveAttribute("loading", "lazy");
+
+  // The copies are made right after the upload is registered: within a few seconds the small one is served
+  await expect.poll(async () => (await page.request.get(`${src}?v=w320`)).headers()["content-type"], { timeout: 20_000 }).toBe("image/webp");
+  const small = await page.request.get(`${src}?v=w320`);
+  const original = await page.request.get(src);
+  expect(original.headers()["content-type"]).toBe("image/png");
+  expect(Number(small.headers()["content-length"])).toBeLessThan(Number(original.headers()["content-length"]));
+  // A copy that doesn't exist is answered with the original, not an error
+  const unknown = await page.request.get(`${src}?v=w9999`);
+  expect(unknown.status()).toBe(200);
+  expect(unknown.headers()["content-type"]).toBe("image/png");
+});

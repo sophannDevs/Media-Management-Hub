@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { storage } from "@/lib/storage";
+import { variantKeysOf } from "./derivatives";
 import { deriveContentState, isReadyToPost, missingRequirements, normalizeHashtags, parseTags, scheduleActiveKey } from "@/lib/workflow/rules";
 import { ActivityType, ImageStatus, NotificationType, ReviewStatus, ScriptStatus, VideoStatus } from "@/lib/workflow/statuses";
 import { ServiceError } from "../errors";
@@ -320,13 +321,13 @@ export async function restoreContents(ids: string[], withPosts = true): Promise<
 
 /** Deletes content, its media records and the uploaded files. */
 export async function deleteContents(ids: string[]) {
-  const assets = await db.mediaAsset.findMany({ where: { contentId: { in: ids } }, select: { id: true, storageKey: true } });
+  const assets = await db.mediaAsset.findMany({ where: { contentId: { in: ids } }, select: { id: true, storageKey: true, variants: true } });
   await db.$transaction([
     db.content.updateMany({ where: { id: { in: ids } }, data: { videoAssetId: null, thumbnailAssetId: null } }),
     db.mediaAsset.deleteMany({ where: { id: { in: assets.map((a) => a.id) } } }),
     db.content.deleteMany({ where: { id: { in: ids } } }),
   ]);
-  await Promise.all(assets.flatMap((a) => (a.storageKey ? [storage.remove(a.storageKey)] : [])));
+  await Promise.all(assets.flatMap((a) => [...(a.storageKey ? [a.storageKey] : []), ...variantKeysOf(a.variants)].map((k) => storage.remove(k).catch(() => {}))));
 }
 
 export async function bulkSetCategory(ids: string[], categoryId: string | null) {

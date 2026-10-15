@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { logger } from "@/lib/log";
 import { storage } from "@/lib/storage";
+import { variantKeysOf } from "./derivatives";
 
 // Storage and the database drift apart over time (MEDIA-03): an upload whose
 // registration failed, a bucket object a browser left behind, a file deleted
@@ -34,8 +35,9 @@ const log = logger.child({ component: "storage-reconcile" });
  */
 export async function reconcileStorage({ dryRun = false, graceMs = RECONCILE_GRACE_MS, prefix = "media/", now = new Date() }: { dryRun?: boolean; graceMs?: number; prefix?: string; now?: Date } = {}): Promise<ReconcileReport> {
   const objects = await storage.list(prefix);
-  const assets = await db.mediaAsset.findMany({ where: { storageKey: { not: null } }, select: { id: true, fileName: true, storageKey: true } });
-  const referenced = new Set(assets.map((a) => a.storageKey!));
+  const assets = await db.mediaAsset.findMany({ where: { storageKey: { not: null } }, select: { id: true, fileName: true, storageKey: true, variants: true } });
+  // The originals and their smaller copies (PERF-08) are all spoken for
+  const referenced = new Set(assets.flatMap((a) => [a.storageKey!, ...variantKeysOf(a.variants)]));
   const present = new Set(objects.map((o) => o.key));
 
   const orphans: string[] = [];

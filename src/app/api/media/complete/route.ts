@@ -9,6 +9,7 @@ import { MediaType } from "@/lib/workflow/statuses";
 import { apiError, rejectCrossSite, route } from "@/server/api";
 import { unauthorizedResponse } from "@/server/auth/dal";
 import { ServiceError } from "@/server/errors";
+import { scheduleDerivatives } from "@/server/services/derivatives";
 import { createMediaAsset, duplicateRefusal, findDuplicate } from "@/server/services/media";
 
 // Second half of a direct-to-bucket upload (MEDIA-01): the browser has PUT
@@ -92,6 +93,7 @@ export const POST = route(async (req) => {
       container: probe?.container ?? null,
       probedAt: probe ? new Date() : null,
     });
+    scheduleDerivatives(asset.id);
     return Response.json({ ok: true, created: [asset.id], errors: [], assets: [{ id: asset.id, size: info.size, sha256, mimeType: check.mimeType }] });
   } catch (e) {
     // Never leave an object behind that isn't registered

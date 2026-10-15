@@ -360,7 +360,8 @@ function PreviewMedia({ asset: a }: { asset: MediaItem }) {
         </div>
       );
     case "VIDEO":
-      return <video controls preload="metadata" poster={a.posterUrl ?? undefined} src={a.url} className="aspect-video max-h-[65vh] w-full bg-black" />;
+      // Nothing of the full video is fetched until play (PERF-08): the poster stands in
+      return <video controls preload="none" poster={a.posterUrl ?? undefined} src={a.url} className="aspect-video max-h-[65vh] w-full bg-black" />;
     case "AUDIO":
     case "MUSIC":
       return (

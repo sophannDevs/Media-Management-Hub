@@ -1,5 +1,6 @@
 import { Clapperboard, ImageIcon, Lightbulb, Play, Smartphone } from "lucide-react";
 import { formatDuration } from "@/lib/dates";
+import { thumbSrcSet } from "@/lib/media-url";
 import { cn } from "@/lib/utils";
 
 const GRADIENTS = [
@@ -25,6 +26,8 @@ export function ContentThumb({
   icon = "video",
   durationSec,
   className,
+  sizes,
+  blur,
 }: {
   src?: string | null;
   seed: string;
@@ -32,17 +35,21 @@ export function ContentThumb({
   icon?: "video" | "short" | "idea" | "image" | "play";
   durationSec?: number | null;
   className?: string;
+  /** How wide the thumbnail is laid out, for the browser to pick a size (PERF-08); default: a card in a grid */
+  sizes?: string;
+  /** A tiny blurred copy (data URI) shown until the image loads */
+  blur?: string | null;
 }) {
   const [a, b] = GRADIENTS[hashIndex(seed)];
   const Icon = { video: Clapperboard, short: Smartphone, idea: Lightbulb, image: ImageIcon, play: Play }[icon];
   return (
     <div
       className={cn("relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg text-white/90", className)}
-      style={{ background: `linear-gradient(135deg, ${a}, ${b})` }}
+      style={{ background: blur ? `url(${blur}) center / cover no-repeat, linear-gradient(135deg, ${a}, ${b})` : `linear-gradient(135deg, ${a}, ${b})` }}
     >
       {src ? (
         // eslint-disable-next-line @next/next/no-img-element -- user media served from /api/files, sizes vary
-        <img src={src} alt={alt} className="absolute inset-0 size-full object-cover" loading="lazy" />
+        <img src={src} srcSet={thumbSrcSet(src)} sizes={sizes ?? "(max-width: 640px) 50vw, 320px"} alt={alt} className="absolute inset-0 size-full object-cover" loading="lazy" decoding="async" />
       ) : (
         <Icon className="size-[38%] max-h-7 max-w-7 opacity-90" aria-hidden />
       )}

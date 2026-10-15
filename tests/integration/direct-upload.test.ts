@@ -65,10 +65,13 @@ vi.mock("@/lib/storage", () => {
   };
 });
 
+vi.mock("@/server/services/derivatives", () => ({ scheduleDerivatives: vi.fn() }));
+
 import { POST as complete } from "@/app/api/media/complete/route";
 import { DELETE as abort, POST as presign } from "@/app/api/media/presign/route";
 import { db } from "@/lib/db";
 import { ffprobeAvailable } from "@/lib/media/probe";
+import { scheduleDerivatives } from "@/server/services/derivatives";
 import { seedPlatforms } from "../helpers/factories";
 
 const post = (url: string, body: unknown) => new Request(`http://app.test${url}`, { method: "POST", headers: { host: "app.test", "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -125,6 +128,7 @@ describe("direct-to-bucket uploads (MEDIA-01)", () => {
     const sha = createHash("sha256").update(whole).digest("hex");
     expect(json.assets[0]).toMatchObject({ size: whole.length, sha256: sha, mimeType: "video/mp4" });
     const asset = await db.mediaAsset.findUniqueOrThrow({ where: { id: json.created[0] } });
+    expect(vi.mocked(scheduleDerivatives)).toHaveBeenCalledWith(asset.id); // the smaller copies follow (PERF-08)
     expect(asset).toMatchObject({ storageKey: big.key, type: "VIDEO", mimeType: "video/mp4", size: whole.length, sha256: sha });
     if (ffprobeAvailable()) expect(asset).toMatchObject({ width: 64, height: 64, codec: "h264+aac" });
     expect(multipart.size).toBe(0);

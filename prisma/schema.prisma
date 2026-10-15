@@ -279,6 +279,10 @@ model MediaAsset {
   codec       String?
   container   String?
   probedAt    DateTime?
+  /// Smaller copies (PERF-08): variant name -> storage key (w320, w640, w1280, poster, preview) and blur -> data URI
+  variants    Json?
+  derivedAt   DateTime?
+  deriveError String?
   /// Images: chosen for the final video
   isSelected  Boolean  @default(false)
   createdAt   DateTime @default(now())
@@ -291,6 +295,8 @@ model MediaAsset {
   @@index([contentId, type])
   @@index([type])
   @@index([sha256])
+  /// The worker's backfill of missing variants
+  @@index([derivedAt])
 }
 
 model SocialAccount {

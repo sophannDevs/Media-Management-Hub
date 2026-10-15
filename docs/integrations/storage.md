@@ -63,6 +63,20 @@ or keep the old provider until the old assets are gone.
   SHA-256 of the whole object read once from the bucket, ffprobe — and
   registration; an object that fails is deleted).
 
+## Smaller copies (PERF-08)
+
+Every uploaded image gets WebP copies 320, 640 and 1280 pixels wide (never
+larger than the original) and a 16-pixel blurred placeholder; every video gets
+a poster frame (WebP, 640 wide) and a three-second silent preview, when
+`ffmpeg` is on the server (`FFMPEG_PATH` points elsewhere). They are stored
+next to the original, named after it (`<key>.w320.webp`, `<key>.poster.webp`,
+`<key>.preview.mp4`), and listed on the asset (`variants`). Pages ask for them
+with `?v=w320` (and so on) on the file URL; the route answers with the original
+when a copy doesn't exist, so nothing breaks while they are being made. They
+are made right after an upload is registered and, for anything that was missed,
+by the worker a few at a time; they go when the asset goes, and the reconcile
+pass keeps them.
+
 ## Not verified (needs a bucket)
 
 - Any provider's behaviour against AWS, R2, B2 or MinIO: endpoint and

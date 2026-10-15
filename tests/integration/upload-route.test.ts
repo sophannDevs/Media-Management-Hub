@@ -13,9 +13,12 @@ const dir = await vi.hoisted(async () => {
   return p;
 });
 
+vi.mock("@/server/services/derivatives", () => ({ scheduleDerivatives: vi.fn() }));
+
 import { POST } from "@/app/api/media/route";
 import { db } from "@/lib/db";
 import { ffprobeAvailable } from "@/lib/media/probe";
+import { scheduleDerivatives } from "@/server/services/derivatives";
 import { createContent } from "@/server/services/content";
 import { seedPlatforms } from "../helpers/factories";
 
@@ -156,6 +159,8 @@ describe("POST /api/media (PERF-07)", () => {
     expect(asset.fileName).not.toMatch(/[\\/]/);
     expect(asset.storageKey).toMatch(/^media\/\d{4}\/\d{2}\/[\w.-]+$/);
     expect(filesOnDisk()).toHaveLength(1);
+    // The smaller copies are made after the answer is sent (PERF-08; the job has its own tests)
+    expect(vi.mocked(scheduleDerivatives)).toHaveBeenCalledWith(asset.id);
   });
 });
 

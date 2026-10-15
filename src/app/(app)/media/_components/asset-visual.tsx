@@ -1,5 +1,6 @@
 import { AudioLines, File, Music, Play } from "lucide-react";
 import { ContentThumb } from "@/components/app/content-thumb";
+import { HoverPreview } from "@/components/app/hover-preview";
 import { cn } from "@/lib/utils";
 import type { MediaItem } from "@/server/queries/media";
 
@@ -34,14 +35,15 @@ export function AssetVisual({ asset, large, className }: { asset: MediaItem; lar
   switch (asset.type) {
     case "IMAGE":
     case "THUMBNAIL":
-      body = <ContentThumb src={asset.url} seed={asset.id} icon="image" className="size-full rounded-none" />;
+      body = <ContentThumb src={asset.url} seed={asset.id} icon="image" blur={asset.blur} sizes={large ? "(max-width: 768px) 100vw, 768px" : undefined} className="size-full rounded-none" />;
       break;
     case "VIDEO":
       body = (
         <>
-          <ContentThumb src={asset.posterUrl} seed={asset.content?.id ?? asset.id} icon="play" className="size-full rounded-none" />
+          <ContentThumb src={asset.posterUrl} seed={asset.content?.id ?? asset.id} icon="play" blur={asset.blur} sizes={large ? "(max-width: 768px) 100vw, 768px" : undefined} className="size-full rounded-none" />
+          {asset.previewUrl && !large && <HoverPreview src={asset.previewUrl} />}
           {asset.posterUrl && (
-            <span className="absolute inset-0 flex items-center justify-center bg-black/10">
+            <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/10">
               <span className={cn("flex items-center justify-center rounded-full bg-black/55 text-white", large ? "size-14" : "size-10")}>
                 <Play className={cn("translate-x-px fill-current", large ? "size-6" : "size-4")} aria-hidden />
               </span>

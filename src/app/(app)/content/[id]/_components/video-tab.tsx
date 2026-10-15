@@ -63,7 +63,8 @@ function FinalVideo({ data }: { data: ContentWorkspace }) {
           <>
             <div className="relative aspect-video overflow-hidden rounded-xl bg-stone-900">
               {v.url ? (
-                <video key={v.id} src={v.url} poster={c.thumbUrl ?? undefined} controls preload="metadata" className="size-full bg-black object-contain" />
+                // With a poster to show, nothing of the file is fetched until play (PERF-08)
+                <video key={v.id} src={v.url} poster={v.posterUrl ?? c.thumbUrl ?? undefined} controls preload={v.posterUrl || c.thumbUrl ? "none" : "metadata"} className="size-full bg-black object-contain" />
               ) : (
                 <>
                   <ContentThumb src={c.thumbUrl} seed={c.id} icon="play" className="size-full rounded-none opacity-70" />
