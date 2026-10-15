@@ -2,7 +2,7 @@
 
 import { BadgeCheck, ClipboardPaste, Copy, Eye, GitCommitHorizontal, History, LoaderCircle, MessageSquareWarning, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Panel } from "@/components/app/content-bits";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
@@ -13,7 +13,10 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useAutosaveDraft, useLeaveWarning, useLoadedDraft } from "@/hooks/use-draft";
 import { useServerAction } from "@/hooks/use-server-action";
+import { fmt } from "@/lib/dates";
+import { browserStore, clearDraft } from "@/lib/drafts";
 import { cn } from "@/lib/utils";
 import { wordCount } from "@/lib/workflow/rules";
 import { ScriptStatus } from "@/lib/workflow/statuses";
@@ -38,6 +41,46 @@ export function ScriptTab({ data }: { data: ContentWorkspace }) {
   const gen = useServerAction();
 
   const dirty = body !== saved;
+
+  // Autosave (UX-03): the text is kept in this browser a moment after each change and on the server
+  // a few seconds after the last one, so a closed tab or a crash loses nothing. A draft from an
+  // earlier session is offered, never applied on its own.
+  const draftKey = `script:${c.id}`;
+  const baseVersion = data.script.currentVersion;
+  const local = useLoadedDraft<{ body: string; baseVersion: number }>(draftKey);
+  const [draftResolved, setDraftResolved] = useState(false);
+  const offer = useMemo(() => {
+    const mine = local && local.value.baseVersion === baseVersion && local.value.body !== saved ? { body: local.value.body, at: local.at } : null;
+    const theirs = data.script.draft;
+    return (mine && theirs ? (mine.at >= theirs.at ? mine : theirs) : (mine ?? theirs)) ?? null;
+  }, [local, data.script.draft, baseVersion, saved]);
+  const offerOpen = !!offer && !draftResolved;
+  const draftValue = useMemo(() => ({ body, baseVersion }), [body, baseVersion]);
+  const { savedAt, failed: draftFailed } = useAutosaveDraft(draftKey, draftValue, { dirty, paused: offerOpen });
+  // The browser's own "leave this page?" prompt, only while the text is not safely kept anywhere
+  useLeaveWarning(dirty && (offerOpen || draftFailed));
+  useEffect(() => {
+    if (!dirty || offerOpen) return;
+    const timer = setTimeout(() => {
+      fetch(`/api/content/${c.id}/script-draft`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ body, baseVersion }) }).catch(() => {});
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [c.id, body, baseVersion, dirty, offerOpen]);
+
+  function restoreDraft() {
+    if (!offer) return;
+    setBody(offer.body);
+    setSource("MANUAL");
+    setDraftResolved(true);
+    toast.success("Draft restored — save it as a version when you're happy with it");
+  }
+
+  function discardDraft() {
+    const store = browserStore();
+    if (store) clearDraft(store, draftKey);
+    fetch(`/api/content/${c.id}/script-draft`, { method: "DELETE" }).catch(() => {});
+    setDraftResolved(true);
+  }
   const words = wordCount(body);
   const minutes = Math.max(1, Math.round(words / 150));
   const scriptTemplates = data.prompts.filter((p) => p.category === "SCRIPT");
@@ -124,6 +167,22 @@ export function ScriptTab({ data }: { data: ContentWorkspace }) {
             </Button>
           </div>
 
+          {offerOpen && offer && (
+            <div role="status" className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              <History className="size-4 shrink-0" />
+              <p className="min-w-0 flex-1">
+                You have text from {fmt(offer.at, data.tz, "MMM d, yyyy · h:mm a")} that was never saved as a version.
+                {dirty && " Restoring it replaces what is in the editor now."}
+              </p>
+              <Button size="sm" variant="outline" className="bg-white" onClick={restoreDraft}>
+                Restore it
+              </Button>
+              <Button size="sm" variant="ghost" onClick={discardDraft}>
+                Discard
+              </Button>
+            </div>
+          )}
+
           <Textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
@@ -136,7 +195,12 @@ export function ScriptTab({ data }: { data: ContentWorkspace }) {
           <div className="flex flex-col gap-3 md:flex-row md:items-center">
             <p className="text-xs text-muted-foreground">
               {words.toLocaleString("en-US")} words · ~{minutes} min narration
-              {dirty && <span className="ml-2 font-medium text-amber-700">· Unsaved changes</span>}
+              {dirty && (
+                <span className="ml-2 font-medium text-amber-700">
+                  · Unsaved changes
+                  {offerOpen ? "" : draftFailed ? " — this browser couldn't keep a draft" : savedAt ? ` — draft kept ${fmt(savedAt, data.tz, "h:mm a")}` : ""}
+                </span>
+              )}
             </p>
             <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
               <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Version note (optional)" className="h-8 w-full sm:w-52" maxLength={200} />

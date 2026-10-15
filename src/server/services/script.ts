@@ -36,6 +36,8 @@ export async function saveScriptVersion(
     }),
     db.script.update({ where: { id: script.id }, data: { body, currentVersion: version } }),
     db.content.update({ where: { id: contentId }, data: { scriptStatus: nextStatus } }),
+    // The text is saved now: the autosaved draft has done its job (UX-03)
+    db.scriptDraft.deleteMany({ where: { contentId } }),
   ]);
   await logActivity({
     contentId,
@@ -44,6 +46,31 @@ export async function saveScriptVersion(
   });
   await syncPublishingStatus(contentId);
   return { version };
+}
+
+/** Largest script text (and draft) accepted. */
+export const MAX_SCRIPT_CHARS = 200_000;
+
+/**
+ * Keeps the text being written so a closed tab or a crash loses nothing
+ * (UX-03). One draft per content; saved over and over while typing, so it only
+ * writes its own row (no version, no activity entry, no page refresh).
+ */
+export async function saveScriptDraft(contentId: string, body: string, baseVersion: number) {
+  if (body.length > MAX_SCRIPT_CHARS) throw new ServiceError("The script is too long.");
+  // null: the content is gone (deleted in another tab), so there is nothing to keep the draft for
+  if (!(await db.content.count({ where: { id: contentId } }))) return null;
+  const draft = await db.scriptDraft.upsert({
+    where: { contentId },
+    create: { contentId, body, baseVersion },
+    update: { body, baseVersion },
+    select: { updatedAt: true },
+  });
+  return { savedAt: draft.updatedAt };
+}
+
+export async function discardScriptDraft(contentId: string) {
+  await db.scriptDraft.deleteMany({ where: { contentId } });
 }
 
 export async function restoreScriptVersion(versionId: string) {

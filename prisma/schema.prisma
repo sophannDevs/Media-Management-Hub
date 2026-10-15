@@ -145,11 +145,11 @@ model Content {
   // Also derived and kept current by syncPublishingStatus(), so lists can
   // filter, sort, count and page in SQL (WF-03).
   /// Pipeline stage: IDEA | SCRIPT | IMAGES | VIDEO | REVIEW | READY | SCHEDULED | PUBLISHED | FAILED
-  stage        String  @default("IDEA")
+  stage        String      @default("IDEA")
   /// What keeps it from Ready to Post: one bit per REQUIREMENTS code (src/lib/workflow/rules.ts)
-  missingMask  Int     @default(0)
+  missingMask  Int         @default(0)
   /// Checklist completion, 0-100
-  completion   Int     @default(0)
+  completion   Int         @default(0)
   /// Image shown in lists: the thumbnail, else the first selected image, else the first image
   coverAssetId String?
   coverAsset   MediaAsset? @relation("ContentCover", fields: [coverAssetId], references: [id], onDelete: SetNull)
@@ -173,6 +173,7 @@ model Content {
   tags        Tag[]
   platforms   ContentPlatform[]
   script      Script?
+  scriptDraft ScriptDraft?
   imagePrompt ImagePrompt?
   media       MediaAsset[]         @relation("ContentMedia")
   schedules   PublishingSchedule[]
@@ -224,6 +225,19 @@ model ScriptVersion {
   createdAt DateTime @default(now())
 
   @@unique([scriptId, version])
+}
+
+/// Script text being written and not yet saved as a version. Autosaved while
+/// typing so a closed tab or a crash loses nothing (UX-03). It is not a version:
+/// saving one replaces the draft, and a draft started from an older version
+/// than the current one is ignored.
+model ScriptDraft {
+  contentId   String   @id
+  content     Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  body        String
+  /// Script.currentVersion when the editing started
+  baseVersion Int
+  updatedAt   DateTime @updatedAt
 }
 
 model ImagePrompt {
@@ -291,12 +305,12 @@ model SocialAccount {
   schedules      PublishingSchedule[]
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
+  // Also in migrations (not expressible here): at most one default account per platform
+  // (unique index on platformId WHERE isDefault), and CHECK constraints on every status / type column.
 
   /// One connection per platform account (externalId is null until real OAuth fills it)
   @@unique([platformId, externalId])
   @@index([platformId])
-  // Also in migrations (not expressible here): at most one default account per platform
-  // (unique index on platformId WHERE isDefault), and CHECK constraints on every status / type column.
 }
 
 /// A planned post of one content item to one platform/account.

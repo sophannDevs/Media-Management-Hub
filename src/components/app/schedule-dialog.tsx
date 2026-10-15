@@ -4,6 +4,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { CalendarCheck, CircleX, Globe, Link2, Lock, Pencil, Plus, Repeat2, TriangleAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { ContentPicker } from "@/components/app/content-picker";
 import { ContentThumb } from "@/components/app/content-thumb";
 import { PlatformIcon } from "@/components/app/platform-icon";
@@ -36,19 +37,34 @@ export function useScheduleDialog() {
 export function ScheduleDialogProvider({ children }: { children: ReactNode }) {
   const [opts, setOpts] = useState<OpenOptions | null>(null);
   const [key, setKey] = useState(0);
+  // Typed text in the open form (UX-03): closing it asks first instead of silently throwing it away
+  const [dirty, setDirty] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
   const openSchedule = useCallback((o: OpenOptions = {}) => {
     setOpts(o);
     setKey((k) => k + 1);
+    setDirty(false);
   }, []);
   const value = useMemo(() => ({ openSchedule }), [openSchedule]);
   return (
     <Ctx.Provider value={value}>
       {children}
-      <Dialog open={!!opts} onOpenChange={(o) => !o && setOpts(null)}>
+      <Dialog open={!!opts} onOpenChange={(o) => !o && (dirty ? setConfirmClose(true) : setOpts(null))}>
         <DialogContent className="max-h-[92vh] gap-0 overflow-hidden p-0 sm:max-w-2xl">
-          {opts && <ScheduleForm key={key} opts={opts} onDone={() => setOpts(null)} onSwitchContent={(contentId) => openSchedule({ ...opts, contentId, scheduleId: null })} />}
+          {opts && <ScheduleForm key={key} opts={opts} onDone={() => setOpts(null)} onDirtyChange={setDirty} onSwitchContent={(contentId) => openSchedule({ ...opts, contentId, scheduleId: null })} />}
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={confirmClose}
+        onOpenChange={setConfirmClose}
+        title="Discard your changes?"
+        description="You've changed this post's details. If you close the form now, those changes are lost."
+        confirmLabel="Discard changes"
+        onConfirm={() => {
+          setConfirmClose(false);
+          setOpts(null);
+        }}
+      />
     </Ctx.Provider>
   );
 }
@@ -87,7 +103,7 @@ const newToken = () =>
 
 type Notice = { code: "ALREADY_SCHEDULED" | "ALREADY_PUBLISHED"; message: string; scheduleId?: string };
 
-function ScheduleForm({ opts, onDone, onSwitchContent }: { opts: OpenOptions; onDone: () => void; onSwitchContent: (id: string) => void }) {
+function ScheduleForm({ opts, onDone, onDirtyChange, onSwitchContent }: { opts: OpenOptions; onDone: () => void; onDirtyChange: (dirty: boolean) => void; onSwitchContent: (id: string) => void }) {
   const router = useRouter();
   const [data, setData] = useState<ScheduleFormData | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -127,10 +143,10 @@ function ScheduleForm({ opts, onDone, onSwitchContent }: { opts: OpenOptions; on
       </div>
     );
   }
-  return <ScheduleFields data={data} opts={opts} onDone={onDone} onSwitchContent={onSwitchContent} />;
+  return <ScheduleFields data={data} opts={opts} onDone={onDone} onDirtyChange={onDirtyChange} onSwitchContent={onSwitchContent} />;
 }
 
-function ScheduleFields({ data, opts, onDone, onSwitchContent }: { data: ScheduleFormData; opts: OpenOptions; onDone: () => void; onSwitchContent: (id: string) => void }) {
+function ScheduleFields({ data, opts, onDone, onDirtyChange, onSwitchContent }: { data: ScheduleFormData; opts: OpenOptions; onDone: () => void; onDirtyChange: (dirty: boolean) => void; onSwitchContent: (id: string) => void }) {
   const editing = data.schedule;
   const content = data.content;
   const enabled = data.platforms.filter((p) => p.enabled && p.meta);
@@ -154,6 +170,12 @@ function ScheduleFields({ data, opts, onDone, onSwitchContent }: { data: Schedul
   const [notice, setNotice] = useState<Notice | null>(null);
   const [overrideOn, setOverrideOn] = useState(!!editing?.override);
   const [reason, setReason] = useState(editing?.override?.reason ?? "");
+  // What the person typed or picked as a time, against what the form opened with. The platform, account and
+  // visibility are left out: "add another platform" resets them without anyone having edited anything.
+  const typed = JSON.stringify([date, time, timezone, title, caption, hashtags, reason]);
+  const [opened, setOpened] = useState(typed);
+  const dirty = typed !== opened;
+  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
   const hardMissing = content?.missing.some((m) => m.hard) ?? false;
   const [token, setToken] = useState(newToken);
   const { run, pending } = useServerAction();
@@ -178,6 +200,8 @@ function ScheduleFields({ data, opts, onDone, onSwitchContent }: { data: Schedul
         // The next "add another platform" is a different post
         setToken(newToken());
         if (!addAnother) return onDone();
+        // What was typed is saved now: closing the form next loses nothing
+        setOpened(typed);
         const next = enabled.find((p) => p.id !== platformId && content.platforms.includes(p.id)) ?? enabled.find((p) => p.id !== platformId);
         if (next) changePlatform(next.id);
       },

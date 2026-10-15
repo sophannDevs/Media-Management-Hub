@@ -2,7 +2,7 @@
 
 import { ArrowRight, Lightbulb, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type ReactNode, useId, useState } from "react";
+import { type ReactNode, useId, useMemo, useState } from "react";
 import { PlatformIcon } from "@/components/app/platform-icon";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,13 +11,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useAutosaveDraft, useLoadedDraft } from "@/hooks/use-draft";
 import { useServerAction } from "@/hooks/use-server-action";
+import { browserStore, clearDraft } from "@/lib/drafts";
 import { cn } from "@/lib/utils";
 import { ContentType, Priority } from "@/lib/workflow/statuses";
 import { createContentAction } from "@/server/actions/content";
 import type { ContentFormOptions } from "@/server/queries/shared";
 
 const NONE = "__none";
+const DRAFT_KEY = "create-content";
 export const LANGUAGES = ["English", "Khmer", "Korean", "Thai", "Vietnamese", "Japanese"];
 
 export function CreateContentDialog({ options, trigger }: { options: ContentFormOptions; trigger?: ReactNode }) {
@@ -26,6 +29,15 @@ export function CreateContentDialog({ options, trigger }: { options: ContentForm
   const { run, pending } = useServerAction();
   const [form, setForm] = useState(() => initial(options));
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
+
+  // Unfinished input is kept in this browser (UX-03): a reload or a closed tab doesn't lose it, and
+  // the next visit offers it back instead of applying it on its own.
+  const blank = useMemo(() => JSON.stringify(initial(options)), [options]);
+  const dirty = JSON.stringify(form) !== blank;
+  const local = useLoadedDraft<typeof form>(DRAFT_KEY);
+  const [offerResolved, setOfferResolved] = useState(false);
+  const offer = local && JSON.stringify(local.value) !== blank && !offerResolved ? local : null;
+  useAutosaveDraft(DRAFT_KEY, form, { dirty, paused: !!offer });
 
   function submit(openWorkspace: boolean) {
     run(
@@ -71,6 +83,38 @@ export function CreateContentDialog({ options, trigger }: { options: ContentForm
           </DialogHeader>
 
           <div className="thin-scroll max-h-[62vh] space-y-7 overflow-y-auto p-6">
+            {offer && (
+              <div role="status" className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                <p className="min-w-0 flex-1">
+                  You started an idea on {new Date(offer.at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })} and didn&apos;t finish it.
+                  {dirty && " Restoring it replaces what is in the form now."}
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="bg-white"
+                  onClick={() => {
+                    setForm({ ...initial(options), ...offer.value });
+                    setOfferResolved(true);
+                  }}
+                >
+                  Restore it
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    const store = browserStore();
+                    if (store) clearDraft(store, DRAFT_KEY);
+                    setOfferResolved(true);
+                  }}
+                >
+                  Discard
+                </Button>
+              </div>
+            )}
             <section>
               <h3 className="mb-3 text-xs font-semibold tracking-wider text-muted-foreground uppercase">Basic information</h3>
               <div className="grid gap-4 sm:grid-cols-2">

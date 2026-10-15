@@ -271,6 +271,7 @@ export async function getContentWorkspace(id: string) {
       platforms: true,
       // Version metadata only: the text of each version is fetched when it is opened (PERF-05)
       script: { include: { versions: { orderBy: { version: "desc" }, select: { id: true, version: true, note: true, status: true, source: true, wordCount: true, createdAt: true } } } },
+      scriptDraft: { select: { body: true, baseVersion: true, updatedAt: true } },
       imagePrompt: true,
       media: { select: assetSelect, orderBy: { createdAt: "asc" } },
       videoAsset: { select: assetSelect },
@@ -368,6 +369,11 @@ export async function getContentWorkspace(id: string) {
       body: c.script?.body ?? "",
       currentVersion: c.script?.currentVersion ?? 0,
       updatedLabel: c.script ? fmtDateTime(c.script.updatedAt, tz) : null,
+      // Unsaved text autosaved earlier (UX-03). Only a draft that still applies: started from the current version and different from it
+      draft:
+        c.scriptDraft && c.scriptDraft.baseVersion === (c.script?.currentVersion ?? 0) && c.scriptDraft.body !== (c.script?.body ?? "")
+          ? { body: c.scriptDraft.body, at: c.scriptDraft.updatedAt.getTime() }
+          : null,
       versions: (c.script?.versions ?? []).map((v) => ({
         id: v.id,
         version: v.version,
