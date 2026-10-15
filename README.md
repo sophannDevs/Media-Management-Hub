@@ -115,3 +115,5 @@ src/components/ui/          shadcn/ui
 - **Phase 3**: Google AI image generation, automated content generation, analytics sync from the YouTube Analytics and Facebook Insights APIs, and email notifications.
 
 The approved static design prototype is kept in `ui-prototype/`.
+#   M e d i a - M a n a g e m e n t - H u b  
+ 
