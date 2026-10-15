@@ -171,3 +171,53 @@ export async function assignMediaToContent(id: string, contentId: string | null)
     await syncPublishingStatus(target.id);
   }
 }
+
+// ---------- Several files at once, and the same file twice (MEDIA-02) ----------
+
+/** Deletes several files; each one's workflow side effects apply as for a single delete. Files already gone are skipped. */
+export async function deleteMediaAssets(ids: string[]) {
+  let removed = 0;
+  for (const id of ids) {
+    try {
+      await deleteMediaAsset(id);
+      removed++;
+    } catch (e) {
+      if (!(e instanceof ServiceError)) throw e;
+    }
+  }
+  return { removed };
+}
+
+/** Moves several files to a content item (or unassigns them), one by one, with the same care as a single move. */
+export async function assignMediaToContents(ids: string[], contentId: string | null) {
+  let moved = 0;
+  for (const id of ids) {
+    try {
+      await assignMediaToContent(id, contentId);
+      moved++;
+    } catch (e) {
+      if (!(e instanceof ServiceError) || e.message !== "File not found.") throw e;
+    }
+  }
+  return { moved };
+}
+
+/** A ServiceError (code CONFLICT) saying which stored file the upload duplicates; `info` carries the ids for the browser. */
+export function duplicateRefusal(fileName: string, dup: NonNullable<Awaited<ReturnType<typeof findDuplicate>>>) {
+  const where = dup.content ? ` (in “${dup.content.title}”)` : "";
+  return new ServiceError(`${fileName}: already uploaded as ${dup.fileName}${where}.`, undefined, "CONFLICT", {
+    duplicateId: dup.id,
+    duplicateName: dup.fileName,
+    ...(dup.content ? { duplicateContentId: dup.content.id, duplicateContentTitle: dup.content.title } : {}),
+  });
+}
+
+/** The stored file with exactly these bytes, when the library already has one: the asset and the content it belongs to. */
+export async function findDuplicate(sha256: string, excludeId?: string) {
+  const a = await db.mediaAsset.findFirst({
+    where: { sha256, storageKey: { not: null }, ...(excludeId ? { id: { not: excludeId } } : {}) },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, fileName: true, type: true, createdAt: true, content: { select: { id: true, title: true } } },
+  });
+  return a;
+}

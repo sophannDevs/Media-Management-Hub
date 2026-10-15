@@ -9,7 +9,7 @@ import { MediaType } from "@/lib/workflow/statuses";
 import { apiError, rejectCrossSite, route } from "@/server/api";
 import { unauthorizedResponse } from "@/server/auth/dal";
 import { ServiceError } from "@/server/errors";
-import { createMediaAsset } from "@/server/services/media";
+import { createMediaAsset, duplicateRefusal, findDuplicate } from "@/server/services/media";
 
 // Second half of a direct-to-bucket upload (MEDIA-01): the browser has PUT
 // the file to the bucket; this finishes a multipart upload, then inspects the
@@ -28,6 +28,8 @@ const schema = z.object({
   width: z.number().positive().nullish(),
   height: z.number().positive().nullish(),
   durationSec: z.number().positive().nullish(),
+  /** The browser was warned the file is a duplicate and chose to keep it (MEDIA-02) */
+  allowDuplicate: z.boolean().nullish(),
 });
 
 async function readHead(key: string, size: number): Promise<Uint8Array> {
@@ -69,6 +71,10 @@ export const POST = route(async (req) => {
     await storage.readStream(key).pipeThrough(inspect.stream).pipeTo(new WritableStream());
     const { sha256, bytes } = inspect.result();
     if (bytes !== info.size) throw new ServiceError(`${fileName}: the stored object could not be read whole.`);
+    if (!parsed.data.allowDuplicate) {
+      const dup = await findDuplicate(sha256);
+      if (dup) throw duplicateRefusal(fileName, dup);
+    }
     const probe = storage.signedGetUrl ? await probeMedia(await storage.signedGetUrl(key, { expiresInSeconds: 600 })) : null;
 
     const asset = await createMediaAsset({
@@ -90,7 +96,7 @@ export const POST = route(async (req) => {
   } catch (e) {
     // Never leave an object behind that isn't registered
     await storage.remove(key).catch(() => {});
-    if (e instanceof ServiceError) return apiError(400, "VALIDATION", e.message);
+    if (e instanceof ServiceError) return e.code === "CONFLICT" ? apiError(409, "CONFLICT", e.message, { info: e.info }) : apiError(400, "VALIDATION", e.message);
     throw e;
   }
 });

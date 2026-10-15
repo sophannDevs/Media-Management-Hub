@@ -15,7 +15,7 @@ import { requestContext, runInRequest } from "./request-context";
  * request leaves exactly one record: a refusal (4xx, or a deliberately
  * unavailable endpoint) at warn, an INTERNAL error (a bug) at error.
  */
-export function apiError(status: number, code: ErrorCode, message: string, opts: { details?: string[]; headers?: HeadersInit; log?: boolean } = {}) {
+export function apiError(status: number, code: ErrorCode, message: string, opts: { details?: string[]; headers?: HeadersInit; log?: boolean; /** Machine-readable extras the client acts on (e.g. the asset a duplicate matches) */ info?: Record<string, string> } = {}) {
   const ctx = requestContext();
   const requestId = ctx?.requestId ?? newRequestId();
   if (opts.log !== false) {
@@ -25,7 +25,7 @@ export function apiError(status: number, code: ErrorCode, message: string, opts:
   }
   const headers = new Headers(opts.headers);
   headers.set(REQUEST_ID_HEADER, requestId);
-  return Response.json({ ok: false, error: message, code, ...(opts.details ? { details: opts.details } : {}), requestId }, { status, headers });
+  return Response.json({ ok: false, error: message, code, ...(opts.details ? { details: opts.details } : {}), ...(opts.info ? { info: opts.info } : {}), requestId }, { status, headers });
 }
 
 /** A 403 for a request a browser sent from another site (SEC-03), or null to continue. */

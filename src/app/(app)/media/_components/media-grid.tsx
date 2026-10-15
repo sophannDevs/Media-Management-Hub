@@ -1,23 +1,24 @@
 "use client";
 
-import { Download, Ellipsis, ExternalLink, Eye, File, FileX, FolderInput, Link2, Trash2, TriangleAlert } from "lucide-react";
+import { Download, Ellipsis, ExternalLink, Eye, File, FileX, FolderInput, Link2, Trash2, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import { type ComponentProps, type ReactNode, useState } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { ContentPicker, type PickerChoice } from "@/components/app/content-picker";
 import { Field } from "@/components/app/field";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useServerAction } from "@/hooks/use-server-action";
 import { formatDuration } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import { assignMediaAction, deleteMediaAction } from "@/server/actions/media";
+import { assignMediaAction, bulkAssignMediaAction, bulkDeleteMediaAction, deleteMediaAction } from "@/server/actions/media";
 import type { MediaItem } from "@/server/queries/media";
 import { AssetVisual } from "./asset-visual";
 import { MEDIA_TYPE_ICONS } from "./media-types";
 
-type Action = "preview" | "move" | "delete";
+type Action = "preview" | "move" | "delete" | "bulk-move" | "bulk-delete";
 const UNASSIGNED = "__none";
 
 export function MediaGrid({ items }: { items: MediaItem[] }) {
@@ -26,11 +27,28 @@ export function MediaGrid({ items }: { items: MediaItem[] }) {
   const [open, setOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const { run, pending } = useServerAction();
+  // Multi-select (MEDIA-02): only files on this page count, so a selection never outlives what is shown
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const ids = items.filter((i) => selected.has(i.id)).map((i) => i.id);
+  const allSelected = items.length > 0 && ids.length === items.length;
+  const inUseCount = items.filter((i) => selected.has(i.id) && i.inUse).length;
+  const toggle = (id: string, on: boolean) =>
+    setSelected((s) => {
+      const next = new Set(s);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  const clear = () => setSelected(new Set());
 
   function show(action: Action, asset: MediaItem) {
     setActive({ action, asset });
     setOpen(true);
   }
+  const showBulk = (action: Action) => {
+    setActive({ action, asset: items.find((i) => selected.has(i.id))! });
+    setOpen(true);
+  };
   const controlled = (action: Action) => ({
     open: open && active?.action === action,
     onOpenChange: (o: boolean) => {
@@ -41,13 +59,54 @@ export function MediaGrid({ items }: { items: MediaItem[] }) {
 
   return (
     <>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border bg-white px-3 text-sm">
+          <Checkbox checked={allSelected} onCheckedChange={(v) => setSelected(v ? new Set(items.map((i) => i.id)) : new Set())} aria-label="Select all files on this page" />
+          {ids.length > 0 ? `${ids.length} selected` : "Select all"}
+        </label>
+        {ids.length > 0 && (
+          <div role="toolbar" aria-label="Selected files" className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" className="bg-white" disabled={pending} onClick={() => showBulk("bulk-move")}>
+              <FolderInput />
+              Move to…
+            </Button>
+            <Button size="sm" variant="outline" className="bg-white text-rose-700 hover:text-rose-800" disabled={pending} onClick={() => showBulk("bulk-delete")}>
+              <Trash2 />
+              Delete
+            </Button>
+            <Button size="sm" variant="ghost" onClick={clear}>
+              <X />
+              Clear
+            </Button>
+          </div>
+        )}
+      </div>
       <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 2xl:grid-cols-6">
         {items.map((a) => (
           <li key={a.id} className="min-w-0">
-            <AssetCard asset={a} busy={pending && deletingId === a.id} onAction={(action) => show(action, a)} />
+            <AssetCard asset={a} busy={pending && (deletingId === a.id || selected.has(a.id))} selected={selected.has(a.id)} onSelect={(on) => toggle(a.id, on)} onAction={(action) => show(action, a)} />
           </li>
         ))}
       </ul>
+
+      <Dialog {...controlled("bulk-move")}>
+        <DialogContent className="gap-0 p-0 sm:max-w-md">
+          <MoveManyForm ids={ids} onDone={() => { setOpen(false); clear(); }} />
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        {...controlled("bulk-delete")}
+        title={`Delete ${ids.length} file${ids.length === 1 ? "" : "s"}?`}
+        confirmLabel={inUseCount ? "Delete anyway" : "Delete"}
+        description={
+          <>
+            {inUseCount > 0 && <span className="font-medium text-foreground">{inUseCount} of them {inUseCount === 1 ? "is" : "are"} in use (a final video, thumbnail or selected image) and will be detached. </span>}
+            The files are permanently removed from storage. This can&apos;t be undone.
+          </>
+        }
+        onConfirm={() => run(() => bulkDeleteMediaAction(ids), { onSuccess: clear })}
+      />
 
       <Dialog {...controlled("preview")}>
         <DialogContent className="max-h-[92vh] gap-0 overflow-y-auto p-0 sm:max-w-3xl">
@@ -84,15 +143,19 @@ export function MediaGrid({ items }: { items: MediaItem[] }) {
   );
 }
 
-function AssetCard({ asset: a, busy, onAction }: { asset: MediaItem; busy: boolean; onAction: (action: Action) => void }) {
+function AssetCard({ asset: a, busy, selected, onSelect, onAction }: { asset: MediaItem; busy: boolean; selected: boolean; onSelect: (on: boolean) => void; onAction: (action: Action) => void }) {
   const TypeIcon = MEDIA_TYPE_ICONS[a.type] ?? File;
   const timed = ["VIDEO", "AUDIO", "MUSIC"].includes(a.type) && !!a.durationSec;
   return (
     <article
       aria-busy={busy}
-      className={cn("group overflow-hidden rounded-2xl border bg-card shadow-card transition-[border-color,opacity] hover:border-olive-300", busy && "pointer-events-none opacity-50")}
+      data-state={selected ? "selected" : undefined}
+      className={cn("group overflow-hidden rounded-2xl border bg-card shadow-card transition-[border-color,opacity] hover:border-olive-300", selected && "border-primary ring-2 ring-primary/30", busy && "pointer-events-none opacity-50")}
     >
       <div className="relative">
+        <span className={cn("absolute top-2 right-11 z-10 rounded-md bg-white/90 p-0.5 shadow-sm transition-opacity", selected ? "opacity-100" : "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100")}>
+          <Checkbox className="size-5" checked={selected} onCheckedChange={(v) => onSelect(!!v)} aria-label={`Select ${a.fileName}`} />
+        </span>
         <button
           type="button"
           onClick={() => onAction("preview")}
@@ -355,6 +418,39 @@ function MoveForm({ asset: a, onDone }: { asset: MediaItem; onDone: () => void }
         <Button type="submit" disabled={pending || target.id === current}>
           <FolderInput />
           {pending ? "Moving…" : "Move file"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
+/** Moves the selected files to one content item, or unassigns them (MEDIA-02). */
+function MoveManyForm({ ids, onDone }: { ids: string[]; onDone: () => void }) {
+  const { run, pending } = useServerAction();
+  const [target, setTarget] = useState<PickerChoice>(UNASSIGNED_CHOICE);
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        run(() => bulkAssignMediaAction(ids, target.id === UNASSIGNED ? null : target.id), { onSuccess: onDone });
+      }}
+    >
+      <DialogHeader className="border-b border-[#f1eedf] p-6 pr-12 pb-4">
+        <DialogTitle>Move {ids.length} file{ids.length === 1 ? "" : "s"}</DialogTitle>
+        <DialogDescription>Each file is detached from any role it plays on its current content item (final video, thumbnail, selected image).</DialogDescription>
+      </DialogHeader>
+      <div className="p-6">
+        <Field label="Belongs to content">
+          <ContentPicker label="Belongs to content" readiness={false} value={target} fixed={[UNASSIGNED_CHOICE]} onChange={setTarget} />
+        </Field>
+      </div>
+      <DialogFooter className="mx-0 mb-0 border-t border-[#f1eedf] bg-[#fcfbf3] px-6 py-4">
+        <Button type="button" variant="outline" className="bg-white" onClick={onDone}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={pending}>
+          <FolderInput />
+          {pending ? "Moving…" : target.id === UNASSIGNED ? "Unassign" : "Move"}
         </Button>
       </DialogFooter>
     </form>

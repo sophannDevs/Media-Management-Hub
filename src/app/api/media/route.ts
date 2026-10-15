@@ -10,7 +10,7 @@ import { MediaType } from "@/lib/workflow/statuses";
 import { apiError, rejectCrossSite, route } from "@/server/api";
 import { unauthorizedResponse } from "@/server/auth/dal";
 import { ServiceError } from "@/server/errors";
-import { createMediaAsset } from "@/server/services/media";
+import { createMediaAsset, duplicateRefusal, findDuplicate } from "@/server/services/media";
 
 // Upload of ONE file (PERF-07): the file's bytes are the request body, and
 // everything else is in the query string:
@@ -72,6 +72,11 @@ export const POST = route(async (req) => {
     const { sha256, head } = inspect.result();
     const check = checkUpload(type, fileName, head);
     if (!check.ok) throw new ServiceError(check.message);
+    // The same bytes are already in the library (MEDIA-02): refused, unless the browser said "upload anyway"
+    if (q.get("allowDuplicate") !== "1") {
+      const dup = await findDuplicate(sha256);
+      if (dup) throw duplicateRefusal(fileName, dup);
+    }
     // The real duration, dimensions and codecs, when the server has ffprobe; the browser's figures otherwise.
     // A bucket object is read by ffprobe through a signed URL (headers only).
     const localPath = storage.localPath(key);
@@ -98,7 +103,7 @@ export const POST = route(async (req) => {
     if (e instanceof UploadTooLargeError || (e instanceof Error && e.cause instanceof UploadTooLargeError)) {
       return apiError(413, "TOO_LARGE", `${fileName}: larger than ${gigabytes(limit)}.`);
     }
-    if (e instanceof ServiceError) return apiError(400, "VALIDATION", e.message);
+    if (e instanceof ServiceError) return e.code === "CONFLICT" ? apiError(409, "CONFLICT", e.message, { info: e.info }) : apiError(400, "VALIDATION", e.message);
     if (req.signal.aborted) {
       logger.warn("upload interrupted by the client", { fileName });
       return apiError(400, "VALIDATION", `${fileName}: the upload was interrupted.`, { log: false });

@@ -4,10 +4,24 @@ import { z } from "zod";
 import { mediaLinkProblem } from "@/lib/security/url";
 import { MediaType } from "@/lib/workflow/statuses";
 import * as media from "../services/media";
-import { id, runAction } from "./_run";
+import { id, ids, runAction } from "./_run";
 
 export async function deleteMediaAction(assetId: string) {
   return runAction(id, assetId, (id) => media.deleteMediaAsset(id), "File deleted");
+}
+
+/** Several files at once (MEDIA-02). */
+export async function bulkDeleteMediaAction(assetIds: string[]) {
+  return runAction(ids, assetIds, (ids) => media.deleteMediaAssets(ids), (r) => `${r.removed} file${r.removed === 1 ? "" : "s"} deleted`);
+}
+
+export async function bulkAssignMediaAction(assetIds: string[], contentId: string | null) {
+  return runAction(
+    z.object({ ids, contentId: z.string().min(1).nullable() }),
+    { ids: assetIds, contentId },
+    (d) => media.assignMediaToContents(d.ids, d.contentId),
+    (r) => (contentId ? `${r.moved} file${r.moved === 1 ? "" : "s"} moved` : `${r.moved} file${r.moved === 1 ? "" : "s"} unassigned`),
+  );
 }
 
 export async function setImageSelectedAction(assetId: string, selected: boolean) {

@@ -226,3 +226,39 @@ describe("POST /api/media (SEC-05)", () => {
     }
   });
 });
+
+// MEDIA-02: the same bytes twice.
+describe("POST /api/media (MEDIA-02 duplicates)", () => {
+  const fixture = () => readFileSync(path.resolve("tests/fixtures/tiny.mp4"));
+  const fromBuffer = (buf: Buffer) =>
+    new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new Uint8Array(buf));
+        c.close();
+      },
+    });
+
+  it("refuses a file the library already has, names the existing one, and keeps nothing", async () => {
+    const { id: contentId } = await createContent({ title: "Owner of the first copy" });
+    const first = await upload(`type=VIDEO&fileName=tiny.mp4&contentId=${contentId}`, fromBuffer(fixture()));
+    expect(first.status).toBe(200);
+    const firstId = (await first.json()).created[0];
+
+    const again = await upload("type=VIDEO&fileName=copy.mp4", fromBuffer(fixture()));
+    expect(again.status).toBe(409);
+    expect(await again.json()).toMatchObject({
+      ok: false,
+      code: "CONFLICT",
+      error: "copy.mp4: already uploaded as tiny.mp4 (in “Owner of the first copy”).",
+      info: { duplicateId: firstId, duplicateName: "tiny.mp4", duplicateContentId: contentId, duplicateContentTitle: "Owner of the first copy" },
+    });
+    expect(await db.mediaAsset.count()).toBe(1);
+    expect(filesOnDisk()).toHaveLength(1);
+
+    // The person saw the warning and chose to keep it
+    const anyway = await upload("type=VIDEO&fileName=copy.mp4&allowDuplicate=1", fromBuffer(fixture()));
+    expect(anyway.status).toBe(200);
+    expect(await db.mediaAsset.count()).toBe(2);
+    expect(filesOnDisk()).toHaveLength(2);
+  });
+});

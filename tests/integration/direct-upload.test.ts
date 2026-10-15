@@ -154,6 +154,24 @@ describe("direct-to-bucket uploads (MEDIA-01)", () => {
     expect(badKey.status).toBe(400);
   });
 
+  it("refuses to register an object the library already has, and deletes it, unless the person allowed it", async () => {
+    bucket.set("media/2026/10/direct-first.mp4", FIXTURE);
+    const first = await complete(post("/api/media/complete", { key: "media/2026/10/direct-first.mp4", type: "VIDEO", fileName: "first.mp4" }));
+    expect(first.status).toBe(200);
+    const firstId = (await first.json()).created[0];
+
+    bucket.set("media/2026/10/direct-second.mp4", FIXTURE);
+    const second = await complete(post("/api/media/complete", { key: "media/2026/10/direct-second.mp4", type: "VIDEO", fileName: "second.mp4" }));
+    expect(second.status).toBe(409);
+    expect(await second.json()).toMatchObject({ code: "CONFLICT", error: "second.mp4: already uploaded as first.mp4.", info: { duplicateId: firstId, duplicateName: "first.mp4" } });
+    expect(bucket.has("media/2026/10/direct-second.mp4")).toBe(false);
+
+    bucket.set("media/2026/10/direct-second.mp4", FIXTURE);
+    const allowed = await complete(post("/api/media/complete", { key: "media/2026/10/direct-second.mp4", type: "VIDEO", fileName: "second.mp4", allowDuplicate: true }));
+    expect(allowed.status).toBe(200);
+    expect(await db.mediaAsset.count()).toBe(2);
+  });
+
   it("lets the browser give up a multipart upload", async () => {
     const big = await (await presign(post("/api/media/presign", { type: "VIDEO", fileName: "big.mp4", size: 3 * 1024 * 1024, contentType: "video/mp4" }))).json();
     expect(multipart.has("up-1")).toBe(true);

@@ -25,3 +25,31 @@ test("an upload without a session is refused before any body is read", async ({ 
   expect(await res.json()).toMatchObject({ ok: false, code: "UNAUTHENTICATED", requestId: expect.any(String) });
   await anonymous.dispose();
 });
+
+// MEDIA-02: the same file twice. The dialog warns before sending, and the
+// person decides.
+test("uploading a file the library already has warns first, and can go ahead anyway", async ({ page }, info) => {
+  test.skip(info.project.name !== "desktop", "mutates the shared e2e database");
+  const fixture = "tests/fixtures/tiny.mp4";
+
+  await page.goto("/media");
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "Upload media" }).click();
+  const dialog = page.getByRole("dialog", { name: "Upload media" });
+  await dialog.getByRole("combobox", { name: "Media type" }).click();
+  await page.getByRole("option", { name: "Video" }).click();
+  await dialog.locator('input[type="file"]').setInputFiles(fixture);
+  await expect(page.getByText("1 file uploaded")).toBeVisible();
+  await expect(dialog).toBeHidden();
+
+  await page.getByRole("button", { name: "Upload media" }).click();
+  await dialog.getByRole("combobox", { name: "Media type" }).click();
+  await page.getByRole("option", { name: "Video" }).click();
+  await dialog.locator('input[type="file"]').setInputFiles(fixture);
+  const row = dialog.getByRole("listitem").filter({ hasText: "tiny.mp4" });
+  await expect(row).toContainText("Already uploaded as tiny.mp4");
+  await row.getByRole("button", { name: "Upload anyway" }).click();
+  await expect(page.getByText("1 file uploaded")).toBeVisible();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("article").filter({ hasText: "tiny.mp4" })).toHaveCount(2);
+});
