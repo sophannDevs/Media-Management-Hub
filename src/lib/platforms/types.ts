@@ -10,10 +10,12 @@ export interface PublishMedia {
   fileName: string;
   mimeType: string;
   size: number;
-  /** Absolute path on disk (uploaded files) */
+  /** Absolute path on disk when the file is stored locally */
   localPath?: string | null;
   /** Public URL (externally linked files) */
   url?: string | null;
+  /** The stored bytes from `start` on, wherever the file lives (local disk or a bucket, MEDIA-01) */
+  read?: (start?: number) => ReadableStream<Uint8Array>;
 }
 
 export interface PublishRequest {

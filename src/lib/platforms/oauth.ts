@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { Readable, Transform } from "node:stream";
+import { Readable } from "node:stream";
 import { PublishError, type PublishErrorCode } from "./types";
 
 // Shared pieces of the real platform integrations (PUB-07): the OAuth
@@ -203,30 +203,50 @@ export function minutesUntilPacificMidnight(now = new Date()): number {
   return Math.max(1, Math.ceil((next.getTime() - pacific.getTime()) / 60_000));
 }
 
-/**
- * A file (or its tail from `start`) as a request body that reports every
- * megabyte sent: the pipeline renews the post's lease on each report, so a
- * long upload is never mistaken for a dead worker.
- */
-export function fileBody(path: string, start: number, onProgress: (bytesSent: number) => void): ReadableStream<Uint8Array> {
+/** A stream that reports every megabyte that passes: the pipeline renews the post's lease on each report. */
+function counted(source: ReadableStream<Uint8Array>, onProgress: (bytesSent: number) => void): ReadableStream<Uint8Array> {
   let sent = 0;
   let reported = 0;
-  const counter = new Transform({
-    transform(chunk: Buffer, _enc, cb) {
-      sent += chunk.length;
-      if (sent - reported >= 1_048_576) {
-        reported = sent;
-        onProgress(sent);
-      }
-      cb(null, chunk);
-    },
-    flush(cb) {
-      if (sent !== reported) onProgress(sent);
-      cb();
-    },
-  });
-  return Readable.toWeb(createReadStream(path, start > 0 ? { start } : {}).pipe(counter)) as ReadableStream<Uint8Array>;
+  return source.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        sent += chunk.byteLength;
+        if (sent - reported >= 1_048_576) {
+          reported = sent;
+          onProgress(sent);
+        }
+        controller.enqueue(chunk);
+      },
+      flush() {
+        if (sent !== reported) onProgress(sent);
+      },
+    }),
+  );
 }
+
+/** What a platform upload reads: the stored file wherever it lives. */
+export interface MediaSource {
+  localPath?: string | null;
+  read?: (start?: number) => ReadableStream<Uint8Array>;
+}
+
+/** True when the file can be read for an upload (stored locally or in a bucket; not a linked URL). */
+export const isReadable = (m: MediaSource | null | undefined): m is MediaSource => !!m && (!!m.read || !!m.localPath);
+
+/**
+ * A stored file (or its tail from `start`) as a request body that reports
+ * every megabyte sent, so a long upload is never mistaken for a dead worker.
+ * Reads through the storage provider when it can (local disk or a bucket,
+ * MEDIA-01), from the local path otherwise.
+ */
+export function mediaBody(media: MediaSource, start: number, onProgress: (bytesSent: number) => void): ReadableStream<Uint8Array> {
+  if (media.read) return counted(media.read(start), onProgress);
+  if (media.localPath) return counted(Readable.toWeb(createReadStream(media.localPath, start > 0 ? { start } : {})) as ReadableStream<Uint8Array>, onProgress);
+  throw new PublishError("The file is not stored here (a linked URL can't be uploaded).", "VALIDATION", false);
+}
+
+/** `mediaBody` for a local file; kept for callers that only have a path. */
+export const fileBody = (path: string, start: number, onProgress: (bytesSent: number) => void) => mediaBody({ localPath: path }, start, onProgress);
 
 /** Waits `ms`, for polling loops; tests can stub it. */
 export const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));

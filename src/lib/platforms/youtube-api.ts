@@ -1,6 +1,6 @@
 import { stat } from "node:fs/promises";
 import { logger } from "@/lib/log";
-import { type ExternalAccount, fileBody, formBody, http, type HttpClassification, messageOf, minutesUntilPacificMidnight, type PlatformAuth, PlatformHttpError, type TokenSet, toPublishError, wait } from "./oauth";
+import { type ExternalAccount, formBody, http, type HttpClassification, isReadable, mediaBody, type MediaSource, messageOf, minutesUntilPacificMidnight, type PlatformAuth, PlatformHttpError, type TokenSet, toPublishError, wait } from "./oauth";
 import { PublishError, type PublishContext, type PublishRequest, type PublishResult, type ReconcileResult } from "./types";
 
 // YouTube Data API v3 (PUB-07). Built from the official pages read on
@@ -178,7 +178,7 @@ async function sessionStatus(sessionUri: string, size: number, token: string): P
 }
 
 /** Sends the file from `start`, resuming on a cut connection up to a few times. Returns the video id. */
-async function sendFile(sessionUri: string, path: string, size: number, mimeType: string, start: number, token: string, ctx: PublishContext): Promise<string> {
+async function sendFile(sessionUri: string, media: MediaSource, size: number, mimeType: string, start: number, token: string, ctx: PublishContext): Promise<string> {
   let offset = start;
   for (let attempt = 1; ; attempt++) {
     const headers: Record<string, string> = { ...bearer(token), "Content-Length": String(size - offset), "Content-Type": mimeType };
@@ -188,7 +188,7 @@ async function sendFile(sessionUri: string, path: string, size: number, mimeType
       const r = await http<{ id?: string }>(sessionUri, {
         method: "PUT",
         headers,
-        body: fileBody(path, offset, (sent) => ctx.progress({ phase: "UPLOADING", bytesSent: offset + sent, totalBytes: size })),
+        body: mediaBody(media, offset, (sent) => ctx.progress({ phase: "UPLOADING", bytesSent: offset + sent, totalBytes: size })),
         timeoutMs: uploadTimeout(size - offset),
         accept: [308],
       });
@@ -229,13 +229,14 @@ async function awaitProcessing(videoId: string, token: string, ctx: PublishConte
 }
 
 async function setThumbnail(videoId: string, thumbnail: NonNullable<PublishRequest["thumbnail"]>, token: string) {
-  if (!thumbnail.localPath) return;
+  if (!isReadable(thumbnail)) return;
   try {
-    const size = thumbnail.size || (await stat(thumbnail.localPath)).size;
+    const size = thumbnail.size || (thumbnail.localPath ? (await stat(thumbnail.localPath)).size : 0);
+    if (!size) return;
     await http(`${YOUTUBE_UPLOAD}/thumbnails/set?videoId=${encodeURIComponent(videoId)}`, {
       method: "POST",
       headers: { ...bearer(token), "Content-Type": thumbnail.mimeType, "Content-Length": String(size) },
-      body: fileBody(thumbnail.localPath, 0, () => {}),
+      body: mediaBody(thumbnail, 0, () => {}),
       timeoutMs: 120_000,
     });
   } catch (e) {
@@ -250,10 +251,11 @@ async function setThumbnail(videoId: string, thumbnail: NonNullable<PublishReque
  * processing. Throws PublishError with the pipeline's codes.
  */
 export async function publishToYouTube(req: PublishRequest, ctx: PublishContext, token: string): Promise<PublishResult> {
-  const path = req.video?.localPath;
-  if (!req.video || !path) throw new PublishError("No final video file to upload (linked videos can't be sent to YouTube).", "VALIDATION", false);
+  if (!req.video || !isReadable(req.video)) throw new PublishError("No final video file to upload (linked videos can't be sent to YouTube).", "VALIDATION", false);
   const mimeType = req.video.mimeType || "application/octet-stream";
-  const size = req.video.size || (await stat(path)).size;
+  const size = req.video.size || (req.video.localPath ? (await stat(req.video.localPath)).size : 0);
+  if (!size) throw new PublishError("The video file's size is unknown.", "VALIDATION", false);
+  const media: MediaSource = req.video;
   let state = ctx.uploadState as UploadState | null;
   if (state && (state.size !== size || state.mimeType !== mimeType)) state = null; // a different file: the old session is useless
 
@@ -274,13 +276,13 @@ export async function publishToYouTube(req: PublishRequest, ctx: PublishContext,
           await ctx.saveUploadState({ sessionUri, size, mimeType } satisfies UploadState);
         }
         try {
-          videoId = await sendFile(sessionUri, path, size, mimeType, start, token, ctx);
+          videoId = await sendFile(sessionUri, media, size, mimeType, start, token, ctx);
         } catch (e) {
           if (e instanceof PlatformHttpError && e.status === 404) {
             // The session expired mid-way: one fresh session, from the start
             sessionUri = await startSession(req, token, size, mimeType);
             await ctx.saveUploadState({ sessionUri, size, mimeType } satisfies UploadState);
-            videoId = await sendFile(sessionUri, path, size, mimeType, 0, token, ctx);
+            videoId = await sendFile(sessionUri, media, size, mimeType, 0, token, ctx);
           } else throw toPublishError(e, classifyYouTube, "during-upload");
         }
       }

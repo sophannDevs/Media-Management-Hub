@@ -47,7 +47,17 @@ type AttemptRow = { id: string; attempt: number; startedAt: Date; platformReques
 
 type MediaRow = { fileName: string; mimeType: string; size: number; storageKey: string | null; externalUrl: string | null } | null;
 const toPublishMedia = (m: MediaRow): PublishMedia | null =>
-  m ? { fileName: m.fileName, mimeType: m.mimeType, size: m.size, localPath: m.storageKey ? storage.localPath(m.storageKey) : null, url: m.externalUrl } : null;
+  m
+    ? {
+        fileName: m.fileName,
+        mimeType: m.mimeType,
+        size: m.size,
+        localPath: m.storageKey ? storage.localPath(m.storageKey) : null,
+        url: m.externalUrl,
+        // Wherever the file lives: a provider resumes an upload from any byte
+        read: m.storageKey ? (start = 0) => storage.readStream(m.storageKey!, start > 0 ? { start, end: m.size - 1 } : undefined) : undefined,
+      }
+    : null;
 
 /** A JSON column as a plain object, or null. */
 function asObject(value: Prisma.JsonValue | null): Record<string, unknown> | null {

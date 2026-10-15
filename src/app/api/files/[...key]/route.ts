@@ -21,6 +21,16 @@ export const GET = route(async (req: NextRequest, ctx: RouteContext<"/api/files/
   const info = asset ? await storage.stat(key) : null;
   if (!asset || !info) return apiError(404, "NOT_FOUND", "File not found.");
 
+  // With a bucket and STORAGE_DIRECT_GET=true the browser fetches the bytes from the bucket (or its CDN)
+  // through a short-lived signed URL, so they never pass through this server (MEDIA-01). The session
+  // check above still gates every file. Off by default: the proxied path below keeps the headers that
+  // keep an uploaded file from running scripts (nosniff, a sandboxing CSP).
+  if (process.env.STORAGE_DIRECT_GET === "true" && storage.signedGetUrl) {
+    const download = req.nextUrl.searchParams.has("download");
+    const location = await storage.signedGetUrl(key, { fileName: asset.fileName, contentType: asset.mimeType, download });
+    return new Response(null, { status: 302, headers: { Location: location, "Cache-Control": "private, no-store" } });
+  }
+
   const etag = fileEtag(info.size, info.modifiedAt);
   const validators = { ETag: etag, "Last-Modified": info.modifiedAt.toUTCString(), "Cache-Control": "private, max-age=86400, immutable" };
   if (isNotModified(req.headers, etag, info.modifiedAt)) return new Response(null, { status: 304, headers: validators });

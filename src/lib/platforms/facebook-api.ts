@@ -1,5 +1,5 @@
 import { stat } from "node:fs/promises";
-import { type ExternalAccount, fileBody, http, type HttpClassification, messageOf, type PlatformAuth, PlatformHttpError, toPublishError, wait } from "./oauth";
+import { type ExternalAccount, http, type HttpClassification, isReadable, mediaBody, messageOf, type PlatformAuth, PlatformHttpError, toPublishError, wait } from "./oauth";
 import { PublishError, type PublishContext, type PublishRequest, type PublishResult, type ReconcileResult } from "./types";
 
 // Facebook Pages: Facebook Login, the Resumable Upload API and the Video API
@@ -110,8 +110,9 @@ const videoUrl = (pageId: string, videoId: string) => `https://www.facebook.com/
 
 async function uploadFile(req: PublishRequest, ctx: PublishContext, tokens: FacebookTokens, state: UploadState): Promise<{ handle: string; sessionId: string; size: number }> {
   const { appId } = requireConfig();
-  const path = req.video!.localPath!;
-  const size = req.video!.size || (await stat(path)).size;
+  const video = req.video!;
+  const size = video.size || (video.localPath ? (await stat(video.localPath)).size : 0);
+  if (!size) throw new PublishError("The video file's size is unknown.", "VALIDATION", false);
   const userToken = tokens.userToken ?? tokens.pageToken;
   let sessionId = state.sessionId && state.size === size ? state.sessionId : null;
   if (!sessionId) {
@@ -132,7 +133,7 @@ async function uploadFile(req: PublishRequest, ctx: PublishContext, tokens: Face
       const r = await http<{ h: string }>(`${GRAPH}/${sessionId}`, {
         method: "POST",
         headers: { ...auth, file_offset: String(offset), "Content-Type": "application/octet-stream", "Content-Length": String(size - offset) },
-        body: fileBody(path, offset, (sent) => ctx.progress({ phase: "UPLOADING", bytesSent: offset + sent, totalBytes: size })),
+        body: mediaBody(video, offset, (sent) => ctx.progress({ phase: "UPLOADING", bytesSent: offset + sent, totalBytes: size })),
         timeoutMs: uploadTimeout(size - offset),
       });
       return { handle: r.data.h, sessionId, size };
@@ -172,7 +173,7 @@ async function awaitProcessing(videoId: string, pageToken: string, ctx: PublishC
 export async function publishToFacebook(req: PublishRequest, ctx: PublishContext, tokens: FacebookTokens): Promise<PublishResult> {
   const pageId = req.account.externalId;
   if (!pageId) throw new PublishError("This Page was added by hand and has no Facebook id: reconnect it with Facebook.", "AUTH", false);
-  if (!req.video?.localPath) throw new PublishError("No final video file to upload (linked videos can't be sent to Facebook).", "VALIDATION", false);
+  if (!req.video || !isReadable(req.video)) throw new PublishError("No final video file to upload (linked videos can't be sent to Facebook).", "VALIDATION", false);
   if (req.video.mimeType !== "video/mp4") throw new PublishError(`Facebook's upload API takes MP4 files; this video is ${req.video.mimeType}.`, "VALIDATION", false);
 
   let state = (ctx.uploadState as UploadState | null) ?? {};

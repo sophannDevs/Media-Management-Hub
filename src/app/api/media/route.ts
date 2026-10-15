@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { logger } from "@/lib/log";
 import { hashAndPeek } from "@/lib/media/inspect";
+import { ALLOWED_DECLARED, gigabytes, maxBytes, sanitizeFileName } from "@/lib/media/limits";
 import { probeMedia } from "@/lib/media/probe";
 import { checkUpload, sizeCapFor } from "@/lib/media/sniff";
 import { makeStorageKey, storage } from "@/lib/storage";
@@ -23,23 +24,6 @@ import { createMediaAsset } from "@/server/services/media";
 // passing through it is buffered and cut off at 10 MB. So this handler checks
 // the origin and the session itself, before it reads a byte.
 
-/**
- * Largest single file: 2 GiB minus one byte, because MediaAsset.size is a
- * 32-bit integer (exactly 2 GiB overflowed it and failed after the whole file
- * had been received). MEDIA_MAX_BYTES can lower it. Beyond this needs a BigInt
- * column, which comes with object storage (MEDIA-01).
- */
-const MAX_FILE_BYTES = 2 ** 31 - 1;
-const maxBytes = () => Math.min(Number(process.env.MEDIA_MAX_BYTES) || MAX_FILE_BYTES, MAX_FILE_BYTES);
-const ALLOWED: Record<string, RegExp> = {
-  IMAGE: /^image\//,
-  THUMBNAIL: /^image\//,
-  VIDEO: /^video\//,
-  AUDIO: /^audio\//,
-  MUSIC: /^audio\//,
-  OTHER: /.*/,
-};
-
 const positive = (v: string | null) => {
   const n = Number(v);
   return v && Number.isFinite(n) && n > 0 ? n : null;
@@ -48,7 +32,6 @@ const pixels = (v: string | null) => {
   const n = positive(v);
   return n === null ? null : Math.round(n);
 };
-const gigabytes = (n: number) => (n >= 1024 ** 3 ? `${+(n / 1024 ** 3).toFixed(1)} GB` : `${Math.round(n / 1024 ** 2)} MB`);
 
 export const POST = route(async (req) => {
   const crossSite = rejectCrossSite(req);
@@ -58,14 +41,14 @@ export const POST = route(async (req) => {
 
   const q = new URL(req.url).searchParams;
   const type = q.get("type") ?? "";
-  const fileName = (q.get("fileName") ?? "").replace(/[\u0000-\u001f\\/]+/g, "-").trim().slice(0, 255);
+  const fileName = sanitizeFileName(q.get("fileName") ?? "");
   const contentId = q.get("contentId") || null;
   const mimeType = (req.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase() || "application/octet-stream";
 
   if (!MediaType.is(type)) return apiError(400, "VALIDATION", "Choose a media type.");
   if (!fileName) return apiError(400, "VALIDATION", "The file needs a name.");
   // A cheap first check on what the browser declared; the stored type comes from the bytes below
-  if (!ALLOWED[type].test(mimeType)) return apiError(400, "VALIDATION", `${fileName}: not a valid ${MediaType.label(type).toLowerCase()} file.`);
+  if (!ALLOWED_DECLARED[type].test(mimeType)) return apiError(400, "VALIDATION", `${fileName}: not a valid ${MediaType.label(type).toLowerCase()} file.`);
 
   // Refuse by the declared size before reading anything; the byteLimit below catches a wrong or missing one.
   // Each type has its own cap (an image is never 2 GB); OTHER accepts nothing (SEC-05).
@@ -89,9 +72,10 @@ export const POST = route(async (req) => {
     const { sha256, head } = inspect.result();
     const check = checkUpload(type, fileName, head);
     if (!check.ok) throw new ServiceError(check.message);
-    // The real duration, dimensions and codecs, when the server has ffprobe; the browser's figures otherwise
+    // The real duration, dimensions and codecs, when the server has ffprobe; the browser's figures otherwise.
+    // A bucket object is read by ffprobe through a signed URL (headers only).
     const localPath = storage.localPath(key);
-    const probe = localPath ? await probeMedia(localPath) : null;
+    const probe = localPath ? await probeMedia(localPath) : storage.signedGetUrl ? await probeMedia(await storage.signedGetUrl(key, { expiresInSeconds: 600 })) : null;
     const asset = await createMediaAsset({
       contentId,
       type,
