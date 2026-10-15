@@ -126,6 +126,8 @@ export function blockingRequirements(missing: Requirement[], overridden: readonl
 export function derivePublishingStatus(c: ContentState, rules: WorkflowRules = DEFAULT_RULES): PublishingStatusCode {
   const s = (c.schedules ?? []).map((x) => x.status).filter((x) => x !== "CANCELLED");
   if (s.includes("PROCESSING")) return "PUBLISHING";
+  // Live somewhere and failed elsewhere (WF-02): say so, instead of only "Failed"
+  if (s.includes("PUBLISHED") && s.includes("FAILED")) return "PARTIAL";
   if (s.includes("FAILED")) return "FAILED";
   if (s.some((x) => x === "WAITING" || x === "RETRY_SCHEDULED")) return "SCHEDULED";
   if (s.includes("PUBLISHED")) return "PUBLISHED";
@@ -164,6 +166,7 @@ export function deriveContentState(c: ContentState, rules: WorkflowRules = DEFAU
 export function deriveStage(c: ContentState, rules: WorkflowRules = DEFAULT_RULES): StageCode {
   const p = c.publishingStatus ?? derivePublishingStatus(c, rules);
   if (p === "PUBLISHED") return "PUBLISHED";
+  if (p === "PARTIAL") return "PARTIAL";
   if (p === "FAILED") return "FAILED";
   if (p === "SCHEDULED" || p === "PUBLISHING") return "SCHEDULED";
   if (c.scriptStatus === "NOT_STARTED") return "IDEA";

@@ -21,6 +21,7 @@ const QUICK = [
   ["SCHEDULED", "Scheduled"],
   ["PUBLISHED", "Published"],
   ["FAILED", "Failed"],
+  ["PARTIAL", "Partly published"],
   ["IDEA", "Ideas"],
 ] as const;
 
@@ -65,7 +66,7 @@ export function ContentFilters({
   }, [q]);
 
   const go = (patch: Partial<ContentListParams>) => startTransition(() => router.replace(buildHref(params, patch), { scroll: false }));
-  const active = Boolean(params.q || params.platform || params.category || params.priority || params.created || params.scheduled);
+  const active = Boolean(params.q || params.platform || params.category || params.priority || params.created || params.scheduled || params.published);
   const deepStage = !QUICK.some(([k]) => k === stage) ? stage : null;
 
   return (
@@ -135,6 +136,7 @@ export function ContentFilters({
         <FilterSelect label="Any priority" value={params.priority} onChange={(v) => go({ priority: v })} items={Priority.options.map((p) => [p.value, p.label])} />
         <FilterSelect label="Created: any time" value={params.created} onChange={(v) => go({ created: v })} items={[["7", "Last 7 days"], ["30", "Last 30 days"]]} />
         <FilterSelect label="Scheduled: any" value={params.scheduled} onChange={(v) => go({ scheduled: v })} items={[["week", "This week"], ["next", "Next week"], ["none", "Not scheduled"]]} />
+        <FilterSelect label="Published: any" value={params.published} onChange={(v) => go({ published: v })} items={[["any", "On any platform"], ["all", "On every platform"], ["none", "Not yet"]]} />
         <div className="flex items-center">
           <Select value={sort} onValueChange={(v) => go({ sort: v, dir: CONTENT_SORTS[v as ContentSort].dir })}>
             <SelectTrigger aria-label="Sort by" className="w-auto rounded-r-none bg-white data-[size=default]:h-9">
@@ -160,7 +162,7 @@ export function ContentFilters({
           </Button>
         </div>
         {active && (
-          <Button variant="ghost" size="sm" onClick={() => { setQ(""); go({ q: undefined, platform: undefined, category: undefined, priority: undefined, created: undefined, scheduled: undefined }); }}>
+          <Button variant="ghost" size="sm" onClick={() => { setQ(""); go({ q: undefined, platform: undefined, category: undefined, priority: undefined, created: undefined, scheduled: undefined, published: undefined }); }}>
             <X />Clear
           </Button>
         )}

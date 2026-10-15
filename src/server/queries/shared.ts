@@ -113,10 +113,15 @@ export const contentSummarySelect = {
   coverAsset: { select: { storageKey: true, externalUrl: true } },
   videoAsset: { select: { durationSec: true } },
   schedules: {
-    select: { id: true, status: true, platformId: true, scheduledAt: true, accountId: true, simulated: true },
+    select: { id: true, status: true, platformId: true, scheduledAt: true, accountId: true, simulated: true, account: { select: { name: true } } },
     orderBy: { scheduledAt: "asc" },
   },
 } satisfies Prisma.ContentSelect;
+
+/** The posts a list row shows as chips (WF-02): everything but cancelled ones, oldest first. */
+export function postChips(schedules: { id: string; platformId: string; status: string; simulated: boolean; account: { name: string } }[]) {
+  return schedules.filter((s) => s.status !== "CANCELLED").map((s) => ({ id: s.id, platformId: s.platformId, status: s.status, simulated: s.simulated, account: s.account.name }));
+}
 
 /** True when the content has published posts and every one of them was simulated. */
 export function onlySimulatedPosts(schedules: { status: string; simulated: boolean }[]) {
@@ -156,6 +161,8 @@ export function toSummary(c: SummaryRow, now: Date) {
     nextSchedule,
     scheduleCount: c.schedules.filter((s) => s.status !== "CANCELLED").length,
     simulated: onlySimulatedPosts(c.schedules),
+    /** One entry per post that counts, for the per-platform chips (WF-02) */
+    posts: postChips(c.schedules),
   };
 }
 export type ContentSummary = ReturnType<typeof toSummary>;

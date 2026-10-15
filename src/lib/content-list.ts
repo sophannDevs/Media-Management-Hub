@@ -9,6 +9,8 @@ export interface ContentListParams {
   priority?: string;
   created?: string;
   scheduled?: string;
+  /** Published on "any" platform, on "all" the platforms it was posted to, or "none" yet (WF-02) */
+  published?: string;
   view?: string;
   sort?: string;
   dir?: string;
@@ -17,7 +19,7 @@ export interface ContentListParams {
   before?: string;
 }
 
-export const LIST_PARAMS = ["q", "stage", "platform", "category", "priority", "created", "scheduled", "view", "sort", "dir", "after", "before"] as const;
+export const LIST_PARAMS = ["q", "stage", "platform", "category", "priority", "created", "scheduled", "published", "view", "sort", "dir", "after", "before"] as const;
 
 export type SortDir = "asc" | "desc";
 

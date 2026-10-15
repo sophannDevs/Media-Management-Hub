@@ -89,7 +89,10 @@ describe("derivePublishingStatus", () => {
   it("lets schedules win over readiness, in the documented order", () => {
     const withSchedules = (...statuses: string[]) => derivePublishingStatus({ ...ready, schedules: statuses.map((status) => ({ status })) });
     expect(withSchedules("PUBLISHED", "PROCESSING")).toBe("PUBLISHING");
-    expect(withSchedules("PUBLISHED", "FAILED")).toBe("FAILED");
+    expect(withSchedules("PUBLISHED", "FAILED")).toBe("PARTIAL"); // live somewhere, failed elsewhere (WF-02)
+    expect(withSchedules("PUBLISHED", "FAILED", "WAITING")).toBe("PARTIAL");
+    expect(withSchedules("FAILED")).toBe("FAILED");
+    expect(withSchedules("FAILED", "WAITING")).toBe("FAILED");
     expect(withSchedules("PUBLISHED", "WAITING")).toBe("SCHEDULED");
     expect(withSchedules("PUBLISHED", "CANCELLED")).toBe("PUBLISHED");
     expect(withSchedules("CANCELLED")).toBe("READY");
@@ -105,6 +108,7 @@ describe("derivePublishingStatus", () => {
 describe("deriveStage", () => {
   it("walks the pipeline in order", () => {
     expect(deriveStage({ ...ready, scriptStatus: "NOT_STARTED" })).toBe("IDEA");
+    expect(deriveStage({ ...ready, schedules: [{ status: "PUBLISHED" }, { status: "FAILED" }] })).toBe("PARTIAL");
     expect(deriveStage({ ...ready, scriptStatus: "GENERATED" })).toBe("SCRIPT");
     expect(deriveStage({ ...ready, imageStatus: "GENERATED" })).toBe("IMAGES");
     expect(deriveStage({ ...ready, videoStatus: "EDITING" })).toBe("VIDEO");

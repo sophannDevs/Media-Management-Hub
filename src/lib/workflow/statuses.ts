@@ -69,6 +69,8 @@ export const PublishingStatus = defs({
   SCHEDULED: { label: "Scheduled", tone: "scheduled" },
   PUBLISHING: { label: "Publishing", tone: "progress" },
   PUBLISHED: { label: "Published", tone: "success" },
+  /** Live on some platforms, failed on others (WF-02) */
+  PARTIAL: { label: "Partly Published", tone: "warn" },
   FAILED: { label: "Failed", tone: "danger" },
 });
 export type PublishingStatusCode = (typeof PublishingStatus.codes)[number];
@@ -163,6 +165,8 @@ export const Stage = defs({
   READY: { label: "Ready to Post", tone: "solid" },
   SCHEDULED: { label: "Scheduled", tone: "scheduled" },
   PUBLISHED: { label: "Published", tone: "success" },
+  /** Live on some platforms, failed on others (WF-02) */
+  PARTIAL: { label: "Partly Published", tone: "warn" },
   FAILED: { label: "Failed", tone: "danger" },
 });
 export type StageCode = (typeof Stage.codes)[number];

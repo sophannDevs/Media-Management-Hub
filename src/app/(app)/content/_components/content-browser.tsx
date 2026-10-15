@@ -31,6 +31,7 @@ import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { ContentThumb, thumbIconFor } from "@/components/app/content-thumb";
 import { PlatformIcon, PlatformStack } from "@/components/app/platform-icon";
 import { useScheduleDialog } from "@/components/app/schedule-dialog";
+import { PostChips } from "@/components/app/post-chips";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -304,7 +305,12 @@ export function ContentBrowser({
                     <TableCell><PlatformStack platforms={c.platforms} /></TableCell>
                     <TableCell><StatusChips item={c} /></TableCell>
                     <TableCell className="w-32"><CompletionBar value={c.completion} /></TableCell>
-                    <TableCell><StatusBadge def={Stage} value={c.stage} label={stageLabel(c.stage, c.simulated)} /></TableCell>
+                    <TableCell>
+                      <div className="flex flex-col items-start gap-1">
+                        <StatusBadge def={Stage} value={c.stage} label={stageLabel(c.stage, c.simulated)} />
+                        <PostChips posts={c.posts} />
+                      </div>
+                    </TableCell>
                     <TableCell><PriorityBadge priority={c.priority} /></TableCell>
                     <TableCell>{nextCell(c)}</TableCell>
                     <TableCell className="whitespace-nowrap text-muted-foreground">{c.createdLabel}</TableCell>
@@ -337,6 +343,7 @@ export function ContentBrowser({
                     <PlatformStack platforms={c.platforms} />
                   </div>
                   <Link href={`/content/${c.id}`} className="mt-1.5 line-clamp-2 min-h-10 font-medium hover:underline">{c.title}</Link>
+                  <PostChips posts={c.posts} className="mt-1.5" />
                   <div className="mt-3 flex items-center justify-between">
                     <StatusChips item={c} />
                     <PriorityBadge priority={c.priority} />

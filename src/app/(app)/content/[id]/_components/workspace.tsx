@@ -25,6 +25,7 @@ import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { ContentThumb } from "@/components/app/content-thumb";
 import { PlatformStack } from "@/components/app/platform-icon";
 import { useScheduleDialog } from "@/components/app/schedule-dialog";
+import { PostChips } from "@/components/app/post-chips";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -125,6 +126,7 @@ export function WorkspaceHeader({ data }: { data: ContentWorkspace }) {
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge def={Stage} value={data.workflow.stage} label={stageLabel(data.workflow.stage, data.workflow.simulated)} />
+          <PostChips posts={data.workflow.posts} size="default" />
           {c.archived && <StatusBadge tone="neutral" label="Archived" />}
           <PriorityBadge priority={c.priority} />
           {c.seriesName && (
