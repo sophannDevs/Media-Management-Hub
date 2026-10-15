@@ -24,7 +24,7 @@ export default function CalendarPage({ searchParams }: { searchParams: SearchPar
     <>
       <PageHeader
         title="Content Calendar"
-        description="Drag a post to another day to reschedule. Drag ready content from the right to schedule it."
+        description="Drag a post to another day to reschedule it, or press Space on it and use the arrow keys, or open its menu and choose Reschedule. Drag ready content from the right to schedule it."
         actions={
           <Suspense fallback={<ControlsSkeleton />}>
             <Controls searchParams={searchParams} />
