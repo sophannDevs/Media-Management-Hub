@@ -31,6 +31,8 @@ export function ScriptTab({ data }: { data: ContentWorkspace }) {
   const [source, setSource] = useState<"MANUAL" | "PASTE">("MANUAL");
   const [templateId, setTemplateId] = useState(NO_TEMPLATE);
   const [viewing, setViewing] = useState<(typeof data.script.versions)[number] | null>(null);
+  // The text of the version being viewed: fetched when it is opened, not sent with the page (PERF-05)
+  const [viewed, setViewed] = useState<{ id: string; body: string | null; failed?: boolean } | null>(null);
   const [confirmGenerate, setConfirmGenerate] = useState(false);
   const { run, pending } = useServerAction();
   const gen = useServerAction();
@@ -44,6 +46,16 @@ export function ScriptTab({ data }: { data: ContentWorkspace }) {
   function generate() {
     gen.run(() => generateScriptAction(c.id, templateId === NO_TEMPLATE ? null : templateId));
   }
+
+  function view(v: (typeof data.script.versions)[number]) {
+    setViewing(v);
+    setViewed({ id: v.id, body: null });
+    fetch(`/api/script-versions/${v.id}`)
+      .then((r) => (r.ok ? (r.json() as Promise<{ body: string }>) : Promise.reject(new Error(String(r.status)))))
+      .then(({ body }) => setViewed((cur) => (cur?.id === v.id ? { id: v.id, body } : cur)))
+      .catch(() => setViewed((cur) => (cur?.id === v.id ? { id: v.id, body: null, failed: true } : cur)));
+  }
+  const viewedBody = viewing && viewed?.id === viewing.id ? viewed : null;
 
   async function paste() {
     try {
@@ -170,7 +182,7 @@ export function ScriptTab({ data }: { data: ContentWorkspace }) {
                     <p className="text-xs text-muted-foreground">{v.createdLabel} · {v.words.toLocaleString("en-US")} words</p>
                   </div>
                   <div className="flex shrink-0 flex-col gap-1">
-                    <Button variant="ghost" size="icon-sm" aria-label={`View version ${v.version}`} onClick={() => setViewing(v)}><Eye /></Button>
+                    <Button variant="ghost" size="icon-sm" aria-label={`View version ${v.version}`} onClick={() => view(v)}><Eye /></Button>
                     {i > 0 && (
                       <Button variant="ghost" size="icon-sm" aria-label={`Restore version ${v.version}`} disabled={pending} onClick={() => run(() => restoreScriptVersionAction(v.id))}><History /></Button>
                     )}
@@ -212,9 +224,11 @@ export function ScriptTab({ data }: { data: ContentWorkspace }) {
             <DialogTitle>Version {viewing?.version}</DialogTitle>
             <DialogDescription>{viewing?.createdLabel}{viewing?.note ? ` · ${viewing.note}` : ""}</DialogDescription>
           </DialogHeader>
-          <pre className="thin-scroll max-h-[60vh] overflow-y-auto rounded-lg border bg-[#fcfbf3] p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap">{viewing?.body}</pre>
+          <pre className="thin-scroll max-h-[60vh] min-h-24 overflow-y-auto rounded-lg border bg-[#fcfbf3] p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap" aria-live="polite">
+            {viewedBody?.failed ? "Couldn't load this version. Close and try again." : (viewedBody?.body ?? "Loading…")}
+          </pre>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => viewing && copy(viewing.body)}><Copy />Copy</Button>
+            <Button variant="outline" disabled={viewedBody?.body == null} onClick={() => viewedBody?.body != null && copy(viewedBody.body)}><Copy />Copy</Button>
             {viewing && viewing.version !== data.script.currentVersion && (
               <Button onClick={() => { run(() => restoreScriptVersionAction(viewing.id)); setViewing(null); }}><History />Restore this version</Button>
             )}

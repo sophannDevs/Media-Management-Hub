@@ -68,7 +68,7 @@ async function Workspace({ params, searchParams }: Pick<PageProps<"/content/[id]
           images: <ImagesTab data={data} />,
           video: <VideoTab data={data} />,
           publishing: <PublishingTab data={data} />,
-          activity: <ActivityTab items={data.activity} />,
+          activity: <ActivityTab key={data.activity.items[0]?.id} contentId={content.id} initial={data.activity} />,
         }}
       />
     </WorkspaceProvider>

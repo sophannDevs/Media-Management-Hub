@@ -3,12 +3,13 @@ import { db } from "@/lib/db";
 import { addDaysToKey, dayKey, dayRangeUtc, fmtDate, fmtDateTime, fmtShort, fmtTime, relativeDay, timeAgo, weekKeys } from "@/lib/dates";
 import { mediaUrl } from "@/lib/media-url";
 import { providerMeta } from "@/lib/platforms/registry";
-import { checklist, completion, deriveStage, imageStage, isReadyToPost, missingRequirements, wordCount } from "@/lib/workflow/rules";
+import { checklist, completion, deriveStage, imageStage, isReadyToPost, missingRequirements } from "@/lib/workflow/rules";
 import { Priority, PRODUCTION_STAGES, Stage } from "@/lib/workflow/statuses";
 import { isClaudeConfigured } from "@/lib/ai/claude";
 import { type ContentListParams, type ContentSort, parseSort, type SortDir } from "@/lib/content-list";
 import { requireUser } from "../auth/dal";
 import { toContentState } from "../services/content-state";
+import { getSettings } from "../services/settings";
 import { listViews } from "../services/views";
 import { contentSummarySelect, getContentFormOptions, getPageContext, onlySimulatedPosts, toSummary } from "./shared";
 
@@ -224,6 +225,40 @@ const assetSelect = {
   createdAt: true,
 } satisfies Prisma.MediaAssetSelect;
 
+// ---------- Workspace: activity history and script version text (PERF-05) ----------
+
+export const ACTIVITY_PAGE = 50;
+const ACTIVITY_ORDER = [{ createdAt: "desc" }, { id: "desc" }] satisfies Prisma.ActivityLogOrderByWithRelationInput[];
+
+type ActivityRow = { id: string; type: string; message: string; createdAt: Date };
+const toActivity = (a: ActivityRow, tz: string) => ({ id: a.id, type: a.type, message: a.message, day: fmtDate(a.createdAt, tz), time: fmtTime(a.createdAt, tz) });
+
+/** A page of rows plus the cursor (the last row's id) of the next one, from a query that fetched one extra. */
+function pageOf<T extends { id: string }>(rows: T[]) {
+  const items = rows.slice(0, ACTIVITY_PAGE);
+  return { items, nextCursor: rows.length > ACTIVITY_PAGE ? items[items.length - 1].id : null };
+}
+
+/** The next page of a content item's history, after the row with id `after` (keyset: stable while new events arrive). */
+export async function getActivityPage(contentId: string, after: string | null) {
+  const { timezone: tz } = await getSettings();
+  const rows = await db.activityLog.findMany({
+    where: { contentId },
+    orderBy: ACTIVITY_ORDER,
+    take: ACTIVITY_PAGE + 1,
+    ...(after ? { cursor: { id: after }, skip: 1 } : {}),
+    select: { id: true, type: true, message: true, createdAt: true },
+  });
+  const { items, nextCursor } = pageOf(rows);
+  return { items: items.map((a) => toActivity(a, tz)), nextCursor };
+}
+
+/** The full text of one saved script version, or null. */
+export async function getScriptVersionBody(versionId: string) {
+  return db.scriptVersion.findUnique({ where: { id: versionId }, select: { body: true } });
+}
+export type ActivityPage = Awaited<ReturnType<typeof getActivityPage>>;
+
 export async function getContentWorkspace(id: string) {
   const { now, rules, tz, settings } = await getPageContext();
   const c = await db.content.findUnique({
@@ -234,7 +269,8 @@ export async function getContentWorkspace(id: string) {
       campaign: true,
       tags: { orderBy: { name: "asc" } },
       platforms: true,
-      script: { include: { versions: { orderBy: { version: "desc" } } } },
+      // Version metadata only: the text of each version is fetched when it is opened (PERF-05)
+      script: { include: { versions: { orderBy: { version: "desc" }, select: { id: true, version: true, note: true, status: true, source: true, wordCount: true, createdAt: true } } } },
       imagePrompt: true,
       media: { select: assetSelect, orderBy: { createdAt: "asc" } },
       videoAsset: { select: assetSelect },
@@ -247,7 +283,8 @@ export async function getContentWorkspace(id: string) {
           jobs: { orderBy: { attempt: "desc" }, take: 5 },
         },
       },
-      activities: { orderBy: { createdAt: "desc" }, take: 150 },
+      // One page of the history; the rest loads on demand (PERF-05). One extra row says whether there is more.
+      activities: { orderBy: ACTIVITY_ORDER, take: ACTIVITY_PAGE + 1 },
     },
   });
   if (!c) return null;
@@ -334,11 +371,10 @@ export async function getContentWorkspace(id: string) {
       versions: (c.script?.versions ?? []).map((v) => ({
         id: v.id,
         version: v.version,
-        body: v.body,
         note: v.note,
         status: v.status,
         source: v.source,
-        words: v.wordCount || wordCount(v.body),
+        words: v.wordCount,
         createdLabel: fmtDateTime(v.createdAt, tz),
       })),
     },
@@ -386,7 +422,10 @@ export async function getContentWorkspace(id: string) {
       { label: "Hashtags added", ok: !!c.hashtags.trim() },
       { label: "Every target platform has a schedule", ok: targetPlatforms.length > 0 && targetPlatforms.every((p) => activeSchedules.some((s) => s.platformId === p)) },
     ],
-    activity: c.activities.map((a) => ({ id: a.id, type: a.type, message: a.message, day: fmtDate(a.createdAt, tz), time: fmtTime(a.createdAt, tz) })),
+    activity: (() => {
+      const { items, nextCursor } = pageOf(c.activities);
+      return { items: items.map((a) => toActivity(a, tz)), nextCursor };
+    })(),
     settings: { timezone: settings.timezone },
   };
 }
