@@ -12,7 +12,7 @@ export type ServiceErrorCode =
   | "UNAUTHENTICATED";
 
 /** Every code a failure can carry: the service reasons above plus the generic HTTP-like ones (ARCH-04). */
-export type ErrorCode = ServiceErrorCode | "VALIDATION" | "NOT_FOUND" | "FORBIDDEN" | "SERVICE_UNAVAILABLE" | "INTERNAL";
+export type ErrorCode = ServiceErrorCode | "VALIDATION" | "NOT_FOUND" | "FORBIDDEN" | "TOO_LARGE" | "SERVICE_UNAVAILABLE" | "INTERNAL";
 
 /** An error whose message is safe to show to the user. */
 export class ServiceError extends Error {

@@ -57,9 +57,7 @@ describe("Route Handlers", () => {
   });
 
   it("report validation problems with their code", async () => {
-    const form = new FormData();
-    form.set("type", "NOT_A_TYPE");
-    const res = await upload(new Request("http://app.test/api/media", { method: "POST", headers: { host: "app.test" }, body: form }));
+    const res = await upload(new Request("http://app.test/api/media?type=NOT_A_TYPE&fileName=a.bin", { method: "POST", headers: { host: "app.test" }, body: "x" }));
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ ok: false, error: "Choose a media type.", code: "VALIDATION", requestId: expect.any(String) });
   });

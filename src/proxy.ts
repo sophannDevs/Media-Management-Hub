@@ -41,6 +41,9 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  // Everything except Next.js build assets and the favicon
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Everything except Next.js build assets, the favicon and uploads. Uploads stay out
+  // because a request that passes through the proxy has its body cloned and buffered in
+  // memory, and anything past 10 MB is cut off (proxyClientMaxBodySize). /api/media
+  // checks the session, the origin and the size itself, and route() gives it a request id.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/media).*)"],
 };

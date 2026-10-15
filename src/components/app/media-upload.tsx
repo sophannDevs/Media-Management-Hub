@@ -68,39 +68,65 @@ export interface UploadResult {
   requestId?: string;
 }
 
-/** The server's answer in either shape: success with refused files, or the common failure shape. */
-function toUploadResult(body: Partial<UploadResult> & { details?: string[] }): UploadResult {
-  return { ok: !!body.ok, created: body.created ?? [], errors: body.errors ?? body.details ?? [], error: body.error, requestId: body.requestId };
+/** One file's answer: its id, or why it was refused. */
+type FileResult = { ok: true; id: string } | { ok: false; error: string; requestId?: string };
+
+/**
+ * Sends ONE file as the request body (XHR, for upload progress), with the type,
+ * name and measured size in the query string. The server streams the bytes to
+ * disk; nothing is held in memory on either side (PERF-07).
+ */
+function uploadOne(file: File, opts: { type: string; contentId?: string | null; meta: MediaMeta; onProgress: (loaded: number) => void }): Promise<FileResult> {
+  const q = new URLSearchParams({ type: opts.type, fileName: file.name });
+  if (opts.contentId) q.set("contentId", opts.contentId);
+  for (const k of ["width", "height", "durationSec"] as const) if (opts.meta[k]) q.set(k, String(opts.meta[k]));
+
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `/api/media?${q}`);
+    xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+    xhr.upload.onprogress = (e) => opts.onProgress(e.loaded);
+    xhr.onload = () => {
+      try {
+        const body = JSON.parse(xhr.responseText) as { ok?: boolean; created?: string[]; error?: string; requestId?: string };
+        resolve(body.ok && body.created?.[0] ? { ok: true, id: body.created[0] } : { ok: false, error: body.error ?? "Upload failed.", requestId: body.requestId });
+      } catch {
+        resolve({ ok: false, error: xhr.status === 413 ? "The file is too large." : "Upload failed." });
+      }
+    };
+    xhr.onerror = () => resolve({ ok: false, error: "Network error during upload." });
+    xhr.send(file);
+  });
 }
 
-/** POSTs files to /api/media (XHR so we get upload progress). */
+/**
+ * Uploads files to /api/media one after another, so a big file never competes
+ * with others for bandwidth or memory. Progress is overall, by bytes. Some
+ * files may be refused while the rest go through: `errors` says which.
+ */
 export async function uploadMedia(opts: {
   files: File[];
   type: string;
   contentId?: string | null;
   onProgress?: (pct: number) => void;
 }): Promise<UploadResult> {
-  const meta = await Promise.all(opts.files.map(readMediaMeta));
-  const form = new FormData();
-  form.set("type", opts.type);
-  if (opts.contentId) form.set("contentId", opts.contentId);
-  form.set("meta", JSON.stringify(meta));
-  for (const f of opts.files) form.append("file", f);
-
-  return new Promise((resolve) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/media");
-    xhr.upload.onprogress = (e) => e.lengthComputable && opts.onProgress?.(Math.round((e.loaded / e.total) * 100));
-    xhr.onload = () => {
-      try {
-        resolve(toUploadResult(JSON.parse(xhr.responseText)));
-      } catch {
-        resolve({ ok: false, created: [], errors: [], error: "Upload failed." });
-      }
-    };
-    xhr.onerror = () => resolve({ ok: false, created: [], errors: [], error: "Network error during upload." });
-    xhr.send(form);
-  });
+  const total = opts.files.reduce((n, f) => n + f.size, 0) || 1;
+  const created: string[] = [];
+  const errors: string[] = [];
+  let requestId: string | undefined;
+  let sent = 0;
+  for (const file of opts.files) {
+    const meta = await readMediaMeta(file);
+    const r = await uploadOne(file, { type: opts.type, contentId: opts.contentId, meta, onProgress: (loaded) => opts.onProgress?.(Math.min(100, Math.round(((sent + loaded) / total) * 100))) });
+    sent += file.size;
+    if (r.ok) created.push(r.id);
+    else {
+      // The server names the file in its own messages; a network or parse failure doesn't
+      errors.push(r.error.startsWith(`${file.name}:`) ? r.error : `${file.name}: ${r.error}`);
+      requestId ??= r.requestId;
+    }
+  }
+  return { ok: created.length > 0, created, errors, error: created.length ? undefined : errors[0], requestId };
 }
 
 /** Upload with progress state, toasts and a router refresh on success. */

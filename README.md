@@ -47,6 +47,7 @@ Tests never touch your development database or `./storage`. The first `test:e2e`
 | `ALLOWED_ORIGINS` | Extra hosts allowed to POST to the API (CSRF check), e.g. behind a reverse proxy. The app's own host is always allowed. |
 | `HTTPS_ONLY` | `true` when served over HTTPS: adds HSTS and `upgrade-insecure-requests` to the security headers. |
 | `MOCK_PUBLISH_FAILURE_RATE` | Optional, e.g. `0.2`: makes the simulated publisher fail randomly so you can exercise the retry flow. |
+| `MEDIA_MAX_BYTES` | Optional: lowers the largest single upload (default and maximum 2 GiB − 1 byte, what the file-size column holds). Uploads are streamed to disk one file per request (`POST /api/media?type=…&fileName=…`, the bytes as the body), so size doesn't cost server memory. |
 | `LOG_LEVEL`, `LOG_FORMAT` | `debug` / `info` (default) / `warn` / `error`; `json` (default in production, one line per event) or `pretty` (default in development). Passwords, tokens, cookies and API keys are redacted. |
 
 ## What's implemented (Phase 1)
