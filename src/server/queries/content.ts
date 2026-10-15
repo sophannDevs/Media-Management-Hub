@@ -151,7 +151,8 @@ async function listPage(params: ContentListParams, { now, tz }: { now: Date; tz:
     offset = n;
   }
 
-  const rows = ids.length ? await db.content.findMany({ where: { id: { in: ids } }, select: contentSummarySelect }) : [];
+  // One statement with the relations joined in, not one per relation (the page budget is 12 queries)
+  const rows = ids.length ? await db.content.findMany({ where: { id: { in: ids } }, select: contentSummarySelect, relationLoadStrategy: "join" }) : [];
   const byId = new Map(rows.map((r) => [r.id, r]));
   const items = ids.flatMap((id) => {
     const r = byId.get(id);

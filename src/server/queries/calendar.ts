@@ -69,8 +69,9 @@ export async function getCalendarData(params: CalendarParams) {
       where: { scheduledAt: range, status: { not: "CANCELLED" }, content: { archivedAt: null }, ...(platform ? { platformId: platform.id } : {}) },
       orderBy: [{ scheduledAt: "asc" }, { id: "asc" }],
       select: eventSelect,
+      relationLoadStrategy: "join",
     }),
-    db.content.findMany({ where: { archivedAt: null, stage: "READY" }, select: contentSummarySelect }),
+    db.content.findMany({ where: { archivedAt: null, stage: "READY" }, select: contentSummarySelect, relationLoadStrategy: "join" }),
     getBestPostingTimes(tz, platform?.id ?? null),
   ]);
 

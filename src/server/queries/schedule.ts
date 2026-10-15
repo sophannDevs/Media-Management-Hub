@@ -165,12 +165,14 @@ export async function getQueueData(params: QueueParams) {
       orderBy: [{ scheduledAt: tab.order }, { id: "asc" }],
       take: ROW_LIMIT,
       select: rowSelect,
+      relationLoadStrategy: "join",
     }),
     db.publishingSchedule.findMany({
       where: { ...live, status: "FAILED" },
       orderBy: { scheduledAt: "desc" },
       take: CALLOUT_LIMIT,
       select: rowSelect,
+      relationLoadStrategy: "join",
     }),
     db.publishingJob.findFirst({
       where: { finishedAt: { not: null, lte: now } },

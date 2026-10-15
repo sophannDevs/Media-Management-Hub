@@ -132,12 +132,13 @@ export async function getAnalyticsData({ range, platform }: AnalyticsParams) {
         account: { select: { name: true } },
         content: { select: contentCardSelect },
       },
+      relationLoadStrategy: "join",
     }),
     db.analyticsSnapshot.count({ where: { source: "MOCK" } }),
   ]);
 
   const topContent = topRows.length
-    ? await db.content.findMany({ where: { id: { in: topRows.map((r) => r.contentId) } }, select: contentCardSelect })
+    ? await db.content.findMany({ where: { id: { in: topRows.map((r) => r.contentId) } }, select: contentCardSelect, relationLoadStrategy: "join" })
     : [];
 
   // ---------- Daily series, period totals, per-platform totals ----------

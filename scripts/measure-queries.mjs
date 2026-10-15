@@ -1,5 +1,6 @@
-// Counts database queries for one request per page (PERF-04 budget: shell ≤ 8).
-//   node scripts/measure-queries.mjs [/route ...]
+// Counts database queries for one request per page (PERF-04: shell ≤ 8, any page ≤ 12).
+//   node scripts/measure-queries.mjs [--list] [/route ...]
+//   --list prints each query (what a page runs and how often) under its count.
 // Needs a production build (`npm run build`, or the one `npm run test:e2e`
 // leaves behind) and the seeded e2e database from an e2e run
 // (E2E_DATABASE_URL, or mediaflow_e2e on the local cluster).
@@ -19,7 +20,9 @@ await db.$disconnect();
 const cookie = `mf_session=${token}`;
 
 const port = Number(process.env.MEASURE_PORT ?? 3230);
-const routes = process.argv.slice(2).length ? process.argv.slice(2) : ["/", "/content", "/calendar", "/schedule", "/media", "/prompts", "/accounts", "/analytics", "/settings"];
+const list = process.argv.includes("--list");
+const given = process.argv.slice(2).filter((a) => a.startsWith("/"));
+const routes = given.length ? given : ["/", "/content", "/calendar", "/schedule", "/media", "/prompts", "/accounts", "/analytics", "/settings"];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const url = (route) => `http://127.0.0.1:${port}${route}`;
 
@@ -34,7 +37,12 @@ const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "star
   },
 });
 let queries = 0;
-server.stdout.on("data", (chunk) => (queries += (String(chunk).match(/prisma:query/g) ?? []).length));
+let seen = [];
+server.stdout.on("data", (chunk) => {
+  const lines = String(chunk).split(String.fromCharCode(10)).filter((l) => l.includes("prisma:query"));
+  queries += lines.length;
+  seen.push(...lines);
+});
 
 try {
   for (let i = 0; ; i++) {
@@ -46,10 +54,18 @@ try {
   for (const route of routes) {
     await (await fetch(url(route), { headers: { cookie } })).text(); // warm up (compile caches, first-request work)
     await sleep(300);
-    queries = 0;
-    await (await fetch(url(route), { headers: { cookie } })).text();
-    await sleep(500);
-    console.log(`${route.padEnd(12)} ${queries}`);
+    // The smallest of three counted requests: a straggler from the request before can land in the window
+    let best = Infinity;
+    let bestSeen = [];
+    for (let n = 0; n < 3; n++) {
+      queries = 0;
+      seen = [];
+      await (await fetch(url(route), { headers: { cookie } })).text();
+      await sleep(500);
+      if (queries < best) [best, bestSeen] = [queries, seen];
+    }
+    console.log(`${route.padEnd(12)} ${best}`);
+    if (list) for (const q of bestSeen) console.log(`    ${q.replace(/^.*prisma:query\s*/, "").replace(/\s+/g, " ").slice(0, 170)}`);
   }
 } finally {
   server.kill();
