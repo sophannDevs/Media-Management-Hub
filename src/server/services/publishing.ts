@@ -3,6 +3,7 @@ import os from "node:os";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { SecretsError } from "@/lib/secrets";
+import { retryPlan } from "@/lib/workflow/retry-policy";
 import { dayDiff } from "@/lib/dates";
 import { logger } from "@/lib/log";
 import { getProvider } from "@/lib/platforms/registry";
@@ -367,19 +368,12 @@ async function recordSuccess(
 async function recordFailure(s: LoadedSchedule, job: AttemptRow, err: PublishError, settings: Settings, opts: { fromPlatform?: boolean } = {}): Promise<ProcessResult> {
   const now = new Date();
   job.platformRequestId ??= err.platformRequestId ?? undefined;
-  // The budget counts automatic retries since the last action by a person, not every attempt ever made (PUB-09)
-  const retry = err.retryable && settings.autoRetry && s.autoRetries < settings.maxRetries;
-  // An unknown outcome is checked with the platform on the next attempt, so it can come back soon
-  const delayMinutes = err.code === "UNKNOWN_OUTCOME" ? 1 : settings.retryDelayMinutes;
-  const retryAt = retry ? new Date(now.getTime() + delayMinutes * 60_000) : null;
-  // Why the next attempt was, or wasn't, scheduled: kept on the attempt row
-  const retryReason = retry
-    ? `${err.code}: automatic retry ${s.autoRetries + 1} of ${settings.maxRetries} in ${delayMinutes} min`
-    : !err.retryable
-      ? `${err.code}: not retried automatically`
-      : !settings.autoRetry
-        ? `${err.code}: automatic retries are off`
-        : `${err.code}: no automatic retries left (${settings.maxRetries} used)`;
+  // One rule per error code (PUB-08): backoff with jitter, the platform's Retry-After, the quota's reset time, a pause on a
+  // dead sign-in; a hard cap on automatic retries since the last action by a person (PUB-09); and the reason, for the row
+  const plan = retryPlan({ code: err.code, retryable: err.retryable, autoRetries: s.autoRetries, settings, retryAfterSeconds: err.retryAfterSeconds, quotaResetAt: err.quotaResetAt, now });
+  const retry = plan.retry;
+  const retryAt = plan.at;
+  const retryReason = plan.reason;
 
   await persist("record failure", () =>
     db.$transaction([
@@ -403,7 +397,7 @@ async function recordFailure(s: LoadedSchedule, job: AttemptRow, err: PublishErr
   );
 
   log.warn("publish attempt failed", { scheduleId: s.id, jobId: job.id, platform: s.platformId, account: s.account.name, attempt: job.attempt, code: err.code, willRetry: retry, retryReason, message: err.message });
-  if (err.code === "AUTH") {
+  if (plan.pauseAccount) {
     await bestEffort("mark account", () => db.socialAccount.update({ where: { id: s.accountId }, data: { status: "TOKEN_EXPIRED", lastError: err.message } }));
     await bestEffort("blocked posts notice", () => notifyBlockedPosts(s.accountId));
   }

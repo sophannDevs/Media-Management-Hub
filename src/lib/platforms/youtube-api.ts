@@ -1,7 +1,7 @@
 import { stat } from "node:fs/promises";
 import { logger } from "@/lib/log";
-import { type ExternalAccount, fileBody, formBody, http, messageOf, minutesUntilPacificMidnight, type PlatformAuth, PlatformHttpError, type TokenSet, toPublishError, wait } from "./oauth";
-import { PublishError, type PublishContext, type PublishErrorCode, type PublishRequest, type PublishResult, type ReconcileResult } from "./types";
+import { type ExternalAccount, fileBody, formBody, http, type HttpClassification, messageOf, minutesUntilPacificMidnight, type PlatformAuth, PlatformHttpError, type TokenSet, toPublishError, wait } from "./oauth";
+import { PublishError, type PublishContext, type PublishRequest, type PublishResult, type ReconcileResult } from "./types";
 
 // YouTube Data API v3 (PUB-07). Built from the official pages read on
 // 15 Oct 2026 (docs/integrations/platforms.md records what was verified and
@@ -112,12 +112,15 @@ const reasonOf = (body: unknown): string => {
 };
 
 /** What a YouTube / Google answer means for the post. */
-export function classifyYouTube(e: PlatformHttpError): { code: PublishErrorCode; retryable: boolean; message?: string } {
+export function classifyYouTube(e: PlatformHttpError): HttpClassification {
   const reason = reasonOf(e.body);
   const text = `${e.message}${reason ? ` (${reason})` : ""}`;
   if (e.status === 401) return { code: "AUTH", retryable: false, message: `YouTube rejected the sign-in: ${text}. Reconnect the channel.` };
   if (e.status === 403) {
-    if (/quota|dailyLimit/i.test(reason)) return { code: "QUOTA", retryable: true, message: `YouTube API quota exceeded (${reason}); it resets at midnight Pacific time, in about ${Math.ceil(minutesUntilPacificMidnight() / 60)} h.` };
+    if (/quota|dailyLimit/i.test(reason)) {
+      const minutes = minutesUntilPacificMidnight();
+      return { code: "QUOTA", retryable: true, message: `YouTube API quota exceeded (${reason}); it resets at midnight Pacific time, in about ${Math.ceil(minutes / 60)} h.`, quotaResetAt: new Date(Date.now() + minutes * 60_000) };
+    }
     if (/rateLimit/i.test(reason)) return { code: "RATE", retryable: true, message: `YouTube is rate limiting the app (${reason}).` };
     return { code: "AUTH", retryable: false, message: `YouTube refused (${text}). Check the channel's permissions and the API project.` };
   }

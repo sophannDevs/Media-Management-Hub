@@ -93,6 +93,10 @@ export class PublishError extends Error {
 
   /** The platform's request / trace id for this failure, when it sent one (kept on the attempt row). */
   platformRequestId: string | null = null;
+  /** Seconds the platform asked us to wait before trying again (a Retry-After header), when it said (PUB-08). */
+  retryAfterSeconds: number | null = null;
+  /** When the platform's quota resets, when the provider knows (YouTube: midnight Pacific time) (PUB-08). */
+  quotaResetAt: Date | null = null;
 }
 
 export interface PlatformProvider {

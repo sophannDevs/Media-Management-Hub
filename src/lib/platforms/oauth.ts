@@ -71,6 +71,8 @@ export class PlatformHttpError extends Error {
     public status: number,
     public body: unknown,
     public requestId: string | null,
+    /** The answer's headers (Retry-After lives there) */
+    public headers: Headers | null = null,
   ) {
     super(message);
     this.name = "PlatformHttpError";
@@ -134,7 +136,7 @@ export async function http<T = unknown>(url: string, opts: HttpOptions = {}): Pr
     throw new PlatformNetworkError(e instanceof Error ? e.message : "The answer could not be read.", e);
   }
   const requestId = requestIdHeader ? res.headers.get(requestIdHeader) : null;
-  if (!res.ok && !accept.includes(res.status)) throw new PlatformHttpError(messageOf(data, res.status), res.status, data, requestId);
+  if (!res.ok && !accept.includes(res.status)) throw new PlatformHttpError(messageOf(data, res.status), res.status, data, requestId, res.headers);
   return { status: res.status, headers: res.headers, data: data as T, requestId };
 }
 
@@ -165,12 +167,23 @@ export function retryAfterSeconds(headers: Headers | null | undefined): number |
 }
 
 /** A PublishError from anything a platform call threw, using a platform-specific table for HTTP answers. */
-export function toPublishError(e: unknown, classifyHttp: (err: PlatformHttpError) => { code: PublishErrorCode; retryable: boolean; message?: string }, phase: "before-upload" | "during-upload"): PublishError {
+export interface HttpClassification {
+  code: PublishErrorCode;
+  retryable: boolean;
+  message?: string;
+  /** When the platform's quota resets, for QUOTA (PUB-08) */
+  quotaResetAt?: Date | null;
+}
+
+export function toPublishError(e: unknown, classifyHttp: (err: PlatformHttpError) => HttpClassification, phase: "before-upload" | "during-upload"): PublishError {
   if (e instanceof PublishError) return e;
   if (e instanceof PlatformHttpError) {
     const c = classifyHttp(e);
     const err = new PublishError(c.message ?? e.message, c.code, c.retryable);
     err.platformRequestId = e.requestId;
+    // What the platform said about when to come back (PUB-08)
+    err.retryAfterSeconds = retryAfterSeconds(e.headers);
+    err.quotaResetAt = c.quotaResetAt ?? null;
     return err;
   }
   if (e instanceof PlatformNetworkError) {

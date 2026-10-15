@@ -1,6 +1,6 @@
 import { stat } from "node:fs/promises";
-import { type ExternalAccount, fileBody, http, messageOf, type PlatformAuth, PlatformHttpError, toPublishError, wait } from "./oauth";
-import { PublishError, type PublishContext, type PublishErrorCode, type PublishRequest, type PublishResult, type ReconcileResult } from "./types";
+import { type ExternalAccount, fileBody, http, type HttpClassification, messageOf, type PlatformAuth, PlatformHttpError, toPublishError, wait } from "./oauth";
+import { PublishError, type PublishContext, type PublishRequest, type PublishResult, type ReconcileResult } from "./types";
 
 // Facebook Pages: Facebook Login, the Resumable Upload API and the Video API
 // (PUB-07). Built from the official pages read on 15 Oct 2026
@@ -76,7 +76,7 @@ const fbCode = (body: unknown): { code: number; subcode: number; type: string } 
 };
 
 /** What a Graph API answer means for the post (error codes from Meta's error reference). */
-export function classifyFacebook(e: PlatformHttpError): { code: PublishErrorCode; retryable: boolean; message?: string } {
+export function classifyFacebook(e: PlatformHttpError): HttpClassification {
   const { code, subcode, type } = fbCode(e.body);
   const text = `${e.message}${code ? ` (code ${code}${subcode ? `/${subcode}` : ""})` : ""}`;
   if (code === 190 || code === 102 || code === 463 || code === 467 || code === 459 || type === "OAuthException") return { code: "AUTH", retryable: false, message: `Facebook rejected the sign-in: ${text}. Reconnect the Page.` };
