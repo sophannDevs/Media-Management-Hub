@@ -1,3 +1,7 @@
+import type { PlatformAuth } from "./oauth";
+
+export type { ExternalAccount, PlatformAuth, TokenSet } from "./oauth";
+
 // Contract every social platform integration implements. Adding TikTok or
 // Instagram means adding one provider file and registering it — nothing else
 // in the app needs to know platform specifics.
@@ -20,6 +24,8 @@ export interface PublishRequest {
     status: string;
     externalId: string | null;
     accessToken: string | null;
+    /** Google: unused here. Facebook: the long-lived user token the Page token came from (upload sessions need it). */
+    refreshToken: string | null;
     tokenExpiresAt: Date | null;
   };
   title: string;
@@ -84,6 +90,9 @@ export class PublishError extends Error {
     super(message);
     this.name = "PublishError";
   }
+
+  /** The platform's request / trace id for this failure, when it sent one (kept on the attempt row). */
+  platformRequestId: string | null = null;
 }
 
 export interface PlatformProvider {
@@ -97,8 +106,10 @@ export interface PlatformProvider {
   maxTitleLength: number;
   maxCaptionLength: number;
   supportsThumbnail: boolean;
-  /** Real integrations set this once OAuth is implemented. */
+  /** True while the platform is simulated (its credentials are not configured): nothing reaches the real platform. */
   isMock: boolean;
+  /** Sign-in and tokens for the real platform; present even while simulated, used only once configured. */
+  auth?: PlatformAuth;
   publish(req: PublishRequest, ctx: PublishContext): Promise<PublishResult>;
   /**
    * Looks up the outcome of an interrupted attempt. Providers that can't

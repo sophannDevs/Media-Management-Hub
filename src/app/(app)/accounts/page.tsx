@@ -14,9 +14,12 @@ import { ConnectAccountDialog } from "./_components/connect-account-dialog";
 
 export const metadata: Metadata = { title: "Social Accounts" };
 
-export default function AccountsPage() {
+export default function AccountsPage({ searchParams }: PageProps<"/accounts">) {
   return (
     <div className="mx-auto w-full max-w-[1300px] space-y-6">
+      <Suspense>
+        <ConnectOutcome searchParams={searchParams} />
+      </Suspense>
       <PageHeader
         title="Social Accounts"
         description="Channels and Pages you can publish to. A post can only be scheduled on a connected account."
@@ -34,6 +37,32 @@ export default function AccountsPage() {
       <HowConnectionsWork />
     </div>
   );
+}
+
+/** What the platform sign-in came back with (PUB-07): /accounts?connected=N or ?error=… */
+async function ConnectOutcome({ searchParams }: { searchParams: PageProps<"/accounts">["searchParams"] }) {
+  const sp = await searchParams;
+  const connected = Number(sp.connected);
+  const error = typeof sp.error === "string" ? sp.error : null;
+  if (error) {
+    return (
+      <p role="alert" className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+        <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+        <span>Could not connect: {error}</span>
+      </p>
+    );
+  }
+  if (connected > 0) {
+    return (
+      <p role="status" className="flex items-start gap-2 rounded-xl border border-olive-200 bg-olive-50 p-3 text-sm text-olive-900">
+        <ShieldCheck className="mt-0.5 size-4 shrink-0" />
+        <span>
+          Connected {connected} {connected === 1 ? "account" : "accounts"}. Their sign-in is stored encrypted; posts scheduled on them go to the real platform.
+        </span>
+      </p>
+    );
+  }
+  return null;
 }
 
 async function ConnectButton() {
@@ -178,7 +207,7 @@ function ReconnectCallout({ a }: { a: AccountCardData }) {
           </p>
         )}
       </div>
-      <ReconnectButton accountId={a.id} name={a.name} />
+      <ReconnectButton accountId={a.id} name={a.name} href={a.oauth ? `/api/oauth/${a.platformId}/start` : undefined} />
     </div>
   );
 }

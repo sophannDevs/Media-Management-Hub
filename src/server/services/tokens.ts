@@ -1,4 +1,6 @@
 import { db } from "@/lib/db";
+import { getProvider } from "@/lib/platforms/registry";
+import { PublishError } from "@/lib/platforms/types";
 import { decryptSecret, encryptSecret, keyIdOf, rotateSecret, SecretsError } from "@/lib/secrets";
 import { ServiceError } from "../errors";
 
@@ -78,6 +80,54 @@ export async function rotateAllAccountTokens() {
     } else unchanged++;
   }
   return { rotated, unchanged, unreadable, total: rows.length };
+}
+
+/** Access tokens this close to expiring are renewed before use. */
+const REFRESH_AHEAD_MS = 5 * 60_000;
+
+type TokenRow = { id: string; platformId: string; name: string; accessToken: string | null; refreshToken: string | null; tokenExpiresAt: Date | null };
+
+/**
+ * The account's access token, renewed first when it is about to expire and
+ * the platform can refresh it (PUB-07). Throws SecretsError when the stored
+ * value can't be read and PublishError (AUTH) when the platform no longer
+ * accepts the sign-in; null when the account has no token.
+ */
+export async function accessTokenFor(account: TokenRow, opts: { force?: boolean } = {}): Promise<string | null> {
+  const token = openToken(account.accessToken);
+  if (!token) return null;
+  const provider = getProvider(account.platformId);
+  const expiring = !!account.tokenExpiresAt && account.tokenExpiresAt.getTime() - Date.now() < REFRESH_AHEAD_MS;
+  if ((!expiring && !opts.force) || !provider?.auth?.refresh || provider.isMock) return token;
+  const refreshToken = openToken(account.refreshToken);
+  if (!refreshToken) return token; // nothing to renew with: the platform answers 401 if it is dead
+  const fresh = await provider.auth.refresh(refreshToken);
+  await storeAccountTokens(account.id, { accessToken: fresh.accessToken, refreshToken: fresh.refreshToken ?? refreshToken, tokenExpiresAt: fresh.expiresAt ?? null });
+  return fresh.accessToken;
+}
+
+/**
+ * Renews every connected account's access token that expires within `within`
+ * ms (the worker's maintenance pass). Returns the accounts whose sign-in the
+ * platform no longer accepts, for the caller to mark and announce.
+ */
+export async function refreshExpiringTokens(within = 24 * 3_600_000) {
+  const rows = await db.socialAccount.findMany({
+    where: { status: "CONNECTED", refreshToken: { not: null }, tokenExpiresAt: { lt: new Date(Date.now() + within) } },
+    select: { id: true, platformId: true, name: true, accessToken: true, refreshToken: true, tokenExpiresAt: true },
+  });
+  let refreshed = 0;
+  const failed: { id: string; name: string; message: string }[] = [];
+  for (const row of rows) {
+    try {
+      await accessTokenFor(row, { force: true });
+      refreshed++;
+    } catch (e) {
+      if (e instanceof PublishError && e.code === "AUTH") failed.push({ id: row.id, name: row.name, message: e.message });
+      // Anything else (network, a damaged value) is left for the next pass
+    }
+  }
+  return { refreshed, failed };
 }
 
 /** Which key id each stored token uses, for an operator checking a rotation. */

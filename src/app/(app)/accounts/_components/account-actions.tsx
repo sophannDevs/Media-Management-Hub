@@ -16,6 +16,9 @@ interface AccountRef {
   isDefault: boolean;
   scheduled: number;
   accountNoun: string;
+  platformId: string;
+  /** Connected with the platform's sign-in: reconnecting goes through it again */
+  oauth: boolean;
 }
 
 const posts = (n: number) => `${n} scheduled post${n === 1 ? "" : "s"}`;
@@ -39,6 +42,13 @@ export function AccountMenu({ account: a }: { account: AccountRef }) {
             <DropdownMenuItem onSelect={() => run(() => syncAccountAction(a.id), { success: `${a.name} synced` })}>
               <RefreshCw />
               Sync now
+            </DropdownMenuItem>
+          ) : a.oauth ? (
+            <DropdownMenuItem asChild>
+              <a href={`/api/oauth/${a.platformId}/start`}>
+                <KeyRound />
+                Reconnect with {a.platformId === "youtube" ? "Google" : "Facebook"}
+              </a>
             </DropdownMenuItem>
           ) : (
             <DropdownMenuItem onSelect={() => run(() => reconnectAccountAction(a.id), { success: `${a.name} reconnected` })}>
@@ -91,8 +101,18 @@ export function AccountMenu({ account: a }: { account: AccountRef }) {
   );
 }
 
-export function ReconnectButton({ accountId, name }: { accountId: string; name: string }) {
+export function ReconnectButton({ accountId, name, href }: { accountId: string; name: string; /** Set for accounts connected through the platform: reconnecting goes through it again */ href?: string }) {
   const { run, pending } = useServerAction();
+  if (href) {
+    return (
+      <Button size="sm" className="shrink-0" asChild>
+        <a href={href}>
+          <KeyRound />
+          Reconnect
+        </a>
+      </Button>
+    );
+  }
   return (
     <Button size="sm" className="shrink-0" disabled={pending} onClick={() => run(() => reconnectAccountAction(accountId), { success: `${name} reconnected` })}>
       <KeyRound />

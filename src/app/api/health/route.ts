@@ -1,5 +1,6 @@
 import { connection } from "next/server";
 import { db } from "@/lib/db";
+import { listProviders } from "@/lib/platforms/registry";
 import { route } from "@/server/api";
 import { workerStatus } from "@/server/worker";
 
@@ -23,6 +24,8 @@ export const GET = route(async () => {
     {
       status,
       database: database ? "ok" : "down",
+      // Which platforms publish for real (their credentials are configured) and which are simulated
+      platforms: Object.fromEntries(listProviders().map((p) => [p.id, p.isMock ? "simulated" : "real"])),
       worker: worker && {
         running: worker.live > 0,
         lastSeenSecondsAgo: worker.lastBeatAt ? Math.round((Date.now() - worker.lastBeatAt.getTime()) / 1000) : null,

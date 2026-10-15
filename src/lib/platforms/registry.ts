@@ -35,6 +35,9 @@ export function providerMeta(platformId: string) {
     maxCaptionLength: p.maxCaptionLength,
     supportsThumbnail: p.supportsThumbnail,
     isMock: p.isMock,
+    /** The real sign-in is configured: accounts connect with the platform, not by hand */
+    oauthConfigured: !p.isMock && !!p.auth,
+    scopes: p.auth?.scopes ?? [],
   };
 }
 export type ProviderMeta = NonNullable<ReturnType<typeof providerMeta>>;

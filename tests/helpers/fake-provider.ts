@@ -1,4 +1,4 @@
-import type { PlatformProvider, PublishContext, PublishRequest, PublishResult, ReconcileResult } from "@/lib/platforms/types";
+import type { PlatformAuth, PlatformProvider, PublishContext, PublishRequest, PublishResult, ReconcileResult } from "@/lib/platforms/types";
 
 type Behavior = (req: PublishRequest, ctx: PublishContext) => Promise<PublishResult>;
 type Reconciler = (req: PublishRequest, uploadState: Record<string, unknown> | null) => Promise<ReconcileResult>;
@@ -13,6 +13,8 @@ class FakePlatform {
   reconcileCalls: PublishRequest[] = [];
   /** Whether the provider reports itself as simulated (PlatformProvider.isMock). */
   mock = true;
+  /** A scripted sign-in (PlatformProvider.auth); set by tests of the connect flow and token refresh. */
+  auth: PlatformAuth | null = null;
   private behavior: Behavior = async () => this.success();
   /** null: the provider can't reconcile (no `reconcile` method). */
   private reconciler: Reconciler | null = async () => ({ status: "not_found" });
@@ -46,6 +48,7 @@ class FakePlatform {
     this.calls = [];
     this.reconcileCalls = [];
     this.mock = true;
+    this.auth = null;
     this.behavior = async () => this.success();
     this.reconciler = async () => ({ status: "not_found" });
   }
@@ -63,6 +66,7 @@ class FakePlatform {
       maxCaptionLength: 5000,
       supportsThumbnail: true,
       isMock: this.mock,
+      ...(this.auth ? { auth: this.auth } : {}),
       publish: (req, ctx) => {
         this.calls.push(req);
         return this.behavior(req, ctx);
@@ -90,6 +94,6 @@ export const fakeRegistry = {
   providerMeta: (id: string) => {
     if (!ids.includes(id)) return null;
     const p = fake.provider(id);
-    return { id: p.id, name: p.name, visibilityOptions: p.visibilityOptions, defaultVisibility: p.defaultVisibility, isMock: p.isMock };
+    return { id: p.id, name: p.name, visibilityOptions: p.visibilityOptions, defaultVisibility: p.defaultVisibility, isMock: p.isMock, oauthConfigured: !p.isMock && !!p.auth, scopes: p.auth?.scopes ?? [] };
   },
 };

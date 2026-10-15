@@ -12,7 +12,7 @@ import { blockingRequirements, missingRequirements } from "@/lib/workflow/rules"
 import { ActivityType, NotificationType } from "@/lib/workflow/statuses";
 import { purgeExpiredSessions } from "../auth/session";
 import { logActivity } from "./activity";
-import { openToken } from "./tokens";
+import { accessTokenFor, openToken, refreshExpiringTokens } from "./tokens";
 import { contentStateSelect, toContentState } from "./content-state";
 import { syncPublishingStatus } from "./content";
 import { notify } from "./notifications";
@@ -53,7 +53,7 @@ function asObject(value: Prisma.JsonValue | null): Record<string, unknown> | nul
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
 
-function toRequest(s: LoadedSchedule): PublishRequest {
+function toRequest(s: LoadedSchedule, accessToken: string | null): PublishRequest {
   return {
     scheduleId: s.id,
     account: {
@@ -61,8 +61,9 @@ function toRequest(s: LoadedSchedule): PublishRequest {
       name: s.account.name,
       status: s.account.status,
       externalId: s.account.externalId,
-      // Stored encrypted (SEC-04): the token itself exists only here, on its way to the platform
-      accessToken: openToken(s.account.accessToken),
+      // Stored encrypted (SEC-04): the tokens exist only here, on their way to the platform
+      accessToken,
+      refreshToken: openToken(s.account.refreshToken),
       tokenExpiresAt: s.account.tokenExpiresAt,
     },
     title: s.title,
@@ -199,11 +200,13 @@ async function attempt(scheduleId: string, heartbeat: Heartbeat): Promise<Proces
 
   let request: PublishRequest;
   try {
-    request = toRequest(s);
+    // Renewed first when about to expire (PUB-07)
+    request = toRequest(s, await accessTokenFor(s.account));
   } catch (e) {
-    if (!(e instanceof SecretsError)) throw e;
-    // The stored credentials can't be read (key changed or value damaged): the account needs reconnecting
-    return recordFailure(s, job, new PublishError(`The stored credentials for "${s.account.name}" can't be read: ${e.message} Reconnect the account.`, "AUTH", false), settings);
+    // The stored credentials can't be read (key changed or value damaged), or the platform no longer accepts the sign-in: the account needs reconnecting
+    if (e instanceof SecretsError) return recordFailure(s, job, new PublishError(`The stored credentials for "${s.account.name}" can't be read: ${e.message} Reconnect the account.`, "AUTH", false), settings);
+    if (e instanceof PublishError) return recordFailure(s, job, e, settings);
+    throw e;
   }
   const uploadState = asObject(s.uploadState);
   const simulated = provider.isMock;
@@ -363,6 +366,7 @@ async function recordSuccess(
 
 async function recordFailure(s: LoadedSchedule, job: AttemptRow, err: PublishError, settings: Settings, opts: { fromPlatform?: boolean } = {}): Promise<ProcessResult> {
   const now = new Date();
+  job.platformRequestId ??= err.platformRequestId ?? undefined;
   // The budget counts automatic retries since the last action by a person, not every attempt ever made (PUB-09)
   const retry = err.retryable && settings.autoRetry && s.autoRetries < settings.maxRetries;
   // An unknown outcome is checked with the platform on the next attempt, so it can come back soon
@@ -518,6 +522,15 @@ export async function notifyBlockedPosts(accountId: string) {
 
 /** Hourly housekeeping: token expiry, tomorrow's posts, incomplete assets, old sessions and worker rows. */
 export async function runMaintenance(now = new Date()) {
+  // Access tokens about to expire are renewed ahead of time (PUB-07); a sign-in the platform no longer accepts blocks the account
+  const renewed = await refreshExpiringTokens().catch((e) => {
+    log.warn("token refresh pass failed", { err: e });
+    return null;
+  });
+  for (const f of renewed?.failed ?? []) {
+    await bestEffort("mark account", () => db.socialAccount.update({ where: { id: f.id }, data: { status: "TOKEN_EXPIRED", lastError: f.message } }));
+    await bestEffort("blocked posts notice", () => notifyBlockedPosts(f.id));
+  }
   const settings = await getSettings();
   const tz = settings.timezone;
 

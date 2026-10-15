@@ -37,7 +37,10 @@ function initials(name: string) {
 export const getConnectPlatforms = cache(async () => {
   await io();
   const platforms = await db.platform.findMany({ orderBy: { sortOrder: "asc" }, select: { id: true, name: true, enabled: true } });
-  return platforms.map((p) => ({ ...p, ...platformCopy(p.id) }));
+  return platforms.map((p) => {
+    const meta = providerMeta(p.id);
+    return { ...p, ...platformCopy(p.id), oauthConfigured: meta?.oauthConfigured ?? false, scopes: meta?.scopes ?? [] };
+  });
 });
 export type ConnectPlatform = Awaited<ReturnType<typeof getConnectPlatforms>>[number];
 
@@ -55,6 +58,7 @@ export async function getAccountsData() {
         status: true,
         followers: true,
         isDefault: true,
+        externalId: true,
         tokenExpiresAt: true,
         lastSyncAt: true,
         lastError: true,
@@ -83,6 +87,8 @@ export async function getAccountsData() {
       status: a.status,
       connected,
       isDefault: a.isDefault,
+      /** Connected with the platform's sign-in (not registered by hand); reconnecting goes through the platform again */
+      oauth: !!a.externalId && (providerMeta(a.platformId)?.oauthConfigured ?? false),
       accountNoun: copy.accountNoun,
       audience: `${compactNumber(a.followers)} ${copy.audienceNoun}`,
       scheduled: scheduledBy.get(a.id) ?? 0,

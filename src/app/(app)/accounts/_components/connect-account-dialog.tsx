@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Info, Plug } from "lucide-react";
+import { Check, Info, KeyRound, Plug } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
 import { Field } from "@/components/app/field";
 import { PlatformIcon } from "@/components/app/platform-icon";
@@ -106,7 +106,8 @@ function ConnectForm({ platforms, initialPlatformId, nameId, onDone }: { platfor
           })}
         </div>
 
-        {platform ? (
+        {platform?.oauthConfigured && <OAuthPanel platform={platform} noun={noun} />}
+        {platform && !platform.oauthConfigured ? (
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label={`${capitalize(noun)} name`} required className="sm:col-span-2">
               <Input id={nameId} required aria-label={`${capitalize(noun)} name`} maxLength={100} value={name} onChange={(e) => setName(e.target.value)} placeholder={platform.id === "youtube" ? "e.g. AI Creator Lab" : "e.g. Smart Living Daily"} />
@@ -122,21 +123,46 @@ function ConnectForm({ platforms, initialPlatformId, nameId, onDone }: { platfor
           <p className="text-sm text-muted-foreground">No platform is available to connect yet.</p>
         )}
 
-        <p className="flex items-start gap-2 rounded-xl bg-secondary/70 p-3 text-xs text-muted-foreground">
-          <Info className="mt-px size-3.5 shrink-0" />
-          OAuth sign-in will replace this form in the next phase — for now accounts are registered manually and publishing is simulated.
-        </p>
+        {platform && !platform.oauthConfigured && (
+          <p className="flex items-start gap-2 rounded-xl bg-secondary/70 p-3 text-xs text-muted-foreground">
+            <Info className="mt-px size-3.5 shrink-0" />
+            {platform.name} is simulated on this server: the {noun} is registered by hand and nothing is sent to {platform.name}. Its sign-in needs the
+            credentials described in .env.example.
+          </p>
+        )}
       </div>
 
       <DialogFooter className="mx-0 mb-0 border-t border-[#f1eedf] bg-[#fcfbf3] px-6 py-4">
         <Button type="button" variant="outline" className="bg-white" onClick={onDone}>
           Cancel
         </Button>
-        <Button type="submit" disabled={pending || !platform || !name.trim()}>
-          <Plug />
-          {pending ? "Connecting…" : `Connect ${noun}`}
-        </Button>
+        {!platform?.oauthConfigured && (
+          <Button type="submit" disabled={pending || !platform || !name.trim()}>
+            <Plug />
+            {pending ? "Connecting…" : `Connect ${noun}`}
+          </Button>
+        )}
       </DialogFooter>
     </form>
+  );
+}
+
+/** The real sign-in (PUB-07): a link to the platform; the callback connects every channel / Page it returns. */
+function OAuthPanel({ platform, noun }: { platform: ConnectPlatform; noun: string }) {
+  const via = platform.id === "youtube" ? "Google" : platform.id === "facebook" ? "Facebook" : platform.name;
+  const scopes = platform.scopes.map((s) => s.replace("https://www.googleapis.com/auth/", "")).join(", ");
+  return (
+    <div className="space-y-3 rounded-xl border border-[#f1eedf] bg-[#fcfbf3] p-4">
+      <p className="text-sm">
+        Sign in with {via}; every {noun} you can publish to is connected and its sign-in is stored encrypted. {platform.name} asks you to allow:{" "}
+        <span className="font-mono text-xs">{scopes}</span>.
+      </p>
+      <Button asChild size="lg">
+        <a href={`/api/oauth/${platform.id}/start`}>
+          <KeyRound />
+          Continue with {via}
+        </a>
+      </Button>
+    </div>
   );
 }
