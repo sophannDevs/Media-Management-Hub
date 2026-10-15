@@ -164,15 +164,22 @@ function ScheduleCard({ s }: { s: Schedule }) {
           <button type="button" onClick={() => setHistory((v) => !v)} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
             <ChevronDown className={cn("size-3.5 transition-transform", history && "rotate-180")} />
             {s.attempts} attempt{s.attempts === 1 ? "" : "s"}
+            {!s.simulated && s.platformStatus === "LIVE" ? " · live on the platform" : !s.simulated && s.platformStatus === "REJECTED" ? " · rejected by the platform" : ""}
           </button>
           {history && (
             <ul className="mt-2 space-y-1.5 rounded-xl bg-[#fcfbf3] p-3 text-xs">
               {s.jobs.map((j) => (
                 <li key={j.id} className="flex gap-2">
                   <span className="w-16 shrink-0 font-medium">Attempt {j.attempt}</span>
+                  <span className="w-24 shrink-0 text-muted-foreground">{j.trigger === "MANUAL" ? "retried by you" : j.trigger === "RETRY" ? "auto retry" : "scheduled"}</span>
                   <span className={cn("w-20 shrink-0", j.status === "FAILED" ? "text-rose-700" : j.status === "SUCCEEDED" ? "text-olive-700" : "text-amber-700")}>{j.status.toLowerCase()}</span>
                   <span className="w-36 shrink-0 text-muted-foreground">{j.startedLabel}</span>
-                  {j.error && <span className="min-w-0 truncate font-mono text-rose-800" title={j.error}>{j.error}</span>}
+                  <span className="min-w-0 flex-1 truncate" title={[j.error, j.retryReason].filter(Boolean).join(" — ")}>
+                    {j.error && <span className="font-mono text-rose-800">{j.error}</span>}
+                    {j.retryReason && <span className="text-muted-foreground">{j.error ? " · " : ""}{j.retryReason}</span>}
+                    {j.externalId && !s.simulated && <span className="text-muted-foreground"> · id {j.externalId}</span>}
+                    {j.durationMs !== null && <span className="text-muted-foreground"> · {(j.durationMs / 1000).toFixed(1)} s</span>}
+                  </span>
                 </li>
               ))}
             </ul>

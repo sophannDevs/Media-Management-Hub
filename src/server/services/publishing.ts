@@ -31,6 +31,8 @@ import { getSettings, rulesFrom, type Settings } from "./settings";
 export const WORKER_ID = `${os.hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`;
 const leaseMs = () => Math.max(10, Number(process.env.PUBLISH_LEASE_SECONDS) || 120) * 1000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** A JS Date as the UTC wall-clock the DateTime columns hold (raw SQL binds a Date as timestamptz). */
+const utc = (d: Date) => Prisma.sql`(${d} AT TIME ZONE 'UTC')`;
 
 const scheduleInclude = {
   account: true,
@@ -39,6 +41,8 @@ const scheduleInclude = {
   content: { select: { ...contentStateSelect, id: true, title: true, archivedAt: true, videoAsset: true, thumbnailAsset: true } },
 } satisfies Prisma.PublishingScheduleInclude;
 type LoadedSchedule = Prisma.PublishingScheduleGetPayload<{ include: typeof scheduleInclude }>;
+/** The attempt row being written: created when the attempt starts, finished once (PUB-09). */
+type AttemptRow = { id: string; attempt: number; startedAt: Date; platformRequestId?: string };
 
 type MediaRow = { fileName: string; mimeType: string; size: number; storageKey: string | null; externalUrl: string | null } | null;
 const toPublishMedia = (m: MediaRow): PublishMedia | null =>
@@ -133,7 +137,6 @@ export async function processSchedule(scheduleId: string): Promise<ProcessResult
  * on, or claiming, each other's rows. Raw SQL, so updatedAt is set here.
  */
 export async function claimNextDue(now = new Date()): Promise<string | null> {
-  const utc = (d: Date) => Prisma.sql`(${d} AT TIME ZONE 'UTC')`;
   const rows = await db.$queryRaw<{ id: string }[]>`
     UPDATE "PublishingSchedule"
     SET "status" = 'PROCESSING', "attempts" = "attempts" + 1, "lockedBy" = ${WORKER_ID},
@@ -163,11 +166,20 @@ async function runClaimed(scheduleId: string): Promise<ProcessResult> {
 async function attempt(scheduleId: string, heartbeat: Heartbeat): Promise<ProcessResult> {
   let s: LoadedSchedule;
   let settings: Settings;
-  let jobId: string;
+  let job: AttemptRow;
   try {
     s = await db.publishingSchedule.findUniqueOrThrow({ where: { id: scheduleId }, include: scheduleInclude });
     settings = await getSettings();
-    jobId = (await db.publishingJob.create({ data: { scheduleId, attempt: s.attempts, status: "PROCESSING" } })).id;
+    const startedAt = new Date();
+    // What put this attempt in the queue: its time came, an automatic retry, or a person
+    const trigger = s.nextAttemptAt === null ? "SCHEDULED" : s.autoRetries > 0 ? "RETRY" : "MANUAL";
+    // The attempt number comes from the log itself, never from a counter that resets (PUB-09)
+    const [row] = await db.$queryRaw<{ id: string; attempt: number }[]>`
+      INSERT INTO "PublishingJob" ("id", "scheduleId", "attempt", "status", "trigger", "workerId", "startedAt")
+      SELECT ${randomUUID()}, ${scheduleId}, COALESCE(MAX("attempt"), 0) + 1, 'PROCESSING', ${trigger}, ${WORKER_ID}, ${utc(startedAt)}
+      FROM "PublishingJob" WHERE "scheduleId" = ${scheduleId}
+      RETURNING "id", "attempt"`;
+    job = { id: row.id, attempt: row.attempt, startedAt };
   } catch (e) {
     // Nothing was sent: give the post back to the queue
     await bestEffort("release claim", () =>
@@ -181,9 +193,9 @@ async function attempt(scheduleId: string, heartbeat: Heartbeat): Promise<Proces
   await bestEffort("status sync", () => syncPublishingStatus(s.contentId));
 
   const provider = getProvider(s.platformId);
-  if (!provider) return recordFailure(s, jobId, new PublishError(`No integration for platform "${s.platformId}".`, "VALIDATION", false), settings);
+  if (!provider) return recordFailure(s, job, new PublishError(`No integration for platform "${s.platformId}".`, "VALIDATION", false), settings);
   const refusal = preflight(s, settings);
-  if (refusal) return recordFailure(s, jobId, refusal, settings);
+  if (refusal) return recordFailure(s, job, refusal, settings);
 
   let request: PublishRequest;
   try {
@@ -191,7 +203,7 @@ async function attempt(scheduleId: string, heartbeat: Heartbeat): Promise<Proces
   } catch (e) {
     if (!(e instanceof SecretsError)) throw e;
     // The stored credentials can't be read (key changed or value damaged): the account needs reconnecting
-    return recordFailure(s, jobId, new PublishError(`The stored credentials for "${s.account.name}" can't be read: ${e.message} Reconnect the account.`, "AUTH", false), settings);
+    return recordFailure(s, job, new PublishError(`The stored credentials for "${s.account.name}" can't be read: ${e.message} Reconnect the account.`, "AUTH", false), settings);
   }
   const uploadState = asObject(s.uploadState);
   const simulated = provider.isMock;
@@ -199,17 +211,18 @@ async function attempt(scheduleId: string, heartbeat: Heartbeat): Promise<Proces
   // The previous attempt ended without a clear answer: ask the platform before sending again
   if (s.lastErrorCode === "UNKNOWN_OUTCOME") {
     const check = await reconcile(provider, request, uploadState);
-    if (check.status === "published") return recordSuccess(s, jobId, check.result, { simulated, reconciled: true });
+    if (check.status === "published") return recordSuccess(s, job, check.result, { simulated, reconciled: true });
     if (check.status === "unknown") {
       const err = new PublishError(
         `Couldn't confirm whether the earlier attempt went live (${check.reason}). Check ${s.platform.name} first and retry only if the post isn't there.`,
         "UNKNOWN_OUTCOME",
         false,
       );
-      return recordFailure(s, jobId, err, settings);
+      return recordFailure(s, job, err, settings);
     }
   }
 
+  let phase: "UPLOADING" | "PROCESSING" | null = null;
   let result: PublishResult;
   try {
     result = await provider.publish(request, {
@@ -219,12 +232,19 @@ async function attempt(scheduleId: string, heartbeat: Heartbeat): Promise<Proces
           db.publishingSchedule.update({ where: { id: scheduleId }, data: { uploadState: state as Prisma.InputJsonObject } }),
         );
       },
-      progress: () => heartbeat.progress(),
+      progress: (info) => {
+        heartbeat.progress();
+        if (info?.platformRequestId) job.platformRequestId = info.platformRequestId;
+        if (info?.phase && info.phase !== phase) {
+          phase = info.phase;
+          void bestEffort("platform status", () => db.publishingSchedule.update({ where: { id: scheduleId }, data: { platformStatus: info.phase } }));
+        }
+      },
     });
   } catch (e) {
-    return recordFailure(s, jobId, classify(e, provider), settings);
+    return recordFailure(s, job, classify(e, provider), settings, { fromPlatform: true });
   }
-  return recordSuccess(s, jobId, result, { simulated, reconciled: false });
+  return recordSuccess(s, job, result, { simulated, reconciled: false });
 }
 
 /**
@@ -271,7 +291,7 @@ async function reconcile(provider: PlatformProvider, req: PublishRequest, upload
 
 async function recordSuccess(
   s: LoadedSchedule,
-  jobId: string,
+  job: AttemptRow,
   result: PublishResult,
   { simulated, reconciled }: { simulated: boolean; reconciled: boolean },
 ): Promise<ProcessResult> {
@@ -296,15 +316,19 @@ async function recordSuccess(
             lastError: null,
             lastErrorCode: null,
             uploadState: Prisma.DbNull,
+            platformStatus: "LIVE",
           },
         }),
-        db.publishingJob.update({ where: { id: jobId }, data: { status: "SUCCEEDED", finishedAt: now } }),
+        db.publishingJob.update({
+          where: { id: job.id },
+          data: { status: "SUCCEEDED", finishedAt: now, durationMs: now.getTime() - job.startedAt.getTime(), externalId: result.externalId, platformRequestId: job.platformRequestId ?? null },
+        }),
       ]),
     );
   } catch (e) {
     log.error("the platform accepted the post but the result could not be saved; it will not be sent again (recovery checks the platform when the lease expires)", {
       scheduleId: s.id,
-      jobId,
+      jobId: job.id,
       platform: s.platformId,
       externalId: result.externalId,
       url: result.url,
@@ -312,7 +336,7 @@ async function recordSuccess(
     });
     throw e;
   }
-  log.info("post published", { scheduleId: s.id, jobId, platform: s.platformId, account: s.account.name, attempt: s.attempts, simulated, reconciled, externalId: result.externalId });
+  log.info("post published", { scheduleId: s.id, jobId: job.id, platform: s.platformId, account: s.account.name, attempt: job.attempt, simulated, reconciled, externalId: result.externalId });
 
   await bestEffort("activity log", () =>
     logActivity({
@@ -337,21 +361,34 @@ async function recordSuccess(
   return "published";
 }
 
-async function recordFailure(s: LoadedSchedule, jobId: string, err: PublishError, settings: Settings): Promise<ProcessResult> {
+async function recordFailure(s: LoadedSchedule, job: AttemptRow, err: PublishError, settings: Settings, opts: { fromPlatform?: boolean } = {}): Promise<ProcessResult> {
   const now = new Date();
-  const retry = err.retryable && settings.autoRetry && s.attempts < settings.maxRetries;
+  // The budget counts automatic retries since the last action by a person, not every attempt ever made (PUB-09)
+  const retry = err.retryable && settings.autoRetry && s.autoRetries < settings.maxRetries;
   // An unknown outcome is checked with the platform on the next attempt, so it can come back soon
   const delayMinutes = err.code === "UNKNOWN_OUTCOME" ? 1 : settings.retryDelayMinutes;
+  const retryAt = retry ? new Date(now.getTime() + delayMinutes * 60_000) : null;
+  // Why the next attempt was, or wasn't, scheduled: kept on the attempt row
+  const retryReason = retry
+    ? `${err.code}: automatic retry ${s.autoRetries + 1} of ${settings.maxRetries} in ${delayMinutes} min`
+    : !err.retryable
+      ? `${err.code}: not retried automatically`
+      : !settings.autoRetry
+        ? `${err.code}: automatic retries are off`
+        : `${err.code}: no automatic retries left (${settings.maxRetries} used)`;
 
   await persist("record failure", () =>
     db.$transaction([
-      db.publishingJob.update({ where: { id: jobId }, data: { status: "FAILED", error: err.message, errorCode: err.code, finishedAt: now } }),
+      db.publishingJob.update({
+        where: { id: job.id },
+        data: { status: "FAILED", error: err.message, errorCode: err.code, finishedAt: now, durationMs: now.getTime() - job.startedAt.getTime(), platformRequestId: job.platformRequestId ?? null, retryAt, retryReason },
+      }),
       db.publishingSchedule.update({
         where: { id: s.id },
         data: {
-          ...(retry
-            ? { status: "RETRY_SCHEDULED", nextAttemptAt: new Date(now.getTime() + delayMinutes * 60_000) }
-            : { status: "FAILED", nextAttemptAt: null, activeKey: null }),
+          ...(retry ? { status: "RETRY_SCHEDULED", nextAttemptAt: retryAt, autoRetries: { increment: 1 } } : { status: "FAILED", nextAttemptAt: null, activeKey: null }),
+          // The platform itself refused the post (ARCH-02); a failure before the upload never reached it
+          ...(opts.fromPlatform && err.code === "VALIDATION" ? { platformStatus: "REJECTED" } : {}),
           lastError: err.message,
           lastErrorCode: err.code,
           lockedBy: null,
@@ -361,7 +398,7 @@ async function recordFailure(s: LoadedSchedule, jobId: string, err: PublishError
     ]),
   );
 
-  log.warn("publish attempt failed", { scheduleId: s.id, jobId, platform: s.platformId, account: s.account.name, attempt: s.attempts, code: err.code, willRetry: retry, message: err.message });
+  log.warn("publish attempt failed", { scheduleId: s.id, jobId: job.id, platform: s.platformId, account: s.account.name, attempt: job.attempt, code: err.code, willRetry: retry, retryReason, message: err.message });
   if (err.code === "AUTH") {
     await bestEffort("mark account", () => db.socialAccount.update({ where: { id: s.accountId }, data: { status: "TOKEN_EXPIRED", lastError: err.message } }));
     await bestEffort("blocked posts notice", () => notifyBlockedPosts(s.accountId));
@@ -381,7 +418,7 @@ async function recordFailure(s: LoadedSchedule, jobId: string, err: PublishError
         title: err.code === "UNKNOWN_OUTCOME" ? "Check this post on the platform" : "Publishing failed",
         message: `"${s.content.title}" could not be posted to ${s.account.name}: ${err.message}`,
         href: `/schedule?status=failed`,
-        dedupeKey: `failed:${s.id}:${s.attempts}`,
+        dedupeKey: `failed:${s.id}:${job.attempt}`,
       }),
     );
   }

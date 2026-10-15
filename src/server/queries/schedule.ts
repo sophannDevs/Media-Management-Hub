@@ -53,7 +53,7 @@ const rowSelect = {
   jobs: {
     orderBy: { startedAt: "desc" },
     take: 20,
-    select: { id: true, attempt: true, status: true, error: true, startedAt: true, finishedAt: true },
+    select: { id: true, attempt: true, status: true, trigger: true, error: true, externalId: true, retryReason: true, startedAt: true, finishedAt: true },
   },
   _count: { select: { jobs: true } },
 } satisfies Prisma.PublishingScheduleSelect;
@@ -131,6 +131,9 @@ function toRow(s: Row, now: Date, tz: string) {
       started: fmt(j.startedAt, tz, "MMM d, h:mm a"),
       finished: j.finishedAt ? fmt(j.finishedAt, tz, dayKey(j.finishedAt, tz) === dayKey(j.startedAt, tz) ? "h:mm a" : "MMM d, h:mm a") : null,
       took: j.finishedAt ? duration(j.finishedAt.getTime() - j.startedAt.getTime()) : null,
+      trigger: j.trigger,
+      externalId: j.externalId,
+      retryReason: j.retryReason,
     })),
     jobCount: s._count.jobs,
   };

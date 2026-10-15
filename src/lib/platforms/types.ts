@@ -45,8 +45,12 @@ export interface PublishContext {
    * interrupted attempt can be resumed or reconciled instead of re-sent.
    */
   saveUploadState(state: Record<string, unknown>): Promise<void>;
-  /** Signals progress; keeps the lease alive during long uploads. */
-  progress(info?: { bytesSent?: number; totalBytes?: number }): void;
+  /**
+   * Signals progress; keeps the lease alive during long uploads. `phase` is the
+   * platform's view of the post (ARCH-02) and `platformRequestId` the platform's
+   * request / trace id, kept on the attempt row (PUB-09).
+   */
+  progress(info?: { bytesSent?: number; totalBytes?: number; phase?: "UPLOADING" | "PROCESSING"; platformRequestId?: string }): void;
 }
 
 /**

@@ -349,7 +349,10 @@ model PublishingSchedule {
   lockedUntil      DateTime?
   /// Provider state saved during an attempt (e.g. a resumable upload session)
   uploadState      Json?
+  /// Every attempt ever made (the log's length); never reset
   attempts         Int                 @default(0)
+  /// Automatic retries since the last action by a person: the budget maxRetries limits (PUB-09)
+  autoRetries      Int                 @default(0)
   nextAttemptAt    DateTime?
   lastError        String?
   /// AUTH | QUOTA | RATE | VALIDATION | NETWORK | UNKNOWN | UNKNOWN_OUTCOME
@@ -357,6 +360,8 @@ model PublishingSchedule {
   externalId       String?
   externalUrl      String?
   publishedAt      DateTime?
+  /// The platform's own view of the post, apart from the queue state (ARCH-02): UPLOADING | PROCESSING | LIVE | REJECTED
+  platformStatus   String?
   /// Published by a simulated provider: nothing reached the platform, and the
   /// external id / URL are made up. Never shown as "Published".
   simulated        Boolean             @default(false)
@@ -387,18 +392,34 @@ model PublishingSchedule {
 }
 
 /// One execution attempt of a PublishingSchedule.
+/// One attempt to publish a schedule: the append-only log of what was sent and
+/// when (PUB-09). A row is created when the attempt starts and finished once; a
+/// finished row never changes (trigger PublishingJob_append_only). `attempt`
+/// is numbered from this log, never from a counter that resets.
 model PublishingJob {
-  id         String             @id @default(cuid())
-  scheduleId String
-  schedule   PublishingSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
-  attempt    Int
+  id                String             @id @default(cuid())
+  scheduleId        String
+  schedule          PublishingSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  attempt           Int
   /// PROCESSING | SUCCEEDED | FAILED
-  status     String
-  error      String?
-  errorCode  String?
-  startedAt  DateTime           @default(now())
-  finishedAt DateTime?
+  status            String
+  /// What put the attempt in the queue: SCHEDULED (its time came) | RETRY (automatic) | MANUAL (a person)
+  trigger           String             @default("SCHEDULED")
+  error             String?
+  errorCode         String?
+  /// The platform's id for the post, when this attempt made it
+  externalId        String?
+  /// The platform's request / trace id, when the provider reports one (for support tickets)
+  platformRequestId String?
+  workerId          String?
+  durationMs        Int?
+  /// When and why the next automatic attempt was scheduled, or why it wasn't
+  retryAt           DateTime?
+  retryReason       String?
+  startedAt         DateTime           @default(now())
+  finishedAt        DateTime?
 
+  @@unique([scheduleId, attempt])
   @@index([scheduleId])
 }
 

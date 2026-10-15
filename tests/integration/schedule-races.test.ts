@@ -85,7 +85,8 @@ describe("user edits racing the worker (PUB-04)", () => {
   });
 
   it("a retry is refused when the worker claims the post first", async () => {
-    const { s } = await post("FAILED");
+    // A post waiting for its automatic retry: the worker can claim it, and a person can retry it right away
+    const { s } = await post("RETRY_SCHEDULED");
     claimAfterNextRead(s.id);
 
     await expect(retrySchedule(s.id)).rejects.toMatchObject({ code: "CONFLICT" });

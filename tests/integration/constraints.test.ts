@@ -7,6 +7,7 @@ import {
 } from "@/lib/workflow/statuses";
 import { connectAccount } from "@/server/services/workspace";
 import { createAccount, createReadyContent, insertSchedule, seedPlatforms } from "../helpers/factories";
+import { JOB_TRIGGERS, PLATFORM_STATUSES } from "@/lib/workflow/schedule-machine";
 
 // DB-02: the database refuses invalid states even when the code has a bug.
 
@@ -25,6 +26,8 @@ const ENUMS: [string, string, readonly string[], boolean?][] = [
   ["PublishingSchedule", "archivedStatus", ["WAITING", "RETRY_SCHEDULED"], true],
   ["PublishingJob", "status", JobStatus.codes],
   ["PublishingJob", "errorCode", PUBLISH_ERROR_CODES, true],
+  ["PublishingJob", "trigger", JOB_TRIGGERS],
+  ["PublishingSchedule", "platformStatus", PLATFORM_STATUSES, true],
   ["SocialAccount", "status", AccountStatus.codes],
   ["MediaAsset", "type", MediaType.codes],
   ["AiPrompt", "category", PromptCategory.codes],

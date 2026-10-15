@@ -325,6 +325,11 @@ function Attempts({ r }: { r: QueueRow }) {
                   Started {j.started}
                   {j.finished ? ` · finished ${j.finished} (${j.took})` : " · still running"}
                 </p>
+                <p className="text-muted-foreground">
+                  {j.trigger === "MANUAL" ? "Retried by you" : j.trigger === "RETRY" ? "Automatic retry" : "Scheduled time"}
+                  {j.retryReason ? ` · ${j.retryReason}` : ""}
+                  {j.externalId && !r.simulated ? ` · platform id ${j.externalId}` : ""}
+                </p>
                 {j.error && <p className="rounded-md border border-rose-100 bg-rose-50 p-1.5 font-mono text-xs break-words text-rose-800">{j.error}</p>}
               </li>
             );

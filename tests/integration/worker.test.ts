@@ -91,7 +91,8 @@ describe("retry (PUB-06)", () => {
     expect(Date.now() - started).toBeLessThan(300);
     expect(r).toMatchObject({ ok: true, message: `Queued — the publishing worker sends it within ${queueIntervalSeconds()} seconds` });
     expect(fake.calls).toHaveLength(0);
-    expect(await db.publishingSchedule.findUniqueOrThrow({ where: { id: s.id } })).toMatchObject({ status: "RETRY_SCHEDULED", attempts: 0 });
+    expect(await db.publishingSchedule.findUniqueOrThrow({ where: { id: s.id } })).// A person's retry refills the automatic-retry budget; the attempt count is the log's length and never resets (PUB-09)
+    toMatchObject({ status: "RETRY_SCHEDULED", attempts: 3, autoRetries: 0 });
     // The worker's next pass sends it
     await processDueSchedules(inMinutes(1));
     expect(fake.calls.map((x) => x.scheduleId)).toEqual([s.id]);

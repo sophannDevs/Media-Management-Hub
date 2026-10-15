@@ -224,7 +224,8 @@ export async function updateSchedule(id: string, input: ScheduleInput) {
         // Editing a failed/cancelled post puts it back in the queue
         status: "WAITING",
         activeKey: scheduleActiveKey("WAITING", existing.contentId, input.accountId),
-        attempts: 0,
+        autoRetries: 0,
+        platformStatus: null,
         nextAttemptAt: null,
         uploadState: Prisma.DbNull,
         ...clearedError(existing.lastErrorCode),
@@ -283,7 +284,8 @@ export async function reschedule(id: string, scheduledAt: Date) {
         scheduledAt,
         status: "WAITING",
         activeKey: scheduleActiveKey("WAITING", s.contentId, s.accountId),
-        attempts: 0,
+        autoRetries: 0,
+        platformStatus: null,
         nextAttemptAt: null,
         ...clearedError(s.lastErrorCode),
       },
@@ -347,7 +349,8 @@ export async function retrySchedule(id: string, opts: { confirmUnknownOutcome?: 
       data: {
         status: "RETRY_SCHEDULED",
         nextAttemptAt: new Date(),
-        attempts: 0,
+        autoRetries: 0,
+        platformStatus: null,
         activeKey: scheduleActiveKey("RETRY_SCHEDULED", s.contentId, s.accountId),
         // The user checked the platform: send without asking it again
         ...(unconfirmed ? { lastErrorCode: null } : {}),

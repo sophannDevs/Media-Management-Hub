@@ -409,6 +409,8 @@ export async function getContentWorkspace(id: string) {
       relative: relativeDay(s.scheduledAt, now, tz),
       title: s.title,
       attempts: s.attempts,
+      /** The platform's own view (ARCH-02): LIVE once it confirmed the post, REJECTED when it refused it */
+      platformStatus: s.platformStatus,
       lastError: s.lastError,
       nextAttemptLabel: s.nextAttemptAt ? fmtDateTime(s.nextAttemptAt, tz) : null,
       simulated: s.simulated,
@@ -417,7 +419,7 @@ export async function getContentWorkspace(id: string) {
       /** Scheduled before Ready to Post with a reason (WF-01) */
       override: s.overrideReason ? { reason: s.overrideReason, atLabel: s.overrideAt ? fmtDateTime(s.overrideAt, tz) : null } : null,
       publishedLabel: s.publishedAt ? fmtDateTime(s.publishedAt, tz) : null,
-      jobs: s.jobs.map((j) => ({ id: j.id, attempt: j.attempt, status: j.status, error: j.error, startedLabel: fmtDateTime(j.startedAt, tz) })),
+      jobs: s.jobs.map((j) => ({ id: j.id, attempt: j.attempt, status: j.status, trigger: j.trigger, error: j.error, retryReason: j.retryReason, externalId: j.externalId, durationMs: j.durationMs, startedLabel: fmtDateTime(j.startedAt, tz) })),
     })),
     publishingChecks: [
       { label: 'Content is "Ready to Post"', ok: ready },
