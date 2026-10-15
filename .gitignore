@@ -56,3 +56,6 @@ next-env.d.ts
 # local PostgreSQL cluster (scripts/db-local.mjs)
 /.pgdata/
 /.pgdata.pw.tmp
+
+# Database backups and the mirror of uploaded files (DB-04)
+/backups/

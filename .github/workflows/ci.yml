@@ -35,6 +35,13 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # pg_dump / pg_restore of the same major version as the server (the backup tests skip without them)
+      - name: PostgreSQL 17 client tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-17
       - name: Typecheck
         run: npm run typecheck
       - name: Lint

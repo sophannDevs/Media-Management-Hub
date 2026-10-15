@@ -226,7 +226,20 @@ async function wipe() {
   await rm(path.join(STORAGE, "seed"), { recursive: true, force: true });
 }
 
+/** The seed deletes everything first: it only runs against a database on this machine (DB-04). */
+function requireLocalDatabase() {
+  try {
+    process.loadEnvFile();
+  } catch {}
+  const host = new URL(process.env.DATABASE_URL ?? "postgresql://localhost/").hostname;
+  if (!["localhost", "127.0.0.1", "::1", "[::1]"].includes(host)) {
+    console.error(`Seeding refused: DATABASE_URL points at ${host}, not at this machine. The seed wipes all data first.`);
+    process.exit(1);
+  }
+}
+
 async function main() {
+  requireLocalDatabase();
   console.log("Seeding demo data…");
   await wipe();
 

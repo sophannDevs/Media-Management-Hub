@@ -24,6 +24,17 @@ npm run worker                # the publishing worker (run one or more; a post i
 
 Copy `.env.example` to `.env` first if you don't have one. Any PostgreSQL 15+ server works: point `DATABASE_URL` at it instead of the local one. Coming from the old SQLite setup? `npm run db:import-sqlite` copies `prisma/dev.db` into PostgreSQL (and `npx tsx scripts/compare-sqlite.ts` checks the row counts). Useful scripts: `npm run typecheck`, `npm run lint`, `npm run db:studio`, `npm run db:reset` (wipes the database).
 
+### Backups
+
+```bash
+npm run db:backup              # backups/<time>/database.dump + manifest.json, and a mirror of uploaded files in backups/files/
+npm run db:backup:verify       # the restore drill: restore the latest backup into a scratch database, check it, drop it
+npm run db:restore             # restore the latest backup into a NEW database (…_restore_<time>); nothing is overwritten
+npm run db:restore -- --replace --files    # rebuild the real database from it (local only) and copy missing files back
+```
+
+The mirror of uploaded files only ever gains files (they are never rewritten), so every older dump stays restorable with its files; `--keep N` (default 14) prunes old dumps. Run `db:backup` from a scheduler (cron, Windows Task Scheduler) and `db:backup:verify` now and then: a backup nobody has restored is a guess. They use the PostgreSQL tools found by `PG_BIN` or the installed PostgreSQL. `db:reset` and `db:seed` wipe data, so they refuse a database that isn't on this machine, and `db:reset` backs up first. On a managed PostgreSQL, use the provider's backups with point-in-time recovery; these scripts are for a single machine.
+
 ### Tests
 
 ```bash
