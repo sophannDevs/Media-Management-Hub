@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,6 +15,7 @@ const dir = await vi.hoisted(async () => {
 
 import { POST } from "@/app/api/media/route";
 import { db } from "@/lib/db";
+import { ffprobeAvailable } from "@/lib/media/probe";
 import { createContent } from "@/server/services/content";
 import { seedPlatforms } from "../helpers/factories";
 
@@ -23,15 +25,21 @@ import { seedPlatforms } from "../helpers/factories";
 
 const MiB = 1024 * 1024;
 
-/** A body of `bytes` bytes, produced chunk by chunk (never all in memory at once). */
-function body(bytes: number, { failAfter }: { failAfter?: number } = {}) {
+/** A valid MP4 file-type box: the server decides what a file is from its first bytes (SEC-05); the rest is filler. */
+const MP4_HEAD = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from("ftypisom"), Buffer.from([0, 0, 2, 0]), Buffer.from("isomiso2mp41")]);
+const PNG_HEAD = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+
+/** A body of `bytes` bytes, produced chunk by chunk (never all in memory at once), starting with `head`. */
+function body(bytes: number, { failAfter, head = MP4_HEAD }: { failAfter?: number; head?: Uint8Array } = {}) {
   let sent = 0;
   return new ReadableStream<Uint8Array>({
     pull(controller) {
       if (failAfter !== undefined && sent >= failAfter) return controller.error(new Error("connection lost"));
       if (sent >= bytes) return controller.close();
       const n = Math.min(64 * 1024, bytes - sent);
-      controller.enqueue(new Uint8Array(n).fill(sent % 251));
+      const chunk = new Uint8Array(n).fill(sent % 251);
+      if (sent === 0) chunk.set(head.subarray(0, n));
+      controller.enqueue(chunk);
       sent += n;
     },
   });
@@ -66,7 +74,7 @@ describe("POST /api/media (PERF-07)", () => {
     expect(statSync(file).size).toBe(12 * MiB);
     expect(path.relative(dir, file).replaceAll("\\", "/")).toBe(asset.storageKey);
     // The bytes are the ones sent
-    expect(readFileSync(file).subarray(0, 4)).toEqual(Buffer.alloc(4, 0));
+    expect(readFileSync(file).subarray(0, MP4_HEAD.length)).toEqual(MP4_HEAD);
   });
 
   it("attaches the file to a content item and applies the workflow side effects", async () => {
@@ -83,7 +91,7 @@ describe("POST /api/media (PERF-07)", () => {
     const unread = new ReadableStream<Uint8Array>({ pull: () => { throw new Error("the body was read"); } });
     const res = await upload("type=VIDEO&fileName=huge.mp4", unread, { "content-length": String(2 * MiB) });
     expect(res.status).toBe(413);
-    expect(await res.json()).toMatchObject({ ok: false, code: "TOO_LARGE", error: "huge.mp4: larger than 1 MB." });
+    expect(await res.json()).toMatchObject({ ok: false, code: "TOO_LARGE", error: "huge.mp4: larger than 1 MB, the limit for video files." });
     expect(filesOnDisk()).toEqual([]);
   });
 
@@ -135,18 +143,86 @@ describe("POST /api/media (PERF-07)", () => {
     const unread = new ReadableStream<Uint8Array>({ pull: () => { throw new Error("the body was read"); } });
     const res = await upload("type=VIDEO&fileName=two-gib.mp4", unread, { "content-length": String(2 ** 31) });
     expect(res.status).toBe(413);
-    expect(await res.json()).toMatchObject({ code: "TOO_LARGE", error: "two-gib.mp4: larger than 2 GB." });
+    expect(await res.json()).toMatchObject({ code: "TOO_LARGE", error: "two-gib.mp4: larger than 2 GB, the limit for video files." });
     // A setting can't raise the cap past what the column holds
     process.env.MEDIA_MAX_BYTES = String(2 ** 40);
     expect((await upload("type=VIDEO&fileName=big.mp4", unread, { "content-length": String(2 ** 31) })).status).toBe(413);
   });
 
   it("keeps a client-supplied name from reaching outside the storage folder", async () => {
-    const res = await upload("type=OTHER&fileName=..%2F..%2Fescape.bin", body(1024), { "content-type": "application/octet-stream" });
+    const res = await upload("type=VIDEO&fileName=..%2F..%2Fescape.mp4", body(1024));
     expect(res.status).toBe(200);
     const asset = await db.mediaAsset.findFirstOrThrow();
     expect(asset.fileName).not.toMatch(/[\\/]/);
     expect(asset.storageKey).toMatch(/^media\/\d{4}\/\d{2}\/[\w.-]+$/);
     expect(filesOnDisk()).toHaveLength(1);
+  });
+});
+
+// SEC-05: what a file is comes from its bytes; the name and type must agree; every file is hashed and measured.
+describe("POST /api/media (SEC-05)", () => {
+  const fixtureBytes = () => readFileSync(path.resolve("tests/fixtures/tiny.mp4"));
+  const fromBuffer = (buf: Buffer) =>
+    new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new Uint8Array(buf));
+        c.close();
+      },
+    });
+
+  it("decides what a file is from its bytes, not from the browser", async () => {
+    const png = await upload("type=VIDEO&fileName=clip.mp4", body(MiB, { head: PNG_HEAD }));
+    expect(png.status).toBe(400);
+    expect(await png.json()).toMatchObject({ code: "VALIDATION", error: "clip.mp4: this is an image file (image/png), not a video." });
+    const text = await upload("type=VIDEO&fileName=clip.mp4", body(MiB, { head: Buffer.from("<html><script>alert(1)</script>") }));
+    expect(await text.json()).toMatchObject({ error: expect.stringMatching(/not a recognised video file/) });
+    expect(filesOnDisk()).toEqual([]);
+
+    // Declared as QuickTime, really MP4: stored as what it is
+    const declared = await upload("type=VIDEO&fileName=clip.mp4", body(MiB), { "content-type": "video/quicktime" });
+    expect(declared.status).toBe(200);
+    expect((await db.mediaAsset.findFirstOrThrow()).mimeType).toBe("video/mp4");
+    expect(filesOnDisk()).toHaveLength(1);
+  });
+
+  it("refuses an extension that does not belong to the format, and the OTHER type", async () => {
+    const mov = await upload("type=VIDEO&fileName=clip.mov", body(MiB), { "content-type": "video/quicktime" });
+    expect(mov.status).toBe(400);
+    expect(await mov.json()).toMatchObject({ error: "clip.mov: the name ends in .mov but the file is video/mp4 (.mp4)." });
+    const other = await upload("type=OTHER&fileName=thing.bin", body(1024), { "content-type": "application/octet-stream" });
+    expect(other.status).toBe(400);
+    expect(await other.json()).toMatchObject({ error: expect.stringMatching(/can.t be uploaded/) });
+    expect(filesOnDisk()).toEqual([]);
+    expect(await db.mediaAsset.count()).toBe(0);
+  });
+
+  it("caps images and audio below the video limit, before reading the body", async () => {
+    const unread = new ReadableStream<Uint8Array>({
+      pull: () => {
+        throw new Error("the body was read");
+      },
+    });
+    const res = await upload("type=IMAGE&fileName=huge.png", unread, { "content-type": "image/png", "content-length": String(30 * MiB) });
+    expect(res.status).toBe(413);
+    expect(await res.json()).toMatchObject({ code: "TOO_LARGE", error: "huge.png: larger than 25 MB, the limit for image files." });
+  });
+
+  it("hashes the file and measures it with ffprobe when the server has it", async () => {
+    const bytes = fixtureBytes();
+    const res = await upload("type=VIDEO&fileName=tiny.mp4&width=1920&height=1080&durationSec=99", fromBuffer(bytes), { "content-length": String(bytes.length) });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    const sha = createHash("sha256").update(bytes).digest("hex");
+    expect(json.assets[0]).toMatchObject({ size: bytes.length, sha256: sha, mimeType: "video/mp4" });
+    const asset = await db.mediaAsset.findUniqueOrThrow({ where: { id: json.created[0] } });
+    expect(asset.sha256).toBe(sha);
+    if (ffprobeAvailable()) {
+      // The browser's figures (1920x1080, 99 s) are replaced by what the file really holds
+      expect(asset).toMatchObject({ width: 64, height: 64, codec: "h264+aac", container: "mov" });
+      expect(asset.durationSec).toBeCloseTo(1, 1);
+      expect(asset.probedAt).toBeInstanceOf(Date);
+    } else {
+      expect(asset).toMatchObject({ width: 1920, height: 1080, durationSec: 99, probedAt: null });
+    }
   });
 });

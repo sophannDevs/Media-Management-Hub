@@ -20,7 +20,6 @@ export const ACCEPT_BY_TYPE: Record<string, string> = {
   VIDEO: "video/*",
   AUDIO: "audio/*",
   MUSIC: "audio/*",
-  OTHER: "*/*",
 };
 
 /** Reads dimensions / duration in the browser so the server doesn't need ffprobe. */

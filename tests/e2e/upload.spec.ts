@@ -8,8 +8,10 @@ test("a file bigger than 10 MB is stored whole", async ({ request }, info) => {
   test.skip(info.project.name !== "desktop", "mutates the shared e2e database");
   const size = 25 * 1024 * 1024;
   const bytes = Buffer.alloc(size, 7);
+  // A valid MP4 file-type box in front: the server decides the type from the bytes (SEC-05)
+  Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from("ftypisom"), Buffer.from([0, 0, 2, 0]), Buffer.from("isomiso2mp41")]).copy(bytes);
 
-  const res = await request.post("/api/media?type=OTHER&fileName=large-upload-check.bin", { data: bytes, headers: { "content-type": "application/octet-stream" }, timeout: 120_000 });
+  const res = await request.post("/api/media?type=VIDEO&fileName=large-upload-check.mp4", { data: bytes, headers: { "content-type": "video/mp4" }, timeout: 120_000 });
   expect(res.status()).toBe(200);
   const body = await res.json();
   expect(body).toMatchObject({ ok: true, errors: [] });
@@ -18,7 +20,7 @@ test("a file bigger than 10 MB is stored whole", async ({ request }, info) => {
 
 test("an upload without a session is refused before any body is read", async ({ playwright, baseURL }) => {
   const anonymous = await playwright.request.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
-  const res = await anonymous.post("/api/media?type=OTHER&fileName=x.bin", { data: Buffer.alloc(1024), headers: { "content-type": "application/octet-stream" } });
+  const res = await anonymous.post("/api/media?type=VIDEO&fileName=x.mp4", { data: Buffer.alloc(1024), headers: { "content-type": "video/mp4" } });
   expect(res.status()).toBe(401);
   expect(await res.json()).toMatchObject({ ok: false, code: "UNAUTHENTICATED", requestId: expect.any(String) });
   await anonymous.dispose();

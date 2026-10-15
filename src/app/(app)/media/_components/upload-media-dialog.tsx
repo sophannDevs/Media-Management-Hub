@@ -120,7 +120,8 @@ function UploadForm({ defaultType, defaultContent, onDone }: { defaultType: stri
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {MediaType.options.map((o) => (
+                {/* OTHER accepts nothing: it was a way around every check (SEC-05) */}
+                {MediaType.options.filter((o) => o.value !== "OTHER").map((o) => (
                   <SelectItem key={o.value} value={o.value}>
                     {o.label}
                   </SelectItem>

@@ -16,6 +16,11 @@ export interface NewMediaInput {
   width?: number | null;
   height?: number | null;
   durationSec?: number | null;
+  /** SEC-05: what the server measured */
+  sha256?: string | null;
+  codec?: string | null;
+  container?: string | null;
+  probedAt?: Date | null;
 }
 
 /** Registers a stored/linked file and applies its side effects on the content workflow. */
@@ -38,6 +43,10 @@ export async function createMediaAsset(input: NewMediaInput) {
       width: input.width ?? null,
       height: input.height ?? null,
       durationSec: input.durationSec ?? null,
+      sha256: input.sha256 ?? null,
+      codec: input.codec ?? null,
+      container: input.container ?? null,
+      probedAt: input.probedAt ?? null,
     },
   });
 

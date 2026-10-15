@@ -273,6 +273,12 @@ model MediaAsset {
   width       Int?
   height      Int?
   durationSec Float?
+  /// SHA-256 of the stored bytes (SEC-05): integrity, and the same file uploaded twice is found
+  sha256      String?
+  /// What ffprobe measured (SEC-05): "h264+aac", the container, and when; null when the server has no ffprobe
+  codec       String?
+  container   String?
+  probedAt    DateTime?
   /// Images: chosen for the final video
   isSelected  Boolean  @default(false)
   createdAt   DateTime @default(now())
@@ -284,6 +290,7 @@ model MediaAsset {
 
   @@index([contentId, type])
   @@index([type])
+  @@index([sha256])
 }
 
 model SocialAccount {
