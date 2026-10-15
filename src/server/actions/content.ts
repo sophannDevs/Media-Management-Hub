@@ -60,6 +60,16 @@ export async function setStatusAction(contentId: string, field: content.StatusFi
   );
 }
 
+/** A review decision with a comment (required when requesting changes); recorded with who made it (WF-06). */
+export async function reviewContentAction(contentId: string, decision: string, comment = "") {
+  return runAction(
+    z.object({ id, decision: z.enum(["IN_REVIEW", "CHANGES_REQUESTED", "APPROVED"]), comment: z.string().max(2000) }),
+    { id: contentId, decision, comment },
+    (d) => content.reviewContent(d.id, d.decision, d.comment),
+    (r) => (r.changed ? "Review recorded" : "Nothing changed"),
+  );
+}
+
 export async function setChecklistFlagAction(contentId: string, key: "titleFinalized" | "descriptionFinalized", value: boolean) {
   return runAction(
     z.object({ id, key: z.enum(["titleFinalized", "descriptionFinalized"]), value: z.boolean() }),

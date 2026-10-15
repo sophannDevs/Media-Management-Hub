@@ -1,4 +1,4 @@
-import { CalendarClock, CalendarX, CircleCheck, Dot, FileText, Film, FolderTree, ImageIcon, KeyRound, Lightbulb, LogIn, MessageSquareWarning, Pencil, Plug, Settings2, ShieldAlert, Sparkles, Trash2, TriangleAlert, Unplug, UserPlus } from "lucide-react";
+import { CalendarClock, CalendarX, CircleCheck, Dot, Eye, FileText, Film, FolderTree, ImageIcon, KeyRound, Lightbulb, LogIn, MessageSquareWarning, Pencil, Plug, Settings2, ShieldAlert, Sparkles, Trash2, TriangleAlert, Unplug, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const MAP: Record<string, [typeof Dot, string]> = {
@@ -6,6 +6,7 @@ const MAP: Record<string, [typeof Dot, string]> = {
   "content.updated": [Pencil, "bg-stone-100 text-stone-600"],
   "content.deleted": [Trash2, "bg-rose-50 text-rose-700"],
   "status.changed": [MessageSquareWarning, "bg-olive-50 text-olive-700"],
+  "review.decided": [Eye, "bg-sky-50 text-sky-800"],
   "script.saved": [FileText, "bg-olive-50 text-olive-700"],
   "script.generated": [FileText, "bg-olive-50 text-olive-700"],
   "image.prompt": [ImageIcon, "bg-olive-50 text-olive-700"],

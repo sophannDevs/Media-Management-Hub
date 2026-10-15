@@ -240,8 +240,9 @@ const assetSelect = {
 export const ACTIVITY_PAGE = 50;
 const ACTIVITY_ORDER = [{ createdAt: "desc" }, { id: "desc" }] satisfies Prisma.ActivityLogOrderByWithRelationInput[];
 
-type ActivityRow = { id: string; type: string; message: string; createdAt: Date; source: string; actor: { name: string } | null };
-const toActivity = (a: ActivityRow, tz: string) => ({ id: a.id, type: a.type, message: a.message, day: fmtDate(a.createdAt, tz), time: fmtTime(a.createdAt, tz), by: actorLabel(a) });
+type ActivityRow = { id: string; type: string; message: string; createdAt: Date; source: string; actor: { name: string } | null; meta: Prisma.JsonValue };
+const commentOf = (meta: Prisma.JsonValue) => (meta && typeof meta === "object" && !Array.isArray(meta) && typeof meta.comment === "string" && meta.comment ? meta.comment : null);
+const toActivity = (a: ActivityRow, tz: string) => ({ id: a.id, type: a.type, message: a.message, day: fmtDate(a.createdAt, tz), time: fmtTime(a.createdAt, tz), by: actorLabel(a), /** What a reviewer said (WF-06) */ comment: commentOf(a.meta) });
 
 /** A page of rows plus the cursor (the last row's id) of the next one, from a query that fetched one extra. */
 function pageOf<T extends { id: string }>(rows: T[]) {
@@ -257,7 +258,7 @@ export async function getActivityPage(contentId: string, after: string | null) {
     orderBy: ACTIVITY_ORDER,
     take: ACTIVITY_PAGE + 1,
     ...(after ? { cursor: { id: after }, skip: 1 } : {}),
-    select: { id: true, type: true, message: true, createdAt: true, source: true, actor: { select: { name: true } } },
+    select: { id: true, type: true, message: true, createdAt: true, source: true, meta: true, actor: { select: { name: true } } },
   });
   const { items, nextCursor } = pageOf(rows);
   return { items: items.map((a) => toActivity(a, tz)), nextCursor };
@@ -296,6 +297,8 @@ export async function getContentWorkspace(id: string) {
       },
       // One page of the history; the rest loads on demand (PERF-05). One extra row says whether there is more.
       activities: { orderBy: ACTIVITY_ORDER, take: ACTIVITY_PAGE + 1, include: { actor: { select: { name: true } } } },
+      // The latest review decision (WF-06); the history is in the activity log
+      reviews: { orderBy: { createdAt: "desc" }, take: 1, include: { actor: { select: { name: true } } } },
     },
   });
   if (!c) return null;
@@ -357,6 +360,10 @@ export async function getContentWorkspace(id: string) {
       imageStatus: c.imageStatus,
       videoStatus: c.videoStatus,
       reviewStatus: c.reviewStatus,
+      /** The latest review decision: who, when and what they said (WF-06) */
+      review: c.reviews[0]
+        ? { decision: c.reviews[0].decision, comment: c.reviews[0].comment, by: actorLabel({ source: c.reviews[0].actorId ? "USER" : "SYSTEM", actor: c.reviews[0].actor }), when: fmtDateTime(c.reviews[0].createdAt, tz) }
+        : null,
       publishingStatus: c.publishingStatus,
       titleFinalized: c.titleFinalized,
       descriptionFinalized: c.descriptionFinalized,

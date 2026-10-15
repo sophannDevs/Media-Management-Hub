@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useServerAction } from "@/hooks/use-server-action";
 import { cn } from "@/lib/utils";
 import { ContentType, ImageStatus, Priority, PublishingStatus, ReviewStatus, ScriptStatus, VideoStatus } from "@/lib/workflow/statuses";
-import { setChecklistFlagAction, setStatusAction, updateContentAction } from "@/server/actions/content";
+import { reviewContentAction, setChecklistFlagAction, setStatusAction, updateContentAction } from "@/server/actions/content";
 import type { ContentWorkspace } from "@/server/queries/content";
 import { useWorkspaceTab } from "./workspace";
 
@@ -148,6 +148,8 @@ const STATUS_ROWS = [
 function ProductionStatus({ data }: { data: ContentWorkspace }) {
   const c = data.content;
   const { run, pending } = useServerAction();
+  const [reviewComment, setReviewComment] = useState("");
+  const review = (decision: "IN_REVIEW" | "CHANGES_REQUESTED" | "APPROVED") => run(() => reviewContentAction(c.id, decision, reviewComment), { onSuccess: () => setReviewComment("") });
   const r = data.workflow.rules;
   const required = [r.requireScriptApproved && "Script = Approved", r.requireImagesApproved && "Images = Approved", r.requireFinalVideo && "Video = Final", r.requireReview && "Review = Approved", r.requireThumbnail && "Thumbnail selected"].filter(Boolean);
 
@@ -169,10 +171,18 @@ function ProductionStatus({ data }: { data: ContentWorkspace }) {
 
         <div className="rounded-xl border border-[#f1eedf] p-3 sm:col-span-2">
           <p className="mb-2 flex items-center gap-2 text-sm font-medium"><Eye className="size-4 text-muted-foreground" />Review</p>
+          {c.review && (
+            <p className="mb-2 text-xs text-muted-foreground">
+              {ReviewStatus.label(c.review.decision)} by {c.review.by} · {c.review.when}
+              {c.review.comment && <> — <q>{c.review.comment}</q></>}
+            </p>
+          )}
+          {/* Who decided and why is recorded with every decision (WF-06); a comment is required to request changes */}
+          <Textarea value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} rows={2} maxLength={2000} placeholder="Comment — required when requesting changes" aria-label="Review comment" className="mb-2" />
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" disabled={pending || c.reviewStatus === "IN_REVIEW"} onClick={() => run(() => setStatusAction(c.id, "reviewStatus", "IN_REVIEW"))}><Send />Send to review</Button>
-            <Button variant="outline" size="sm" disabled={pending || c.reviewStatus === "CHANGES_REQUESTED"} onClick={() => run(() => setStatusAction(c.id, "reviewStatus", "CHANGES_REQUESTED"))}><MessageSquareWarning />Request changes</Button>
-            <Button size="sm" disabled={pending || c.reviewStatus === "APPROVED"} onClick={() => run(() => setStatusAction(c.id, "reviewStatus", "APPROVED"))}><Check />Approve content</Button>
+            <Button variant="outline" size="sm" disabled={pending || c.reviewStatus === "IN_REVIEW"} onClick={() => review("IN_REVIEW")}><Send />Send to review</Button>
+            <Button variant="outline" size="sm" disabled={pending || !reviewComment.trim()} onClick={() => review("CHANGES_REQUESTED")}><MessageSquareWarning />Request changes</Button>
+            <Button size="sm" disabled={pending || c.reviewStatus === "APPROVED"} onClick={() => review("APPROVED")}><Check />Approve content</Button>
           </div>
         </div>
 

@@ -30,6 +30,7 @@ model User {
   lastLoginAt  DateTime?
   createdAt    DateTime      @default(now())
   activities   ActivityLog[]
+  reviews      Review[]
   sessions     Session[]
   savedViews   SavedView[]
 }
@@ -155,6 +156,8 @@ model Content {
   /// Image shown in lists: the thumbnail, else the first selected image, else the first image
   coverAssetId String?
   coverAsset   MediaAsset? @relation("ContentCover", fields: [coverAssetId], references: [id], onDelete: SetNull)
+  /// Review decisions, newest last (WF-06)
+  reviews      Review[]
 
   /// In the trash (WF-05): archived as well, so every list hides it; kept CONTENT_TRASH_DAYS, then removed by the worker — never automatically when a post of it went live
   deletedAt          DateTime?
@@ -540,4 +543,21 @@ model AiPrompt {
   content   String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+/// A review decision with who made it and why (WF-06)
+model Review {
+  id        String   @id @default(cuid())
+  contentId String
+  content   Content  @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  /// IN_REVIEW (sent to review), CHANGES_REQUESTED, APPROVED
+  decision  String
+  /// Required when changes are requested
+  comment   String   @default("")
+  /// Who decided; null for the system
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([contentId, createdAt])
 }

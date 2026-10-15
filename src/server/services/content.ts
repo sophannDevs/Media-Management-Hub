@@ -5,7 +5,7 @@ import { variantKeysOf } from "./derivatives";
 import { type DerivedContentState, deriveContentState, isReadyToPost, missingRequirements, normalizeHashtags, parseTags, scheduleActiveKey, type WorkflowRules } from "@/lib/workflow/rules";
 import { ActivityType, ImageStatus, NotificationType, type PublishingStatusCode, ReviewStatus, ScriptStatus, VideoStatus } from "@/lib/workflow/statuses";
 import { ServiceError } from "../errors";
-import { logActivity } from "./activity";
+import { logActivity, resolveActor } from "./activity";
 import { contentStateSelect, coverAssetId, toContentState } from "./content-state";
 import { notify } from "./notifications";
 import { getRules } from "./settings";
@@ -212,6 +212,11 @@ export async function updateContent(id: string, input: Partial<ContentInput>) {
 export async function setProductionStatus(id: string, field: StatusField, value: string) {
   const meta = STATUS_FIELDS[field];
   if (!meta || !meta.def.is(value)) throw new ServiceError("Invalid status.");
+  // Review decisions carry who and why (WF-06)
+  if (field === "reviewStatus") {
+    await reviewContent(id, value);
+    return;
+  }
   const row = await db.content.findUnique({ where: { id }, select: contentStateSelect });
   if (!row) throw new ServiceError("Content not found.");
   if (row[field] === value) return;
@@ -238,6 +243,40 @@ export async function setProductionStatus(id: string, field: StatusField, value:
     meta: { field, from: row[field], to: value },
   });
   await syncPublishingStatus(id);
+}
+
+export type ReviewDecision = "IN_REVIEW" | "CHANGES_REQUESTED" | "APPROVED";
+const DECISIONS: ReviewDecision[] = ["IN_REVIEW", "CHANGES_REQUESTED", "APPROVED"];
+const DECISION_WORD: Record<ReviewDecision, string> = { IN_REVIEW: "Sent to review", CHANGES_REQUESTED: "Changes requested", APPROVED: "Approved" };
+
+/**
+ * A review decision (WF-06): the status changes, and a Review row and a log
+ * row say who decided, when and what they said. Requesting changes needs a
+ * comment. The same decision again, without a word, records nothing. The
+ * resets stay as they were: editing an approved script, changing the selected
+ * images or replacing the video sends the item back on its own.
+ */
+export async function reviewContent(id: string, decision: string, comment = "") {
+  if (!DECISIONS.includes(decision as ReviewDecision)) throw new ServiceError("Invalid review decision.");
+  const text = comment.trim();
+  if (decision === "CHANGES_REQUESTED" && !text) throw new ServiceError("Say what needs to change.");
+  if (text.length > 2000) throw new ServiceError("Keep the comment under 2,000 characters.");
+  const row = await db.content.findUnique({ where: { id }, select: { reviewStatus: true } });
+  if (!row) throw new ServiceError("Content not found.");
+  if (row.reviewStatus === decision && !text) return { changed: false as const };
+  const actor = await resolveActor();
+  const review = await db.$transaction(async (tx) => {
+    await tx.content.update({ where: { id }, data: { reviewStatus: decision } });
+    return tx.review.create({ data: { contentId: id, decision, comment: text, actorId: actor.userId } });
+  });
+  await logActivity({
+    contentId: id,
+    type: ActivityType.REVIEW_DECIDED,
+    message: `${DECISION_WORD[decision as ReviewDecision]}${text ? `: “${text}”` : ""}`,
+    meta: { field: "reviewStatus", from: row.reviewStatus, to: decision, comment: text, reviewId: review.id },
+  });
+  await syncPublishingStatus(id);
+  return { changed: true as const, reviewId: review.id };
 }
 
 export async function setChecklistFlag(id: string, key: "titleFinalized" | "descriptionFinalized", value: boolean) {

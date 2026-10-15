@@ -100,3 +100,22 @@ test("deleting content moves it to the trash, where it can be restored", async (
   await page.goto(`/content?q=${encodeURIComponent(title)}`);
   await expect(page.locator('a[href^="/content/c"]').first()).toBeVisible();
 });
+
+// WF-06: a review decision says who and why.
+test("requesting changes needs a comment, which the history then shows with its author", async ({ page }, info) => {
+  test.skip(info.project.name !== "desktop", "mutates the shared e2e database");
+
+  await page.goto("/content?q=Siem%20Reap");
+  const href = await page.locator('a[href^="/content/c"]').first().getAttribute("href");
+  await page.goto(href!);
+  await page.waitForLoadState("networkidle");
+  const request = page.getByRole("button", { name: "Request changes" });
+  await expect(request).toBeDisabled();
+  await page.getByRole("textbox", { name: "Review comment" }).fill("Tighten the intro");
+  await request.click();
+  await expect(page.getByText(/Changes Requested by Workspace Owner/)).toBeVisible();
+
+  await page.goto(`${href}?tab=activity`);
+  await expect(page.getByText("Changes requested: “Tighten the intro”")).toBeVisible();
+  await expect(page.getByText("Tighten the intro", { exact: true })).toBeVisible();
+});

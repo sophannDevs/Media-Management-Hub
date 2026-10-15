@@ -184,6 +184,8 @@ export const ActivityType = {
   /** Removed for good (WF-05); the row is gone, so this one has no contentId */
   CONTENT_DELETED: "content.deleted",
   STATUS_CHANGED: "status.changed",
+  /** A review decision with who and why (WF-06) */
+  REVIEW_DECIDED: "review.decided",
   SCRIPT_SAVED: "script.saved",
   SCRIPT_GENERATED: "script.generated",
   IMAGE_PROMPT_SAVED: "image.prompt",
