@@ -33,8 +33,11 @@ or keep the old provider until the old assets are gone.
   read them unless the rule exposes them.
 - **Lifecycle rules**: abort incomplete multipart uploads after 1 day (a browser
   that gave up leaves parts behind; the app aborts what it can, the rule
-  catches the rest). Don't expire media objects; the reconcile job (MEDIA-03)
-  removes the ones no asset references, after a grace period.
+  catches the rest). Don't expire media objects: the worker's daily reconcile
+  pass (MEDIA-03) removes the ones no asset references once they are a day
+  old, and `npm run media:reconcile -- --dry-run` shows what it would remove.
+  It also lists assets whose file is missing (after a restore without the
+  files, say) without touching them.
 - **Versioning**: optional; with it, a deleted object can be restored for the
   retention window, which complements `npm run db:backup` (the database dump
   references objects by key).

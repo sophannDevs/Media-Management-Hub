@@ -25,6 +25,7 @@
     "db:restore": "node scripts/db-restore.mjs",
     "db:backup:verify": "node scripts/db-restore.mjs --verify",
     "db:studio": "prisma studio",
+    "media:reconcile": "tsx scripts/media-reconcile.ts",
     "secrets:key": "node scripts/secrets.mjs key",
     "secrets:rotate": "tsx scripts/rotate-tokens.ts",
     "postinstall": "prisma generate"

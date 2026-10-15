@@ -28,3 +28,6 @@ main().catch((e) => {
   console.error(e);
   process.exit(1);
 });
+
+// A module of its own (plain scripts share one global scope, and two of them declaring `main` collide)
+export {};

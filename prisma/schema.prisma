@@ -500,7 +500,7 @@ model WorkerHeartbeat {
 
 /// Periodic jobs that must run once per period whatever the number of workers (PUB-10).
 model ScheduledTask {
-  /// maintenance | analytics
+  /// maintenance | analytics | storage-reconcile
   name           String    @id
   lastStartedAt  DateTime?
   lastFinishedAt DateTime?

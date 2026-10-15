@@ -30,7 +30,8 @@ export const ffprobePath = () => process.env.FFPROBE_PATH?.trim() || "ffprobe";
 export async function probeMedia(path: string, timeoutMs = 10_000): Promise<ProbeResult | null> {
   if (available === false) return null;
   const json = await new Promise<FfprobeJson | null>((resolve) => {
-    execFile(ffprobePath(), ["-v", "error", "-print_format", "json", "-show_format", "-show_streams", path], { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, stdout) => {
+    // The program is chosen at run time (FFPROBE_PATH): not something the bundler can trace
+    execFile(/*turbopackIgnore: true*/ ffprobePath(), ["-v", "error", "-print_format", "json", "-show_format", "-show_streams", path], { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, stdout) => {
       if (err) {
         if ((err as NodeJS.ErrnoException).code === "ENOENT") {
           if (available !== false) log.warn("ffprobe is not installed: uploads keep the browser's duration and size figures (set FFPROBE_PATH or install FFmpeg)");
