@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { AiProvider, PromptCategory } from "@/lib/workflow/statuses";
 import { ServiceError } from "../errors";
@@ -17,19 +18,27 @@ export async function connectAccount(input: { platformId: string; name: string; 
   const platform = await db.platform.findUnique({ where: { id: input.platformId } });
   if (!platform?.enabled) throw new ServiceError("This platform is not available yet.");
   const isFirst = (await db.socialAccount.count({ where: { platformId: input.platformId } })) === 0;
-  return db.socialAccount.create({
-    data: {
-      platformId: input.platformId,
-      name: input.name.trim(),
-      handle: input.handle?.trim() ?? "",
-      followers: input.followers ?? 0,
-      status: "CONNECTED",
-      accessToken: `mock_${Math.random().toString(36).slice(2)}`,
-      tokenExpiresAt: tokenExpiry(),
-      lastSyncAt: new Date(),
-      isDefault: isFirst,
-    },
-  });
+  const create = (isDefault: boolean) =>
+    db.socialAccount.create({
+      data: {
+        platformId: input.platformId,
+        name: input.name.trim(),
+        handle: input.handle?.trim() ?? "",
+        followers: input.followers ?? 0,
+        status: "CONNECTED",
+        accessToken: `mock_${Math.random().toString(36).slice(2)}`,
+        tokenExpiresAt: tokenExpiry(),
+        lastSyncAt: new Date(),
+        isDefault,
+      },
+    });
+  try {
+    return await create(isFirst);
+  } catch (e) {
+    // Two accounts connected at once both saw "none yet": the database allows one default per platform, the other becomes a normal account
+    if (isFirst && e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") return create(false);
+    throw e;
+  }
 }
 
 export async function reconnectAccount(id: string) {

@@ -47,6 +47,11 @@ if (fresh) {
   }
 }
 await admin.$disconnect();
+// An existing library may predate the latest migrations
+if (!fresh) {
+  const r = spawnSync(process.execPath, ["node_modules/prisma/build/index.js", "migrate", "deploy"], { env, stdio: "ignore" });
+  if (r.status !== 0) throw new Error("prisma migrate deploy failed on the perf database");
+}
 
 // A session for the seeded owner
 const db = new prisma.PrismaClient({ datasources: { db: { url: dbUrl } } });

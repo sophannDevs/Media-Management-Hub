@@ -67,7 +67,8 @@ export type ReconcileResult =
  * UNKNOWN_OUTCOME means the post may or may not exist on the platform; it is
  * never retried blindly (see processSchedule).
  */
-export type PublishErrorCode = "AUTH" | "QUOTA" | "RATE" | "VALIDATION" | "NETWORK" | "UNKNOWN" | "UNKNOWN_OUTCOME";
+export const PUBLISH_ERROR_CODES = ["AUTH", "QUOTA", "RATE", "VALIDATION", "NETWORK", "UNKNOWN", "UNKNOWN_OUTCOME"] as const;
+export type PublishErrorCode = (typeof PUBLISH_ERROR_CODES)[number];
 
 export class PublishError extends Error {
   constructor(

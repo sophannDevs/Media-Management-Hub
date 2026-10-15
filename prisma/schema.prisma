@@ -292,7 +292,11 @@ model SocialAccount {
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
 
+  /// One connection per platform account (externalId is null until real OAuth fills it)
+  @@unique([platformId, externalId])
   @@index([platformId])
+  // Also in migrations (not expressible here): at most one default account per platform
+  // (unique index on platformId WHERE isDefault), and CHECK constraints on every status / type column.
 }
 
 /// A planned post of one content item to one platform/account.
