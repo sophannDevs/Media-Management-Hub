@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { timeAgo } from "@/lib/dates";
 import { requireUser } from "@/server/auth/dal";
 import { getContentFormOptions, getNavCounts, getNotifications, getNow } from "@/server/queries/shared";
+import { KeyboardShortcuts } from "./keyboard-shortcuts";
 import { NotificationsMenu } from "./notifications-menu";
 import { SearchBox } from "./search-box";
 import { MobileNav, MobileNavState, Sidebar } from "./sidebar-nav";
@@ -34,12 +35,15 @@ async function Notifications() {
   );
 }
 
-/** Server-rendered "Create Content" button (loads the form options). */
-export async function CreateContentButton({ trigger }: { trigger?: ReactNode }) {
+/**
+ * Server-rendered "Create Content" button (loads the form options). `listen`: this
+ * is the one in the header, which the `c` shortcut opens.
+ */
+export async function CreateContentButton({ trigger, listen }: { trigger?: ReactNode; listen?: boolean }) {
   // Request time only: the options are cached across requests, never filled at build time
   await io();
   await requireUser();
-  return <CreateContentDialog options={await getContentFormOptions()} trigger={trigger} />;
+  return <CreateContentDialog options={await getContentFormOptions()} trigger={trigger} listen={listen} />;
 }
 
 export function CreateContentButtonFallback() {
@@ -76,8 +80,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             <SearchBox />
             <div className="ml-auto flex items-center gap-2">
               <Suspense fallback={<CreateContentButtonFallback />}>
-                <CreateContentButton />
+                <CreateContentButton listen />
               </Suspense>
+              <KeyboardShortcuts />
               <Suspense
                 fallback={
                   <Button variant="outline" size="icon-lg" className="bg-white" disabled aria-label="Notifications">

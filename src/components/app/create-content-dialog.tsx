@@ -2,7 +2,7 @@
 
 import { ArrowRight, Lightbulb, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type ReactNode, useId, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import { PlatformIcon } from "@/components/app/platform-icon";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAutosaveDraft, useLoadedDraft } from "@/hooks/use-draft";
 import { useServerAction } from "@/hooks/use-server-action";
 import { browserStore, clearDraft } from "@/lib/drafts";
+import { CREATE_CONTENT_EVENT } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 import { ContentType, Priority } from "@/lib/workflow/statuses";
 import { createContentAction } from "@/server/actions/content";
@@ -23,8 +24,14 @@ const NONE = "__none";
 const DRAFT_KEY = "create-content";
 export const LANGUAGES = ["English", "Khmer", "Korean", "Thai", "Vietnamese", "Japanese"];
 
-export function CreateContentDialog({ options, trigger }: { options: ContentFormOptions; trigger?: ReactNode }) {
+export function CreateContentDialog({ options, trigger, listen = false }: { options: ContentFormOptions; trigger?: ReactNode; /** Opens when the `c` shortcut is pressed (only the header's instance does) */ listen?: boolean }) {
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!listen) return;
+    const onShortcut = () => setOpen(true);
+    window.addEventListener(CREATE_CONTENT_EVENT, onShortcut);
+    return () => window.removeEventListener(CREATE_CONTENT_EVENT, onShortcut);
+  }, [listen]);
   const router = useRouter();
   const { run, pending } = useServerAction();
   const [form, setForm] = useState(() => initial(options));
